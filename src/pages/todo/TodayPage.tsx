@@ -5,6 +5,7 @@ import { format, addDays, subDays, parseISO } from "date-fns";
 import { cn } from "../../lib/utils";
 import { useTasks } from "../../contexts/TaskContext";
 import { useAuth } from "../../contexts/AuthContext";
+import { getTaskCompletionForDate } from "../../lib/taskService";
 import TaskCard from "../../components/todo/TaskCard";
 import TaskForm from "../../components/todo/TaskForm";
 import type { Task } from "../../types/todo";
@@ -16,14 +17,38 @@ export default function TodayPage() {
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "do" | "dont">("all");
   const [completionDelta, setCompletionDelta] = useState(0);
+  const [repeatingCompletedCount, setRepeatingCompletedCount] = useState(0);
 
   const parsedDate = parseISO(selectedDate + "T12:00:00");
   const today = format(new Date(), "yyyy-MM-dd");
   const isToday = selectedDate === today;
 
+  // Load completed count for repeating tasks for the selected date; reset delta when data changes
   useEffect(() => {
-    setCompletionDelta(0);
-  }, [tasks, selectedDate]);
+    if (!user || tasks.length === 0) {
+      setRepeatingCompletedCount(0);
+      setCompletionDelta(0);
+      return;
+    }
+    let cancelled = false;
+    const repeatingTasks = tasks.filter((t) => t.isRepeating);
+    if (repeatingTasks.length === 0) {
+      setRepeatingCompletedCount(0);
+      setCompletionDelta(0);
+      return;
+    }
+    Promise.all(
+      repeatingTasks.map((task) => getTaskCompletionForDate(task, selectedDate))
+    ).then((results) => {
+      if (cancelled) return;
+      const count = results.filter((r) => r.isCompleted).length;
+      setRepeatingCompletedCount(count);
+      setCompletionDelta(0);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, tasks, selectedDate]);
 
   function goToPrevDay() {
     setSelectedDate(format(subDays(parsedDate, 1), "yyyy-MM-dd"));
@@ -39,7 +64,10 @@ export default function TodayPage() {
   });
 
   const totalCount = tasks.length;
-  const baseCompletedCount = tasks.filter((t) => t.status === "completed").length;
+  const oneTimeCompletedCount = tasks.filter(
+    (t) => !t.isRepeating && t.status === "completed"
+  ).length;
+  const baseCompletedCount = oneTimeCompletedCount + repeatingCompletedCount;
   const completedCount = Math.max(0, Math.min(totalCount, baseCompletedCount + completionDelta));
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
