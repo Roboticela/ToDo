@@ -86,12 +86,12 @@ export default function AppLayout() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.25 }}
-        className="min-h-screen bg-background flex flex-col lg:flex-row w-full"
+        className="h-screen min-h-screen overflow-hidden flex flex-col lg:flex-row w-full bg-background"
       >
         <SideNav />
-        <main className="flex-1 flex flex-col min-w-0 w-full max-w-2xl md:max-w-4xl lg:max-w-none mx-auto lg:mx-0 lg:pl-56">
+        <main className="flex-1 flex flex-col min-h-0 min-w-0 w-full max-w-2xl md:max-w-4xl lg:max-w-none mx-auto lg:mx-0 lg:pl-56">
           <TodoHeader title={headerTitle} />
-          <div className="flex-1 pb-16 lg:pb-0 w-full min-w-0">
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-16 lg:pb-0 w-full custom-scrollbar">
             <AnimatePresence mode="wait">
               <motion.div
                 key={location.pathname}
@@ -100,7 +100,7 @@ export default function AppLayout() {
                 animate="animate"
                 exit="exit"
                 transition={pageTransition}
-                className="h-full min-h-0 flex flex-col"
+                className="min-h-full flex flex-col"
               >
                 <Outlet />
               </motion.div>

@@ -92,7 +92,7 @@ export default function TodayPage() {
     <div className="flex flex-col min-h-full">
       <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto">
       {/* Date Navigator */}
-      <div className="sticky top-14 z-20 bg-background/90 backdrop-blur-sm border-b border-border/30 px-4 md:px-6 lg:px-8 py-3">
+      <div className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-border/30 px-4 md:px-6 lg:px-8 py-3">
         <div className="flex items-center justify-between mb-3">
           <motion.button
             type="button"
