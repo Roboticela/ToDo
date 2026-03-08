@@ -163,13 +163,15 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
               <h2 className="text-lg font-bold text-foreground">
                 {editTask ? "Edit Task" : "New Task"}
               </h2>
-              <button
+              <motion.button
                 type="button"
                 onClick={onClose}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
                 className="p-2 rounded-xl text-foreground/40 hover:text-foreground/70 hover:bg-accent/50 transition-colors"
               >
                 <X className="w-5 h-5" />
-              </button>
+              </motion.button>
             </div>
 
             {/* Form */}

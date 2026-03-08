@@ -19,15 +19,25 @@ function SideNav() {
   const { user, logout } = useAuth();
 
   return (
-    <aside className="hidden lg:flex lg:flex-col lg:w-56 lg:fixed lg:top-14 lg:bottom-0 lg:left-0 z-40 border-r border-border bg-card/95 backdrop-blur-xl shrink-0">
+    <motion.aside
+      initial={{ x: -24, opacity: 0 }}
+      animate={{ x: 0, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 300, damping: 35, delay: 0.05 }}
+      className="hidden lg:flex lg:flex-col lg:w-56 lg:fixed lg:top-14 lg:bottom-0 lg:left-0 z-40 border-r border-border bg-card/95 backdrop-blur-xl shrink-0"
+    >
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
-        {NAV_ITEMS.map(({ path, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ path, label, icon: Icon }, i) => {
           const isActive = location.pathname === path;
           return (
-            <button
+            <motion.button
               key={path}
               type="button"
               onClick={() => navigate(path)}
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.2, delay: 0.1 + i * 0.04 }}
+              whileHover={{ x: 4 }}
+              whileTap={{ scale: 0.98 }}
               className={cn(
                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors relative",
                 isActive
@@ -46,38 +56,48 @@ function SideNav() {
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
               </span>
               <span className="font-medium text-sm truncate">{label}</span>
-            </button>
+            </motion.button>
           );
         })}
       </nav>
 
       {/* User section at bottom */}
       {user && (
-        <div className="shrink-0 border-t border-border/60 p-3 space-y-3">
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: 0.3 }}
+          className="shrink-0 border-t border-border/60 p-3 space-y-3"
+        >
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center overflow-hidden shrink-0">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-10 h-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center overflow-hidden shrink-0"
+            >
               {user.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
               ) : (
                 <User className="w-5 h-5 text-primary/60" />
               )}
-            </div>
+            </motion.div>
             <div className="min-w-0 flex-1">
               <p className="font-medium text-sm text-foreground truncate">{user.name}</p>
               <p className="text-xs text-foreground/50 truncate">{user.email}</p>
             </div>
           </div>
-          <button
+          <motion.button
             type="button"
             onClick={() => logout()}
+            whileHover={{ backgroundColor: "rgba(255,255,255,0.06)" }}
+            whileTap={{ scale: 0.98 }}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-medium text-foreground/70 hover:text-foreground hover:bg-accent/50 transition-colors border border-border/60"
           >
             <LogOut className="w-4 h-4 text-red-400" />
             Logout
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
       )}
-    </aside>
+    </motion.aside>
   );
 }
 

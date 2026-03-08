@@ -137,31 +137,47 @@ function TodoHeader({ title = "Roboticela ToDo", rightContent }: TodoHeaderProps
             </motion.div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-[9.6rem] rounded-xl max-h-[80vh] overflow-y-auto">
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => setAboutModalOpen(true)}>
-              <Info className="w-4 h-4" />
-              <span>About</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://github.com/Roboticela/ToDo", { openInNewTab: true })}>
-              <Github className="w-4 h-4" />
-              <span>Github</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => setLicenseModalOpen(true)}>
-              <FileText className="w-4 h-4" />
-              <span>License</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/support", { openInNewTab: true })}>
-              <HelpCircle className="w-4 h-4" />
-              <span>Support</span>
-            </DropdownMenuItem>
-            <div className="h-px bg-border my-1" />
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/privacy", { openInNewTab: true })}>
-              <Shield className="w-4 h-4" />
-              <span>Privacy Policy</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/terms", { openInNewTab: true })}>
-              <Scale className="w-4 h-4" />
-              <span>Terms of Service</span>
-            </DropdownMenuItem>
+            <AnimatePresence>
+              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, delay: 0 }}>
+                <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => setAboutModalOpen(true)}>
+                  <Info className="w-4 h-4" />
+                  <span>About</span>
+                </DropdownMenuItem>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, delay: 0.02 }}>
+                <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://github.com/Roboticela/ToDo", { openInNewTab: true })}>
+                  <Github className="w-4 h-4" />
+                  <span>Github</span>
+                </DropdownMenuItem>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, delay: 0.04 }}>
+                <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => setLicenseModalOpen(true)}>
+                  <FileText className="w-4 h-4" />
+                  <span>License</span>
+                </DropdownMenuItem>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, delay: 0.06 }}>
+                <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/support", { openInNewTab: true })}>
+                  <HelpCircle className="w-4 h-4" />
+                  <span>Support</span>
+                </DropdownMenuItem>
+              </motion.div>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15, delay: 0.08 }}>
+                <div className="h-px bg-border my-1" />
+              </motion.div>
+              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, delay: 0.1 }}>
+                <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/privacy", { openInNewTab: true })}>
+                  <Shield className="w-4 h-4" />
+                  <span>Privacy Policy</span>
+                </DropdownMenuItem>
+              </motion.div>
+              <motion.div initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.15, delay: 0.12 }}>
+                <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/terms", { openInNewTab: true })}>
+                  <Scale className="w-4 h-4" />
+                  <span>Terms of Service</span>
+                </DropdownMenuItem>
+              </motion.div>
+            </AnimatePresence>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

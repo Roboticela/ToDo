@@ -25,9 +25,11 @@ interface TaskCardProps {
   onEdit: (task: Task) => void;
   /** Called when the user toggles completion so the parent can update progress bar etc. */
   onCompletionChange?: (completed: boolean) => void;
+  /** Optional delay for list stagger animation (e.g. index * 0.03) */
+  staggerDelay?: number;
 }
 
-export default function TaskCard({ task, date, onEdit, onCompletionChange }: TaskCardProps) {
+export default function TaskCard({ task, date, onEdit, onCompletionChange, staggerDelay = 0 }: TaskCardProps) {
   const { completeTask, uncompleteTask, deleteTask } = useTasks();
   const [isCompleted, setIsCompleted] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -77,8 +79,8 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange }: Tas
       layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: isDeleting ? 0 : 1, y: 0, scale: isDeleting ? 0.95 : 1 }}
-      exit={{ opacity: 0, y: -8, scale: 0.95 }}
-      transition={{ duration: 0.2 }}
+      exit={{ opacity: 0, y: -8, scale: 0.95, transition: { duration: 0.2 } }}
+      transition={{ duration: 0.2, delay: isDeleting ? 0 : staggerDelay }}
       className={cn(
         "rounded-2xl border bg-card transition-all overflow-hidden",
         isCompleted ? "border-border/40 opacity-70" : "border-border",

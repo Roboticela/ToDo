@@ -145,31 +145,47 @@ export default function TodayPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="px-4 md:px-6 lg:px-8 pt-4 pb-2 flex gap-2">
+      <motion.div
+        className="px-4 md:px-6 lg:px-8 pt-4 pb-2 flex gap-2"
+        initial={{ opacity: 0, y: 4 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.1 }}
+      >
         {[
           { key: "all" as const, label: "All", icon: List },
           { key: "do" as const, label: "Do's", icon: TrendingUp },
           { key: "dont" as const, label: "Don'ts", icon: TrendingDown },
         ].map(({ key, label, icon: Icon }) => (
-          <button
+          <motion.button
             key={key}
             type="button"
             onClick={() => setActiveFilter(key)}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+              "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
               activeFilter === key
-                ? "bg-primary/15 text-primary border border-primary/30"
+                ? "text-primary border border-primary/30"
                 : "bg-accent/30 text-foreground/50 border border-transparent hover:bg-accent/50"
             )}
           >
-            <Icon className="w-3 h-3" />
-            {label}
-          </button>
+            {activeFilter === key && (
+              <motion.span
+                layoutId="todayFilterPill"
+                className="absolute inset-0 rounded-full bg-primary/15"
+                transition={{ type: "spring", stiffness: 400, damping: 35 }}
+              />
+            )}
+            <span className="relative z-0 flex items-center gap-1.5">
+              <Icon className="w-3 h-3" />
+              {label}
+            </span>
+          </motion.button>
         ))}
-      </div>
+      </motion.div>
 
-      {/* Task List */}
-      <div className="flex-1 px-4 md:px-6 lg:px-8 pb-4">
+      {/* Task List — one task height of space at bottom above FAB/nav */}
+      <div className="flex-1 px-4 md:px-6 lg:px-8 pb-24">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
@@ -194,10 +210,20 @@ export default function TodayPage() {
             </div>
           </motion.div>
         ) : (
-          <div className="space-y-4 pt-1">
+          <motion.div
+            className="space-y-4 pt-1"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.2 }}
+          >
             {/* Do's section */}
             {doTasks.length > 0 && (
-              <div className="space-y-2">
+              <motion.div
+                className="space-y-2"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.25 }}
+              >
                 {activeFilter === "all" && (
                   <div className="flex items-center gap-2 px-1">
                     <TrendingUp className="w-3.5 h-3.5 text-green-400" />
@@ -207,16 +233,28 @@ export default function TodayPage() {
                   </div>
                 )}
                 <AnimatePresence mode="popLayout">
-                  {doTasks.map((task) => (
-<TaskCard key={task.id} task={task} date={selectedDate} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
-                    ))}
-                  </AnimatePresence>
-                </div>
-              )}
+                  {doTasks.map((task, i) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      date={selectedDate}
+                      onEdit={handleEdit}
+                      onCompletionChange={handleCompletionChange}
+                      staggerDelay={i * 0.03}
+                    />
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
 
             {/* Don'ts section */}
             {dontTasks.length > 0 && (
-              <div className="space-y-2">
+              <motion.div
+                className="space-y-2"
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.25, delay: 0.05 }}
+              >
                 {activeFilter === "all" && (
                   <div className="flex items-center gap-2 px-1">
                     <TrendingDown className="w-3.5 h-3.5 text-orange-400" />
@@ -226,13 +264,20 @@ export default function TodayPage() {
                   </div>
                 )}
                 <AnimatePresence mode="popLayout">
-                  {dontTasks.map((task) => (
-<TaskCard key={task.id} task={task} date={selectedDate} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
-                    ))}
-                  </AnimatePresence>
-                </div>
-              )}
-          </div>
+                  {dontTasks.map((task, i) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      date={selectedDate}
+                      onEdit={handleEdit}
+                      onCompletionChange={handleCompletionChange}
+                      staggerDelay={i * 0.03}
+                    />
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </motion.div>
         )}
       </div>
 

@@ -1,11 +1,20 @@
 import { useEffect, useMemo } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../contexts/AuthContext";
 import { TaskProvider } from "../../contexts/TaskContext";
 import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
 import TodoHeader from "./TodoHeader";
 import { initNotificationScheduler, requestNotificationPermission } from "../../lib/notificationService";
+
+const pageVariants = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -6 },
+};
+
+const pageTransition = { type: "tween", duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] };
 
 const ROUTE_TITLES: Record<string, string> = {
   "/todo": "Today",
@@ -44,12 +53,28 @@ export default function AppLayout() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="min-h-screen bg-background flex items-center justify-center"
+      >
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-2 border-border border-t-primary rounded-full animate-spin" />
-          <p className="text-sm text-foreground/50">Loading...</p>
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+            className="w-12 h-12 border-2 border-border border-t-primary rounded-full"
+          />
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="text-sm text-foreground/50"
+          >
+            Loading...
+          </motion.p>
         </div>
-      </div>
+      </motion.div>
     );
   }
 
@@ -57,16 +82,33 @@ export default function AppLayout() {
 
   return (
     <TaskProvider>
-      <div className="min-h-screen bg-background flex flex-col lg:flex-row w-full">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.25 }}
+        className="min-h-screen bg-background flex flex-col lg:flex-row w-full"
+      >
         <SideNav />
         <main className="flex-1 flex flex-col min-w-0 w-full max-w-2xl md:max-w-4xl lg:max-w-none mx-auto lg:mx-0 lg:pl-56">
           <TodoHeader title={headerTitle} />
           <div className="flex-1 pb-16 lg:pb-0 w-full min-w-0">
-            <Outlet />
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={location.pathname}
+                variants={pageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                transition={pageTransition}
+                className="h-full min-h-0 flex flex-col"
+              >
+                <Outlet />
+              </motion.div>
+            </AnimatePresence>
           </div>
           <BottomNav />
         </main>
-      </div>
+      </motion.div>
     </TaskProvider>
   );
 }
