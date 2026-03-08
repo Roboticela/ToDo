@@ -1,9 +1,17 @@
+import { useState } from "react";
 import { useTheme, type ThemeName } from "../../contexts/ThemeContext";
 import { useNavigate } from "react-router-dom";
 import {
   CheckSquare,
   Palette,
   ChevronDown,
+  Menu,
+  Info,
+  Github,
+  FileText,
+  Shield,
+  Scale,
+  HelpCircle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../ui/button";
@@ -14,7 +22,10 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { cn } from "../../lib/utils";
+import { openLink } from "../../lib/tauri";
 import SyncIndicator from "./SyncIndicator";
+import AboutModal from "../AboutModal";
+import LicenseModal from "../LicenseModal";
 
 const themes: { name: ThemeName; label: string; colors: string }[] = [
   { name: "navy", label: "Navy", colors: "bg-blue-900" },
@@ -36,8 +47,11 @@ export default function TodoHeader({ title = "Roboticela ToDo", rightContent }: 
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const currentTheme = themes.find((t) => t.name === theme);
+  const [aboutModalOpen, setAboutModalOpen] = useState(false);
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
 
   return (
+    <>
     <motion.header
       initial={{ y: -60, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
@@ -94,7 +108,50 @@ export default function TodoHeader({ title = "Roboticela ToDo", rightContent }: 
             </AnimatePresence>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button variant="outline" size="sm" className="gap-1.5 rounded-xl h-9 px-3">
+                <Menu className="w-4 h-4" />
+                <span className="hidden sm:inline text-xs">Menu</span>
+                <ChevronDown className="w-3 h-3" />
+              </Button>
+            </motion.div>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[9.6rem] rounded-xl max-h-[80vh] overflow-y-auto">
+            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => setAboutModalOpen(true)}>
+              <Info className="w-4 h-4" />
+              <span>About</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://github.com/Roboticela/ToDo", { openInNewTab: true })}>
+              <Github className="w-4 h-4" />
+              <span>Github</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => setLicenseModalOpen(true)}>
+              <FileText className="w-4 h-4" />
+              <span>License</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/support", { openInNewTab: true })}>
+              <HelpCircle className="w-4 h-4" />
+              <span>Support</span>
+            </DropdownMenuItem>
+            <div className="h-px bg-border my-1" />
+            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/privacy", { openInNewTab: true })}>
+              <Shield className="w-4 h-4" />
+              <span>Privacy Policy</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="flex items-center gap-3 cursor-pointer" onClick={() => openLink("https://roboticela.com/terms", { openInNewTab: true })}>
+              <Scale className="w-4 h-4" />
+              <span>Terms of Service</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </motion.header>
+
+      <AboutModal isOpen={aboutModalOpen} onClose={() => setAboutModalOpen(false)} />
+      <LicenseModal isOpen={licenseModalOpen} onClose={() => setLicenseModalOpen(false)} />
+    </>
   );
 }
