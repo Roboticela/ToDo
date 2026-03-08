@@ -224,9 +224,9 @@ export default function AnalyticsPage() {
   return (
     <div className="flex flex-col min-h-full">
       <TodoHeader title="Analytics" />
-
+      <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto overflow-y-auto">
       {/* Range selector */}
-      <div className="px-4 pt-4 pb-3 space-y-3">
+      <div className="px-4 md:px-6 lg:px-8 pt-4 pb-3 space-y-3">
         <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1">
           {RANGE_OPTIONS.map((r) => (
             <button
@@ -353,7 +353,7 @@ export default function AnalyticsPage() {
         </AnimatePresence>
       </div>
 
-      <div className="flex-1 px-4 pb-6 space-y-5 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 px-4 md:px-6 lg:px-8 pb-6 space-y-5 overflow-y-auto custom-scrollbar">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
@@ -386,7 +386,7 @@ export default function AnalyticsPage() {
             className="space-y-5"
           >
             {/* Stats grid */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatCard
                 label="Completion Rate"
                 value={`${stats!.completionRate}%`}
@@ -650,6 +650,7 @@ export default function AnalyticsPage() {
             )}
           </motion.div>
         )}
+      </div>
       </div>
     </div>
   );

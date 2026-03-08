@@ -78,7 +78,7 @@ export default function SubscriptionPage() {
     <div className="flex flex-col min-h-full">
       <TodoHeader title="Subscription" />
 
-      <div className="flex-1 px-4 py-6 space-y-4 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-4 overflow-y-auto custom-scrollbar">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -92,6 +92,7 @@ export default function SubscriptionPage() {
         </motion.div>
 
         {/* Plan cards */}
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
         {PLANS.map((plan, i) => {
           const isCurrentPlan = user?.plan === plan.id;
           return (
@@ -101,7 +102,7 @@ export default function SubscriptionPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.08 }}
               className={cn(
-                "relative bg-card border rounded-2xl p-5 overflow-hidden",
+                "relative bg-card border rounded-2xl p-5 overflow-hidden flex flex-col lg:flex-1 lg:min-w-0",
                 plan.highlight
                   ? "border-primary/40 ring-1 ring-primary/20"
                   : "border-border",
@@ -143,7 +144,7 @@ export default function SubscriptionPage() {
                 </div>
               </div>
 
-              <ul className="space-y-2 mb-5">
+              <ul className="space-y-2 mb-5 flex-1">
                 {plan.features.map((feat) => (
                   <li key={feat} className="flex items-center gap-2 text-sm text-foreground/70">
                     <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
@@ -174,6 +175,7 @@ export default function SubscriptionPage() {
             </motion.div>
           );
         })}
+        </div>
 
         {/* Note */}
         <div className="text-center py-2">

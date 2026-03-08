@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { X, Clock, Timer, CalendarDays, TrendingUp, TrendingDown, Repeat } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useIsDesktop } from "../../hooks/useIsDesktop";
 import type { Task, TaskFormData, TaskType, TaskCategory, RepeatDay } from "../../types/todo";
 import { useTasks } from "../../contexts/TaskContext";
 import { getTodayString } from "../../lib/taskService";
@@ -27,6 +28,7 @@ interface TaskFormProps {
 }
 
 export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: TaskFormProps) {
+  const isDesktop = useIsDesktop();
   const { createTask, updateTask } = useTasks();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -138,16 +140,21 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
             onClick={onClose}
           />
 
-          {/* Sheet */}
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", stiffness: 300, damping: 35 }}
-            className="fixed bottom-0 left-0 right-0 z-50 max-w-2xl mx-auto bg-card border-t border-border rounded-t-3xl max-h-[92vh] overflow-hidden flex flex-col"
-          >
-            {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1 shrink-0">
+          {/* Center wrapper on desktop */}
+          <div className="fixed inset-0 z-50 pointer-events-none lg:flex lg:items-center lg:justify-center lg:p-4">
+            {/* Sheet */}
+            <motion.div
+              initial={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
+              animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
+              exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
+              transition={isDesktop ? { duration: 0.2 } : { type: "spring", stiffness: 300, damping: 35 }}
+              className={cn(
+                "pointer-events-auto w-full max-w-2xl max-h-[92vh] lg:max-h-[90vh] overflow-hidden flex flex-col bg-card border border-border",
+                "fixed bottom-0 left-0 right-0 mx-auto z-50 rounded-t-3xl border-t lg:relative lg:rounded-xl"
+              )}
+            >
+            {/* Handle - hide on desktop */}
+            <div className="flex justify-center pt-3 pb-1 shrink-0 lg:hidden">
               <div className="w-10 h-1 rounded-full bg-border" />
             </div>
 
@@ -393,6 +400,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
               </div>
             </form>
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

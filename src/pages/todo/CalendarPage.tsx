@@ -133,9 +133,9 @@ export default function CalendarPage() {
   return (
     <div className="flex flex-col min-h-full">
       <TodoHeader title="Calendar" />
-
+      <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto">
       {/* Month Navigator */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+      <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-border/30">
         <motion.button
           type="button"
           onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
@@ -165,7 +165,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Day headers */}
-      <div className="grid grid-cols-7 px-2 pt-3 pb-1">
+      <div className="grid grid-cols-7 px-2 md:px-4 lg:px-6 pt-3 pb-1">
         {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
           <div key={d} className="text-center text-xs font-semibold text-foreground/40 py-1">
             {d}
@@ -174,7 +174,7 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 px-2 gap-y-1">
+      <div className="grid grid-cols-7 px-2 md:px-4 lg:px-6 gap-y-1">
         <AnimatePresence mode="wait">
           {days.map((day) => {
             const dateStr = format(day, "yyyy-MM-dd");
@@ -239,7 +239,7 @@ export default function CalendarPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.3 }}
-            className="flex-1 mt-3 border-t border-border/30 px-4 pt-4 pb-4"
+            className="flex-1 mt-3 border-t border-border/30 px-4 md:px-6 lg:px-8 pt-4 pb-4"
           >
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -337,6 +337,7 @@ export default function CalendarPage() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
 
       {/* Task Form */}
       <TaskForm

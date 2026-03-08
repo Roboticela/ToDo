@@ -54,9 +54,9 @@ export default function TodayPage() {
   return (
     <div className="flex flex-col min-h-full">
       <TodoHeader />
-
+      <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto">
       {/* Date Navigator */}
-      <div className="sticky top-14 z-20 bg-background/90 backdrop-blur-sm border-b border-border/30 px-4 py-3">
+      <div className="sticky top-14 z-20 bg-background/90 backdrop-blur-sm border-b border-border/30 px-4 md:px-6 lg:px-8 py-3">
         <div className="flex items-center justify-between mb-3">
           <motion.button
             type="button"
@@ -109,7 +109,7 @@ export default function TodayPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="px-4 pt-4 pb-2 flex gap-2">
+      <div className="px-4 md:px-6 lg:px-8 pt-4 pb-2 flex gap-2">
         {[
           { key: "all" as const, label: "All", icon: List },
           { key: "do" as const, label: "Do's", icon: TrendingUp },
@@ -133,7 +133,7 @@ export default function TodayPage() {
       </div>
 
       {/* Task List */}
-      <div className="flex-1 px-4 pb-4">
+      <div className="flex-1 px-4 md:px-6 lg:px-8 pb-4">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
@@ -202,7 +202,7 @@ export default function TodayPage() {
 
       {/* Greeting */}
       {user && isToday && tasks.length > 0 && (
-        <div className="px-4 py-2 text-center">
+        <div className="px-4 md:px-6 lg:px-8 py-2 text-center">
           <p className="text-xs text-foreground/30">
             {progressPct === 100
               ? `Great job, ${user.name.split(" ")[0]}! All tasks done! 🎉`
@@ -211,13 +211,14 @@ export default function TodayPage() {
         </div>
       )}
 
+      </div>
       {/* FAB */}
       <motion.button
         type="button"
         onClick={() => { setEditTask(null); setShowForm(true); }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.92 }}
-        className="fixed bottom-20 right-4 z-30 w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
+        className="fixed bottom-20 right-4 md:right-6 lg:right-8 z-30 w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
         style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
       >
         <Plus className="w-6 h-6" strokeWidth={2.5} />

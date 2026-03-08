@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Clock, ChevronUp, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useIsDesktop } from "../../hooks/useIsDesktop";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -263,6 +264,7 @@ export default function TimePicker({
   error,
   use24h = false,
 }: TimePickerProps) {
+  const isDesktop = useIsDesktop();
   const [open, setOpen] = useState(false);
 
   // Internal drum state — always in sync with `value` on open
@@ -339,16 +341,20 @@ export default function TimePicker({
             onClick={() => setOpen(false)}
           />
 
+          <div className="fixed inset-0 z-61 pointer-events-none lg:flex lg:items-center lg:justify-center lg:p-4">
           <motion.div
             key="sheet"
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", stiffness: 330, damping: 38 }}
-            className="fixed bottom-0 left-0 right-0 z-61 max-w-2xl mx-auto bg-card border-t border-border rounded-t-3xl overflow-hidden"
+            initial={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
+            animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
+            exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
+            transition={isDesktop ? { duration: 0.2 } : { type: "spring", stiffness: 330, damping: 38 }}
+            className={cn(
+              "pointer-events-auto w-full max-w-2xl bg-card border border-border overflow-hidden",
+              "fixed bottom-0 left-0 right-0 mx-auto z-61 rounded-t-3xl border-t lg:relative lg:rounded-xl lg:max-h-[90vh]"
+            )}
           >
-            {/* Handle */}
-            <div className="flex justify-center pt-3 pb-1">
+            {/* Handle - hide on desktop */}
+            <div className="flex justify-center pt-3 pb-1 lg:hidden">
               <div className="w-10 h-1 rounded-full bg-border/60" />
             </div>
 
@@ -462,6 +468,7 @@ export default function TimePicker({
               </motion.button>
             </div>
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

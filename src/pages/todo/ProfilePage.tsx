@@ -17,6 +17,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useIsDesktop } from "../../hooks/useIsDesktop";
 import { useAuth } from "../../contexts/AuthContext";
 import { updateProfile, changePassword, deleteAccount } from "../../lib/authService";
 import { PLAN_FEATURES } from "../../types/todo";
@@ -45,7 +46,7 @@ export default function ProfilePage() {
     <div className="flex flex-col min-h-full">
       <TodoHeader title="Profile" />
 
-      <div className="flex-1 px-4 py-6 space-y-5 overflow-y-auto custom-scrollbar">
+      <div className="flex-1 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-5 overflow-y-auto custom-scrollbar">
         {/* Avatar + Name */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -469,21 +470,27 @@ function BottomSheet({
 }: {
   title: string; onClose: () => void; children: React.ReactNode;
 }) {
+  const isDesktop = useIsDesktop();
   return (
-    <motion.div
-      initial={{ y: "100%" }}
-      animate={{ y: 0 }}
-      exit={{ y: "100%" }}
-      transition={{ type: "spring", stiffness: 300, damping: 35 }}
-      className="fixed bottom-0 left-0 right-0 z-50 max-w-2xl mx-auto bg-card border-t border-border rounded-t-3xl p-5"
-    >
-      <div className="flex items-center justify-between mb-5">
-        <h3 className="text-base font-bold text-foreground">{title}</h3>
-        <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-accent/50">
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-      {children}
-    </motion.div>
+    <div className="fixed inset-0 z-50 pointer-events-none lg:flex lg:items-center lg:justify-center lg:p-4">
+      <motion.div
+        initial={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
+        animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
+        exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
+        transition={isDesktop ? { duration: 0.2 } : { type: "spring", stiffness: 300, damping: 35 }}
+        className={cn(
+          "pointer-events-auto w-full max-w-2xl bg-card border border-border p-5",
+          "fixed bottom-0 left-0 right-0 mx-auto z-50 rounded-t-3xl border-t lg:relative lg:rounded-xl lg:max-h-[90vh] lg:overflow-y-auto"
+        )}
+      >
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-base font-bold text-foreground">{title}</h3>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-foreground/40 hover:text-foreground/70 hover:bg-accent/50">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {children}
+      </motion.div>
+    </div>
   );
 }
