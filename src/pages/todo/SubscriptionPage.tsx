@@ -4,7 +4,6 @@ import { Crown, Check, ArrowLeft, Zap, Infinity } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { PLAN_FEATURES, type SubscriptionPlan } from "../../types/todo";
-import TodoHeader from "../../components/todo/TodoHeader";
 
 const PLANS: {
   id: SubscriptionPlan;
@@ -76,8 +75,6 @@ export default function SubscriptionPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TodoHeader title="Subscription" />
-
       <div className="flex-1 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-4 overflow-y-auto custom-scrollbar">
         {/* Header */}
         <motion.div

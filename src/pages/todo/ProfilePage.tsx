@@ -21,7 +21,6 @@ import { useIsDesktop } from "../../hooks/useIsDesktop";
 import { useAuth } from "../../contexts/AuthContext";
 import { updateProfile, changePassword, deleteAccount } from "../../lib/authService";
 import { PLAN_FEATURES } from "../../types/todo";
-import TodoHeader from "../../components/todo/TodoHeader";
 
 type ModalType = "edit-name" | "change-password" | "delete-account" | null;
 
@@ -44,8 +43,6 @@ export default function ProfilePage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TodoHeader title="Profile" />
-
       <div className="flex-1 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-5 overflow-y-auto custom-scrollbar">
         {/* Avatar + Name */}
         <motion.div

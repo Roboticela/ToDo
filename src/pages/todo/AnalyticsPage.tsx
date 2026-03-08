@@ -28,7 +28,6 @@ import {
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { getAnalyticsForDateRange, getEarliestTaskDate } from "../../lib/taskService";
-import TodoHeader from "../../components/todo/TodoHeader";
 import DatePicker from "../../components/todo/DatePicker";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -223,7 +222,6 @@ export default function AnalyticsPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TodoHeader title="Analytics" />
       <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto overflow-y-auto">
       {/* Range selector */}
       <div className="px-4 md:px-6 lg:px-8 pt-4 pb-3 space-y-3">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mail, ArrowLeft, CheckSquare, CheckCircle } from "lucide-react";
@@ -6,6 +6,10 @@ import { forgotPassword } from "../../lib/authService";
 import { cn } from "../../lib/utils";
 
 export default function ForgotPasswordPage() {
+  useEffect(() => {
+    document.title = "Forgot Password - Roboticela ToDo";
+  }, []);
+
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [sent, setSent] = useState(false);

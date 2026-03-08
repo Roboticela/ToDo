@@ -30,7 +30,6 @@ import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
 import { getTasksForDate, getTaskCompletionForDate } from "../../lib/taskService";
-import TodoHeader from "../../components/todo/TodoHeader";
 import TaskForm from "../../components/todo/TaskForm";
 import type { Task } from "../../types/todo";
 
@@ -132,7 +131,6 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TodoHeader title="Calendar" />
       <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto">
       {/* Month Navigator */}
       <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-3 border-b border-border/30">

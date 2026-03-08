@@ -7,7 +7,6 @@ import { useTasks } from "../../contexts/TaskContext";
 import { useAuth } from "../../contexts/AuthContext";
 import TaskCard from "../../components/todo/TaskCard";
 import TaskForm from "../../components/todo/TaskForm";
-import TodoHeader from "../../components/todo/TodoHeader";
 import type { Task } from "../../types/todo";
 
 export default function TodayPage() {
@@ -53,7 +52,6 @@ export default function TodayPage() {
 
   return (
     <div className="flex flex-col min-h-full">
-      <TodoHeader />
       <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto">
       {/* Date Navigator */}
       <div className="sticky top-14 z-20 bg-background/90 backdrop-blur-sm border-b border-border/30 px-4 md:px-6 lg:px-8 py-3">

@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Home, Calendar, BarChart3, User } from "lucide-react";
@@ -10,7 +11,7 @@ const NAV_ITEMS = [
   { path: "/todo/profile", label: "Profile", icon: User },
 ];
 
-export default function BottomNav() {
+function BottomNav() {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -52,3 +53,5 @@ export default function BottomNav() {
     </nav>
   );
 }
+
+export default memo(BottomNav);

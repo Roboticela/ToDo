@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, User, CheckSquare } from "lucide-react";
@@ -9,6 +9,11 @@ import { cn } from "../../lib/utils";
 export default function RegisterPage() {
   const navigate = useNavigate();
   const { setAuthData } = useAuth();
+
+  useEffect(() => {
+    document.title = "Sign up - Roboticela ToDo";
+  }, []);
+
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

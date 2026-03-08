@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useTheme, type ThemeName } from "../../contexts/ThemeContext";
 import { useNavigate } from "react-router-dom";
 import {
@@ -43,7 +43,7 @@ interface TodoHeaderProps {
   rightContent?: React.ReactNode;
 }
 
-export default function TodoHeader({ title = "Roboticela ToDo", rightContent }: TodoHeaderProps) {
+function TodoHeader({ title = "Roboticela ToDo", rightContent }: TodoHeaderProps) {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const currentTheme = themes.find((t) => t.name === theme);
@@ -66,7 +66,7 @@ export default function TodoHeader({ title = "Roboticela ToDo", rightContent }: 
         <CheckSquare className="w-6 h-6 text-primary" strokeWidth={2} />
         <h1 className="text-base font-bold text-foreground">
           <span className="sm:hidden">ToDo</span>
-          <span className="hidden sm:inline">{title}</span>
+          <span className="hidden sm:inline">Roboticela ToDo</span>
         </h1>
       </button>
 
@@ -155,3 +155,5 @@ export default function TodoHeader({ title = "Roboticela ToDo", rightContent }: 
     </>
   );
 }
+
+export default memo(TodoHeader);

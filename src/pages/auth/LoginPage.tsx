@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, CheckSquare } from "lucide-react";
@@ -10,6 +10,11 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const { setAuthData } = useAuth();
   const [email, setEmail] = useState("");
+
+  useEffect(() => {
+    document.title = "Login - Roboticela ToDo";
+  }, []);
+
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);

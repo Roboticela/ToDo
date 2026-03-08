@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Home, Calendar, BarChart3, User, CreditCard, LogOut } from "lucide-react";
@@ -12,7 +13,7 @@ const NAV_ITEMS = [
   { path: "/todo/profile", label: "Profile", icon: User },
 ];
 
-export default function SideNav() {
+function SideNav() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -79,3 +80,5 @@ export default function SideNav() {
     </aside>
   );
 }
+
+export default memo(SideNav);

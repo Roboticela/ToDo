@@ -1,14 +1,32 @@
-import { useEffect } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
+import { useEffect, useMemo } from "react";
+import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { TaskProvider } from "../../contexts/TaskContext";
 import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
+import TodoHeader from "./TodoHeader";
 import { initNotificationScheduler, requestNotificationPermission } from "../../lib/notificationService";
+
+const ROUTE_TITLES: Record<string, string> = {
+  "/todo": "Today",
+  "/todo/calendar": "Calendar",
+  "/todo/analytics": "Analytics",
+  "/todo/subscription": "Subscription",
+  "/todo/profile": "Profile",
+};
 
 export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const headerTitle = useMemo(
+    () => ROUTE_TITLES[location.pathname] ?? "Today",
+    [location.pathname]
+  );
+
+  useEffect(() => {
+    document.title = `${headerTitle} - Roboticela ToDo`;
+  }, [headerTitle]);
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -42,6 +60,7 @@ export default function AppLayout() {
       <div className="min-h-screen bg-background flex flex-col lg:flex-row w-full">
         <SideNav />
         <main className="flex-1 flex flex-col min-w-0 w-full max-w-2xl md:max-w-4xl lg:max-w-none mx-auto lg:mx-0 lg:pl-56">
+          <TodoHeader title={headerTitle} />
           <div className="flex-1 pb-16 lg:pb-0 w-full min-w-0">
             <Outlet />
           </div>
