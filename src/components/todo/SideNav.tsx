@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { path: "/todo/calendar", label: "Calendar", icon: Calendar },
   { path: "/todo/analytics", label: "Analytics", icon: BarChart3 },
   { path: "/todo/subscription", label: "Subscription", icon: CreditCard },
-  { path: "/todo/profile", label: "Profile", icon: User },
+  { path: "/todo/settings", label: "Settings", icon: User },
 ];
 
 function SideNav() {

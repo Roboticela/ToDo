@@ -136,7 +136,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-primary">•</span>
-                        <span>Profile, subscription plans, and secure account management</span>
+                        <span>Settings, subscription plans, and secure account management</span>
                       </li>
                     </ul>
                   </motion.div>

@@ -15,20 +15,30 @@ import {
   Eye,
   EyeOff,
   Check,
+  Download,
+  Upload,
 } from "lucide-react";
+import { format } from "date-fns";
 import { cn } from "../../lib/utils";
 import { useIsDesktop } from "../../hooks/useIsDesktop";
 import { useAuth } from "../../contexts/AuthContext";
+import { useTasks } from "../../contexts/TaskContext";
 import { updateProfile, changePassword, deleteAccount } from "../../lib/authService";
+import { getExportData, importTasksFromData } from "../../lib/taskService";
 import { PLAN_FEATURES } from "../../types/todo";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
-export default function ProfilePage() {
+export default function SettingsPage() {
   const navigate = useNavigate();
   const { user, updateUser, logout } = useAuth();
+  const { refreshTasks } = useTasks();
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   if (!user) return null;
 
@@ -39,6 +49,59 @@ export default function ProfilePage() {
     setIsLoggingOut(true);
     await logout();
     navigate("/auth/login", { replace: true });
+  }
+
+  async function handleExport() {
+    setExportLoading(true);
+    setImportMessage(null);
+    try {
+      const data = await getExportData(user.id);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `roboticela-todo-export-${format(new Date(), "yyyy-MM-dd")}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportLoading(false);
+    }
+  }
+
+  function handleImportClick() {
+    setImportMessage(null);
+    importInputRef.current?.click();
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setImportLoading(true);
+    setImportMessage(null);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text) as unknown;
+      const count = Array.isArray((data as { tasks?: unknown[] }).tasks) ? (data as { tasks: unknown[] }).tasks.length : 0;
+      if (count === 0) {
+        setImportMessage("No tasks found in file.");
+        return;
+      }
+      if (!window.confirm(`Import ${count} task${count === 1 ? "" : "s"}? They will be added to your account.`)) {
+        return;
+      }
+      const result = await importTasksFromData(user.id, data);
+      await refreshTasks();
+      if (result.errors.length > 0) {
+        setImportMessage(`Imported ${result.imported} task(s). ${result.errors.length} error(s): ${result.errors.slice(0, 3).join("; ")}${result.errors.length > 3 ? "…" : ""}`);
+      } else {
+        setImportMessage(`Imported ${result.imported} task(s) successfully.`);
+      }
+    } catch (err) {
+      setImportMessage(err instanceof Error ? err.message : "Invalid or corrupted export file.");
+    } finally {
+      setImportLoading(false);
+    }
   }
 
   return (
@@ -109,6 +172,34 @@ export default function ProfilePage() {
             label="Change Password"
             onClick={() => setActiveModal("change-password")}
           />
+        </Section>
+
+        {/* Data: Export / Import */}
+        <Section label="Data">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,application/json"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          <SettingsRow
+            icon={<Download className="w-4 h-4 text-primary/70" />}
+            label="Export tasks"
+            value={exportLoading ? "Exporting…" : undefined}
+            onClick={handleExport}
+            loading={exportLoading}
+          />
+          <SettingsRow
+            icon={<Upload className="w-4 h-4 text-primary/70" />}
+            label="Import tasks"
+            value={importLoading ? "Importing…" : undefined}
+            onClick={handleImportClick}
+            loading={importLoading}
+          />
+          {importMessage && (
+            <p className="px-4 py-2 text-xs text-foreground/70 border-t border-border/50">{importMessage}</p>
+          )}
         </Section>
 
         {/* Plan section */}
@@ -265,14 +356,14 @@ function SettingsRow({
         !onClick && "cursor-default"
       )}
     >
-      <div className="flex-shrink-0">{icon}</div>
+      <div className="shrink-0">{icon}</div>
       <div className="flex-1 min-w-0">
         <span className={cn("text-sm font-medium", danger && "text-red-400")}>{label}</span>
       </div>
       {value && <span className="text-xs text-foreground/40 truncate max-w-[120px]">{value}</span>}
-      {onClick && !loading && <ChevronRight className="w-4 h-4 text-foreground/30 flex-shrink-0" />}
+      {onClick && !loading && <ChevronRight className="w-4 h-4 text-foreground/30 shrink-0" />}
       {loading && (
-        <div className="w-4 h-4 border-2 border-border border-t-primary rounded-full animate-spin flex-shrink-0" />
+        <div className="w-4 h-4 border-2 border-border border-t-primary rounded-full animate-spin shrink-0" />
       )}
     </button>
   );
@@ -630,7 +721,7 @@ function DeleteAccountModal({
     <BottomSheet title="Delete Account" onClose={onClose}>
       <div className="space-y-4">
         <div className="flex items-start gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-          <AlertCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
           <p className="text-xs text-red-400">
             This action is irreversible. All your tasks and data will be permanently deleted.
           </p>

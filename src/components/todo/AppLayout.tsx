@@ -21,7 +21,8 @@ const ROUTE_TITLES: Record<string, string> = {
   "/todo/calendar": "Calendar",
   "/todo/analytics": "Analytics",
   "/todo/subscription": "Subscription",
-  "/todo/profile": "Profile",
+  "/todo/settings": "Settings",
+  "/todo/profile": "Settings",
 };
 
 export default function AppLayout() {

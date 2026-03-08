@@ -250,3 +250,62 @@ export function getDateLabel(date: string): string {
 
   return format(new Date(date + "T12:00:00"), "EEE, MMM d");
 }
+
+// ─── Export / Import ───────────────────────────────────────────────────────────
+
+export interface ExportData {
+  version: number;
+  exportedAt: string;
+  app: string;
+  tasks: Task[];
+}
+
+const EXPORT_VERSION = 1;
+
+export async function getExportData(userId: string): Promise<ExportData> {
+  const tasks = await getAllTasksByUser(userId);
+  return {
+    version: EXPORT_VERSION,
+    exportedAt: new Date().toISOString(),
+    app: "Roboticela ToDo",
+    tasks,
+  };
+}
+
+export async function importTasksFromData(
+  userId: string,
+  data: unknown
+): Promise<{ imported: number; errors: string[] }> {
+  const errors: string[] = [];
+  const parsed = data as ExportData;
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.tasks)) {
+    return { imported: 0, errors: ["Invalid export file: missing or invalid tasks array."] };
+  }
+  let imported = 0;
+  for (let i = 0; i < parsed.tasks.length; i++) {
+    const t = parsed.tasks[i];
+    if (!t || typeof t.title !== "string" || !t.title.trim()) {
+      errors.push(`Row ${i + 1}: missing title`);
+      continue;
+    }
+    const formData: TaskFormData = {
+      title: t.title.trim(),
+      description: t.description?.trim() || undefined,
+      type: t.type ?? "daily",
+      category: t.category ?? "do",
+      date: t.date ?? getTodayString(),
+      time: t.time,
+      startTime: t.startTime,
+      endTime: t.endTime,
+      isRepeating: t.isRepeating ?? false,
+      repeatDays: Array.isArray(t.repeatDays) ? (t.repeatDays as RepeatDay[]) : [],
+    };
+    try {
+      await createTask(userId, formData);
+      imported++;
+    } catch (err) {
+      errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : "Failed to create task"}`);
+    }
+  }
+  return { imported, errors };
+}

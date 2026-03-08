@@ -19,7 +19,7 @@ import AppLayout from "./components/todo/AppLayout";
 import TodayPage from "./pages/todo/TodayPage";
 import CalendarPage from "./pages/todo/CalendarPage";
 import AnalyticsPage from "./pages/todo/AnalyticsPage";
-import ProfilePage from "./pages/todo/ProfilePage";
+import SettingsPage from "./pages/todo/SettingsPage";
 import SubscriptionPage from "./pages/todo/SubscriptionPage";
 
 if (isTauri()) {
@@ -54,7 +54,8 @@ createRoot(document.getElementById("root")!).render(
                 <Route index element={<TodayPage />} />
                 <Route path="calendar" element={<CalendarPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
-                <Route path="profile" element={<ProfilePage />} />
+                <Route path="settings" element={<SettingsPage />} />
+                <Route path="profile" element={<Navigate to="/todo/settings" replace />} />
                 <Route path="subscription" element={<SubscriptionPage />} />
               </Route>
 
