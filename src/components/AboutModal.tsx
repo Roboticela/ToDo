@@ -99,7 +99,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   >
                     <h3 className="text-lg font-semibold text-foreground mb-2">Description</h3>
                     <p className="text-foreground/90 text-sm sm:text-base leading-relaxed">
-                      Roboticela ToDo is an interactive application. Organize and track your tasks.
+                      Roboticela ToDo is a task management app to plan your day, track progress, and stay on top of what to do and what to avoid. Use Today, Calendar, and Analytics to organize tasks by time, repeat schedules, and see how you’re doing.
                     </p>
                   </motion.div>
 
@@ -112,27 +112,31 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                     <ul className="space-y-2 text-foreground/90 text-sm sm:text-base leading-relaxed">
                       <li className="flex items-start gap-2">
                         <span className="text-primary">•</span>
-                        <span>Step-by-step animation through all 7 OSI layers</span>
+                        <span>Today view with progress bar, Do’s and Don’ts, and filters</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-primary">•</span>
-                        <span>Custom message, transmission medium (Ethernet, Wi‑Fi, Fiber, etc.), and protocol (HTTP, HTTPS, SMTP, DNS, FTP)</span>
+                        <span>Calendar view to see and manage tasks by date</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-primary">•</span>
-                        <span>Optional source and destination IP addresses</span>
+                        <span>Time-based and duration tasks with optional repeating schedules</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-primary">•</span>
-                        <span>Adjustable animation speed (slow, normal, fast)</span>
+                        <span>Analytics to review your completion and trends</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-primary">•</span>
-                        <span>Multiple themes for a comfortable viewing experience</span>
+                        <span>Sync across devices with offline support</span>
                       </li>
                       <li className="flex items-start gap-2">
                         <span className="text-primary">•</span>
-                        <span>User-friendly, educational interface</span>
+                        <span>Multiple themes (Navy, Dark, Light, Sunset, Ocean, Forest, and more)</span>
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-primary">•</span>
+                        <span>Profile, subscription plans, and secure account management</span>
                       </li>
                     </ul>
                   </motion.div>

@@ -82,6 +82,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange }: Tas
       className={cn(
         "rounded-2xl border bg-card transition-all overflow-hidden",
         isCompleted ? "border-border/40 opacity-70" : "border-border",
+        task.category === "do" && "border-l-2 border-l-green-400/60",
         task.category === "dont" && "border-l-2 border-l-orange-400/60"
       )}
     >
