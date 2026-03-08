@@ -3,7 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, User, CheckSquare } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { register, loginWithGoogle } from "../../lib/authService";
+import { register, getGoogleAuthUrl } from "../../lib/authService";
+import { isTauri } from "../../lib/tauri";
+import { openLink } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
 
 export default function RegisterPage() {
@@ -50,17 +52,16 @@ export default function RegisterPage() {
   }
 
   async function handleGoogle() {
-    setIsLoading(true);
     setError("");
-    try {
-      const { user, session } = await loginWithGoogle();
-      setAuthData(user, session);
-      navigate("/todo");
-    } catch {
-      setError("Google sign-up failed. Please try again.");
-    } finally {
-      setIsLoading(false);
+    if (isTauri()) {
+      try {
+        await openLink(getGoogleAuthUrl(), { openInNewTab: true });
+      } catch {
+        setError("Could not open browser for Google sign-up.");
+      }
+      return;
     }
+    window.location.href = getGoogleAuthUrl();
   }
 
   return (

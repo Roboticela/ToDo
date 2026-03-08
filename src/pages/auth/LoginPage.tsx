@@ -3,7 +3,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, CheckSquare } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { login, loginWithGoogle } from "../../lib/authService";
+import { login, getGoogleAuthUrl } from "../../lib/authService";
+import { isTauri } from "../../lib/tauri";
+import { openLink } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
 
 export default function LoginPage() {
@@ -40,17 +42,18 @@ export default function LoginPage() {
   }
 
   async function handleGoogle() {
-    setIsLoading(true);
     setError("");
-    try {
-      const { user, session } = await loginWithGoogle();
-      setAuthData(user, session);
-      navigate("/todo");
-    } catch {
-      setError("Google login failed. Please try again.");
-    } finally {
-      setIsLoading(false);
+    if (isTauri()) {
+      try {
+        await openLink(getGoogleAuthUrl(), { openInNewTab: true });
+        // User will complete login in system browser; desktop-success page or deep link will bring them back
+      } catch {
+        setError("Could not open browser for Google sign-in.");
+      }
+      return;
     }
+    // Web: redirect to backend Google OAuth flow
+    window.location.href = getGoogleAuthUrl();
   }
 
   return (

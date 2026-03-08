@@ -7,12 +7,16 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { AuthProvider } from "./contexts/AuthContext";
 import { SyncProvider } from "./contexts/SyncContext";
 import { ThemeScript } from "./components/ThemeScript";
+import DeepLinkAuthSetup from "./components/DeepLinkAuthSetup";
 import { isTauri } from "./lib/tauri";
 
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
 import RegisterPage from "./pages/auth/RegisterPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
+import AuthCallbackPage from "./pages/auth/AuthCallbackPage";
+import DesktopSuccessPage from "./pages/auth/DesktopSuccessPage";
 
 // App layout + pages
 import AppLayout from "./components/todo/AppLayout";
@@ -41,6 +45,7 @@ createRoot(document.getElementById("root")!).render(
     <ThemeScript />
     <ThemeProvider>
       <AuthProvider>
+        <DeepLinkAuthSetup />
         <SyncProvider>
           <BrowserRouter>
             <Routes>
@@ -48,6 +53,9 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/auth/login" element={<LoginPage />} />
               <Route path="/auth/register" element={<RegisterPage />} />
               <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/auth/callback" element={<AuthCallbackPage />} />
+              <Route path="/auth/desktop-success" element={<DesktopSuccessPage />} />
 
               {/* App */}
               <Route path="/todo" element={<AppLayout />}>

@@ -1,0 +1,99 @@
+// Prisma schema for Roboticela ToDo - PostgreSQL
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  passwordHash  String?   // null for Google-only users
+  avatarUrl     String?
+  plan          String    @default("free") // free | basic | pro
+  planExpiresAt DateTime?
+  googleId      String?   @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions           Session[]
+  passwordResetTokens PasswordResetToken[]
+  tasks               Task[]
+  completions         TaskCompletion[]
+  subscriptions       Subscription[]
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id          String   @id
+  userId      String
+  title       String
+  description String?
+  type        String   // time-based | daily | duration
+  category    String   // do | dont
+  date        String   // YYYY-MM-DD
+  time        String?
+  startTime   String?
+  endTime     String?
+  isRepeating Boolean  @default(false)
+  repeatDays  Int[]    @default([]) // 0-6
+  status      String   @default("pending") // pending | completed | missed | skipped
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  completions TaskCompletion[]
+}
+
+model TaskCompletion {
+  id          String   @id
+  taskId      String
+  userId      String
+  date        String // YYYY-MM-DD
+  status      String // completed | missed | skipped
+  completedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Subscription {
+  id                      String    @id // Paddle subscription id (sub_xxx) or our uuid for legacy
+  userId                  String
+  paddleCustomerId        String?
+  paddleSubscriptionId     String?   // same as id when from Paddle
+  plan                    String    // basic | pro
+  status                  String    @default("active") // active | cancelled | past_due
+  currentPeriodEnd        DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

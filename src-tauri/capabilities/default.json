@@ -9,6 +9,7 @@
     "core:default",
     "dialog:allow-save",
     "opener:default",
-    "window-state:default"
+    "window-state:default",
+    "deep-link:default"
   ]
 }

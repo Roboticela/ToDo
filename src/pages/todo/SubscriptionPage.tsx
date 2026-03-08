@@ -1,9 +1,32 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Crown, Check, ArrowLeft, Zap, Infinity } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
-import { PLAN_FEATURES, type SubscriptionPlan } from "../../types/todo";
+import { type SubscriptionPlan } from "../../types/todo";
+import { openLink } from "../../lib/tauri";
+import { isTauri } from "../../lib/tauri";
+
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
+async function createCheckout(plan: "basic" | "pro", accessToken: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/paddle/create-checkout`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ plan }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Could not start checkout");
+  }
+  const data = await res.json();
+  if (!data.checkoutUrl) throw new Error("No checkout URL");
+  return data.checkoutUrl;
+}
 
 const PLANS: {
   id: SubscriptionPlan;
@@ -71,7 +94,27 @@ const PLANS: {
 
 export default function SubscriptionPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+  const [loadingPlan, setLoadingPlan] = useState<SubscriptionPlan | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleUpgrade(plan: SubscriptionPlan) {
+    if (plan === "free" || !session?.accessToken) return;
+    setError(null);
+    setLoadingPlan(plan);
+    try {
+      const checkoutUrl = await createCheckout(plan, session.accessToken);
+      if (isTauri()) {
+        await openLink(checkoutUrl, { openInNewTab: true });
+      } else {
+        window.open(checkoutUrl, "_blank", "noopener,noreferrer");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Checkout failed");
+    } finally {
+      setLoadingPlan(null);
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-full">
@@ -88,10 +131,18 @@ export default function SubscriptionPage() {
           </p>
         </motion.div>
 
+        {error && (
+          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
+            {error}
+          </div>
+        )}
+
         {/* Plan cards */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
         {PLANS.map((plan, i) => {
           const isCurrentPlan = user?.plan === plan.id;
+          const isUpgrade = plan.id !== "free" && !isCurrentPlan;
+          const isLoading = loadingPlan === plan.id;
           return (
             <motion.div
               key={plan.id}
@@ -144,7 +195,7 @@ export default function SubscriptionPage() {
               <ul className="space-y-2 mb-5 flex-1">
                 {plan.features.map((feat) => (
                   <li key={feat} className="flex items-center gap-2 text-sm text-foreground/70">
-                    <Check className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                    <Check className="w-3.5 h-3.5 text-green-400 shrink-0" />
                     {feat}
                   </li>
                 ))}
@@ -153,7 +204,8 @@ export default function SubscriptionPage() {
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.97 }}
-                disabled={isCurrentPlan}
+                disabled={isCurrentPlan || isLoading}
+                onClick={() => isUpgrade && handleUpgrade(plan.id)}
                 className={cn(
                   "w-full h-11 rounded-xl text-sm font-semibold transition-all",
                   isCurrentPlan
@@ -167,6 +219,8 @@ export default function SubscriptionPage() {
                   ? "Current Plan"
                   : plan.id === "free"
                   ? "Downgrade to Free"
+                  : isLoading
+                  ? "Opening checkout..."
                   : `Upgrade to ${plan.name}`}
               </motion.button>
             </motion.div>

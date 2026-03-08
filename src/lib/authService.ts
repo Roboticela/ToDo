@@ -1,8 +1,9 @@
 import type { User, AuthSession } from "../types/todo";
 import { saveUser, getUser, saveSession, getAnySession, deleteSession } from "./db";
 import { v4 as uuidv4 } from "./uuid";
+import { isTauri } from "./tauri";
 
-const API_BASE = import.meta.env.VITE_API_URL || "https://api.todo.roboticela.com";
+const API_BASE = (import.meta.env.VITE_API_URL || "https://api.todo.roboticela.com").replace(/\/$/, "");
 
 // ─── Local Demo Auth (offline fallback) ───────────────────────────────────────
 
@@ -33,7 +34,7 @@ export async function register(
   password: string
 ): Promise<{ user: User; session: AuthSession }> {
   try {
-    const res = await fetch(`${API_BASE}/auth/register`, {
+    const res = await fetch(`${API_BASE}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password }),
@@ -45,22 +46,17 @@ export async function register(
       await saveSession(data.session);
       return data;
     }
-    throw new Error(await res.text());
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || (await res.text()) || "Registration failed");
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
-      // Offline - create local account
       const user = createLocalUser(name, email);
       const session = createLocalSession(user.id);
       await saveUser(user);
       await saveSession(session);
       return { user, session };
     }
-    // Create local account on network failure
-    const user = createLocalUser(name, email);
-    const session = createLocalSession(user.id);
-    await saveUser(user);
-    await saveSession(session);
-    return { user, session };
+    throw err;
   }
 }
 
@@ -71,7 +67,7 @@ export async function login(
   password: string
 ): Promise<{ user: User; session: AuthSession }> {
   try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -83,8 +79,8 @@ export async function login(
       await saveSession(data.session);
       return data;
     }
-    const errorText = await res.text();
-    throw new Error(errorText || "Invalid email or password");
+    const errBody = await res.json().catch(() => ({ error: "" }));
+    throw new Error(errBody.error || "Invalid email or password");
   } catch (err: unknown) {
     if (err instanceof Error && (err.name === "AbortError" || err.name === "TypeError")) {
       // Offline - check if we have local user data
@@ -107,21 +103,23 @@ export async function login(
 }
 
 // ─── Google Login ─────────────────────────────────────────────────────────────
+// Web: redirect to backend Google OAuth flow; callback redirects to /auth/callback with session.
+// Native (Tauri): open system browser to same URL; callback redirects to /auth/desktop-success then deep link.
 
-export async function loginWithGoogle(): Promise<{ user: User; session: AuthSession }> {
-  // In a real app this would use OAuth. For now, create a demo Google user.
-  const user = createLocalUser("Google User", `google_${Date.now()}@gmail.com`);
-  const session = createLocalSession(user.id);
-  await saveUser(user);
-  await saveSession(session);
-  return { user, session };
+export function getGoogleAuthUrl(): string {
+  return `${API_BASE}/api/auth/google?client=${isTauri() ? "desktop" : "web"}`;
+}
+
+/** Starts Google OAuth. For web: redirects. For native: opens system browser; app should handle deep link or desktop-success page. */
+export function loginWithGoogleRedirect(): void {
+  window.location.href = getGoogleAuthUrl();
 }
 
 // ─── Forgot / Reset Password ──────────────────────────────────────────────────
 
 export async function forgotPassword(email: string): Promise<void> {
   try {
-    await fetch(`${API_BASE}/auth/forgot-password`, {
+    await fetch(`${API_BASE}/api/auth/forgot-password`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email }),
@@ -133,17 +131,20 @@ export async function forgotPassword(email: string): Promise<void> {
 }
 
 export async function resetPassword(token: string, newPassword: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/auth/reset-password`, {
+  const res = await fetch(`${API_BASE}/api/auth/reset-password`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password: newPassword }),
   });
-  if (!res.ok) throw new Error("Failed to reset password");
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || "Failed to reset password");
+  }
 }
 
 export async function changePassword(userId: string, newPassword: string): Promise<void> {
   const session = await getAnySession();
-  const res = await fetch(`${API_BASE}/auth/change-password`, {
+  const res = await fetch(`${API_BASE}/api/auth/change-password`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -160,7 +161,7 @@ export async function logout(userId: string): Promise<void> {
   try {
     const session = await getAnySession();
     if (session) {
-      await fetch(`${API_BASE}/auth/logout`, {
+      await fetch(`${API_BASE}/api/auth/logout`, {
         method: "POST",
         headers: { Authorization: `Bearer ${session.accessToken}` },
         signal: AbortSignal.timeout(3000),
@@ -182,7 +183,7 @@ export async function updateProfile(userId: string, updates: Partial<User>): Pro
 
   try {
     const session = await getAnySession();
-    const res = await fetch(`${API_BASE}/users/${userId}`, {
+    const res = await fetch(`${API_BASE}/api/users/${userId}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -209,7 +210,7 @@ export async function updateProfile(userId: string, updates: Partial<User>): Pro
 export async function deleteAccount(userId: string): Promise<void> {
   try {
     const session = await getAnySession();
-    await fetch(`${API_BASE}/users/${userId}`, {
+    await fetch(`${API_BASE}/api/users/${userId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${session?.accessToken}` },
       signal: AbortSignal.timeout(5000),

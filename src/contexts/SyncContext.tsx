@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import type { ReactNode } from "react";
+import { useAuth } from "./AuthContext";
+import { syncTasksToServer } from "../lib/syncApi";
 
 interface SyncContextType {
   isOnline: boolean;
@@ -12,6 +14,7 @@ interface SyncContextType {
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
 export function SyncProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -21,6 +24,12 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     if (isSyncing || !navigator.onLine) return;
     setIsSyncing(true);
     try {
+      if (user) {
+        const result = await syncTasksToServer(user.id);
+        if (result) {
+          // Server sync succeeded; queue is logically synced
+        }
+      }
       const { getSyncQueue, removeSyncQueueItem } = await import("../lib/db");
       const queue = await getSyncQueue();
       for (const item of queue) {
@@ -36,7 +45,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [isSyncing]);
+  }, [isSyncing, user]);
 
   useEffect(() => {
     const handleOnline = () => {
