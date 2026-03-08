@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -22,7 +22,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { updateProfile, changePassword, deleteAccount } from "../../lib/authService";
 import { PLAN_FEATURES } from "../../types/todo";
 
-type ModalType = "edit-name" | "change-password" | "delete-account" | null;
+type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
 export default function ProfilePage() {
   const navigate = useNavigate();
@@ -60,6 +60,7 @@ export default function ProfilePage() {
             </div>
             <button
               type="button"
+              onClick={() => setActiveModal("change-avatar")}
               className="absolute -bottom-1 -right-1 w-7 h-7 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-md hover:bg-primary/90 transition-colors"
             >
               <Camera className="w-3.5 h-3.5" />
@@ -101,6 +102,7 @@ export default function ProfilePage() {
             icon={<Mail className="w-4 h-4 text-primary/70" />}
             label="Email"
             value={user.email}
+            onClick={() => setActiveModal("edit-email")}
           />
           <SettingsRow
             icon={<Lock className="w-4 h-4 text-primary/70" />}
@@ -150,7 +152,7 @@ export default function ProfilePage() {
         {/* Danger zone */}
         <Section label="Account Actions">
           <SettingsRow
-            icon={<LogOut className="w-4 h-4 text-foreground/50" />}
+            icon={<LogOut className="w-4 h-4 text-red-400" />}
             label="Sign Out"
             onClick={handleLogout}
             loading={isLoggingOut}
@@ -163,10 +165,6 @@ export default function ProfilePage() {
             danger
           />
         </Section>
-
-        <div className="text-center py-4">
-          <p className="text-xs text-foreground/25">Roboticela ToDo · v0.1.0</p>
-        </div>
       </div>
 
       {/* Modals */}
@@ -185,6 +183,22 @@ export default function ProfilePage() {
                 currentName={user.name}
                 userId={user.id}
                 onSave={(name) => { updateUser({ ...user, name }); setActiveModal(null); }}
+                onClose={() => setActiveModal(null)}
+              />
+            )}
+            {activeModal === "edit-email" && (
+              <EditEmailModal
+                currentEmail={user.email}
+                userId={user.id}
+                onSave={(email) => { updateUser({ ...user, email }); setActiveModal(null); }}
+                onClose={() => setActiveModal(null)}
+              />
+            )}
+            {activeModal === "change-avatar" && (
+              <ChangeAvatarModal
+                currentAvatarUrl={user.avatarUrl}
+                userId={user.id}
+                onSave={(avatarUrl) => { updateUser({ ...user, avatarUrl }); setActiveModal(null); }}
                 onClose={() => setActiveModal(null)}
               />
             )}
@@ -318,28 +332,219 @@ function EditNameModal({
   );
 }
 
+function EditEmailModal({
+  currentEmail,
+  userId,
+  onSave,
+  onClose,
+}: {
+  currentEmail: string;
+  userId: string;
+  onSave: (email: string) => void;
+  onClose: () => void;
+}) {
+  const [email, setEmail] = useState(currentEmail);
+  const [confirmEmail, setConfirmEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    setError("");
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setError("Enter your new email");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setError("Enter a valid email address");
+      return;
+    }
+    if (trimmed !== confirmEmail.trim()) {
+      setError("Emails do not match");
+      return;
+    }
+    if (trimmed === currentEmail) {
+      onClose();
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const updated = await updateProfile(userId, { email: trimmed });
+      onSave(updated.email);
+    } catch {
+      setError("Failed to update email. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <BottomSheet title="Change Email" onClose={onClose}>
+      <div className="space-y-4">
+        {error && (
+          <div className="p-3 rounded-xl bg-red-500/10 text-red-400 text-xs border border-red-500/20">
+            {error}
+          </div>
+        )}
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-foreground/60">New email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full h-11 px-4 rounded-xl border border-border bg-accent/20 text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 text-sm"
+            autoComplete="email"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-foreground/60">Confirm new email</label>
+          <input
+            type="email"
+            value={confirmEmail}
+            onChange={(e) => setConfirmEmail(e.target.value)}
+            placeholder="you@example.com"
+            className="w-full h-11 px-4 rounded-xl border border-border bg-accent/20 text-foreground placeholder:text-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40 text-sm"
+            autoComplete="email"
+          />
+        </div>
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium text-foreground/70 hover:bg-accent/30 transition-colors">
+            Cancel
+          </button>
+          <motion.button
+            type="button"
+            onClick={handleSave}
+            disabled={isLoading || !email.trim() || !confirmEmail.trim()}
+            whileTap={{ scale: 0.97 }}
+            className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-60 transition-colors"
+          >
+            {isLoading ? "Saving..." : "Save"}
+          </motion.button>
+        </div>
+      </div>
+    </BottomSheet>
+  );
+}
+
+function ChangeAvatarModal({
+  currentAvatarUrl,
+  userId,
+  onSave,
+  onClose,
+}: {
+  currentAvatarUrl?: string;
+  userId: string;
+  onSave: (avatarUrl: string | undefined) => void;
+  onClose: () => void;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith("image/")) return;
+    setError("");
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setIsLoading(true);
+      try {
+        const updated = await updateProfile(userId, { avatarUrl: dataUrl });
+        onSave(updated.avatarUrl);
+        onClose();
+      } catch {
+        setError("Failed to update photo.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
+  async function handleRemove() {
+    setIsLoading(true);
+    setError("");
+    try {
+      const updated = await updateProfile(userId, { avatarUrl: undefined });
+      onSave(updated.avatarUrl);
+      onClose();
+    } catch {
+      setError("Failed to remove photo.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <BottomSheet title="Change Photo" onClose={onClose}>
+      <div className="space-y-4">
+        {error && (
+          <div className="p-3 rounded-xl bg-red-500/10 text-red-400 text-xs border border-red-500/20">
+            {error}
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        <motion.button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isLoading}
+          whileTap={{ scale: 0.98 }}
+          className="w-full h-11 rounded-xl border border-border text-sm font-medium text-foreground/80 hover:bg-accent/30 transition-colors flex items-center justify-center gap-2"
+        >
+          <Camera className="w-4 h-4" />
+          {isLoading ? "Saving..." : "Choose image from device"}
+        </motion.button>
+        {currentAvatarUrl && (
+          <button
+            type="button"
+            onClick={handleRemove}
+            disabled={isLoading}
+            className="w-full h-11 rounded-xl border border-red-500/30 text-red-400 text-sm font-medium hover:bg-red-500/10 transition-colors"
+          >
+            Remove photo
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full h-11 rounded-xl border border-border text-sm font-medium text-foreground/70 hover:bg-accent/30 transition-colors"
+        >
+          Cancel
+        </button>
+      </div>
+    </BottomSheet>
+  );
+}
+
 function ChangePasswordModal({ userId, onClose }: { userId: string; onClose: () => void }) {
-  const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
   async function handleSave() {
-    if (!current || !next || !confirm) { setError("Fill in all fields"); return; }
+    if (!next || !confirm) { setError("Fill in all fields"); return; }
     if (next !== confirm) { setError("Passwords don't match"); return; }
     if (next.length < 6) { setError("Password must be at least 6 characters"); return; }
     setIsLoading(true);
     setError("");
     try {
-      await changePassword(userId, current, next);
+      await changePassword(userId, next);
       setSuccess(true);
       setTimeout(onClose, 1500);
     } catch {
-      setError("Failed to change password. Check your current password.");
+      setError("Failed to change password.");
     } finally {
       setIsLoading(false);
     }
@@ -357,7 +562,6 @@ function ChangePasswordModal({ userId, onClose }: { userId: string; onClose: () 
       ) : (
         <div className="space-y-4">
           {error && <div className="p-3 rounded-xl bg-red-500/10 text-red-400 text-xs border border-red-500/20">{error}</div>}
-          <PasswordInput label="Current Password" value={current} onChange={setCurrent} show={showCurrent} onToggle={() => setShowCurrent(!showCurrent)} />
           <PasswordInput label="New Password" value={next} onChange={setNext} show={showNext} onToggle={() => setShowNext(!showNext)} />
           <PasswordInput label="Confirm New Password" value={confirm} onChange={setConfirm} show={showNext} onToggle={() => {}} />
           <div className="flex gap-3">

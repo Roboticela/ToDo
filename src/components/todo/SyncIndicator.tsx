@@ -13,7 +13,7 @@ export default function SyncIndicator() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.2 }}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+          className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium leading-none"
           style={{
             background: isOnline
               ? pendingCount > 0
@@ -29,23 +29,23 @@ export default function SyncIndicator() {
         >
           {!isOnline ? (
             <>
-              <WifiOff className="w-3 h-3" />
-              <span>Offline</span>
+              <WifiOff className="w-3 h-3 shrink-0" />
+              <span className="leading-none">Offline</span>
             </>
           ) : isSyncing ? (
             <>
-              <RefreshCw className="w-3 h-3 animate-spin" />
-              <span>Syncing...</span>
+              <RefreshCw className="w-3 h-3 shrink-0 animate-spin" />
+              <span className="leading-none">Syncing...</span>
             </>
           ) : pendingCount > 0 ? (
             <>
-              <Wifi className="w-3 h-3" />
-              <span>{pendingCount} pending</span>
+              <Wifi className="w-3 h-3 shrink-0" />
+              <span className="leading-none">{pendingCount} pending</span>
             </>
           ) : (
             <>
-              <CheckCircle className="w-3 h-3" />
-              <span>Synced</span>
+              <CheckCircle className="w-3 h-3 shrink-0" />
+              <span className="leading-none">Synced</span>
             </>
           )}
         </motion.div>

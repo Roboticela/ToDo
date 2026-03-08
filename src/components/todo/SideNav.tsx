@@ -72,7 +72,7 @@ function SideNav() {
             onClick={() => logout()}
             className="w-full flex items-center justify-center gap-2 py-2 rounded-xl text-sm font-medium text-foreground/70 hover:text-foreground hover:bg-accent/50 transition-colors border border-border/60"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4 text-red-400" />
             Logout
           </button>
         </div>

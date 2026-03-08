@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, ChevronLeft, ChevronRight, CheckCircle2, List, TrendingUp, TrendingDown } from "lucide-react";
 import { format, addDays, subDays, parseISO } from "date-fns";
@@ -15,10 +15,15 @@ export default function TodayPage() {
   const [showForm, setShowForm] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "do" | "dont">("all");
+  const [completionDelta, setCompletionDelta] = useState(0);
 
   const parsedDate = parseISO(selectedDate + "T12:00:00");
   const today = format(new Date(), "yyyy-MM-dd");
   const isToday = selectedDate === today;
+
+  useEffect(() => {
+    setCompletionDelta(0);
+  }, [tasks, selectedDate]);
 
   function goToPrevDay() {
     setSelectedDate(format(subDays(parsedDate, 1), "yyyy-MM-dd"));
@@ -33,8 +38,9 @@ export default function TodayPage() {
     return t.category === activeFilter;
   });
 
-  const completedCount = tasks.filter((t) => t.status === "completed").length;
   const totalCount = tasks.length;
+  const baseCompletedCount = tasks.filter((t) => t.status === "completed").length;
+  const completedCount = Math.max(0, Math.min(totalCount, baseCompletedCount + completionDelta));
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const doTasks = filteredTasks.filter((t) => t.category === "do");
@@ -43,6 +49,10 @@ export default function TodayPage() {
   function handleEdit(task: Task) {
     setEditTask(task);
     setShowForm(true);
+  }
+
+  function handleCompletionChange(completed: boolean) {
+    setCompletionDelta((prev) => (completed ? prev + 1 : prev - 1));
   }
 
   function handleCloseForm() {
@@ -170,11 +180,11 @@ export default function TodayPage() {
                 )}
                 <AnimatePresence mode="popLayout">
                   {doTasks.map((task) => (
-                    <TaskCard key={task.id} task={task} date={selectedDate} onEdit={handleEdit} />
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
+<TaskCard key={task.id} task={task} date={selectedDate} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
 
             {/* Don'ts section */}
             {dontTasks.length > 0 && (
@@ -189,25 +199,14 @@ export default function TodayPage() {
                 )}
                 <AnimatePresence mode="popLayout">
                   {dontTasks.map((task) => (
-                    <TaskCard key={task.id} task={task} date={selectedDate} onEdit={handleEdit} />
-                  ))}
-                </AnimatePresence>
-              </div>
-            )}
+<TaskCard key={task.id} task={task} date={selectedDate} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
           </div>
         )}
       </div>
-
-      {/* Greeting */}
-      {user && isToday && tasks.length > 0 && (
-        <div className="px-4 md:px-6 lg:px-8 py-2 text-center">
-          <p className="text-xs text-foreground/30">
-            {progressPct === 100
-              ? `Great job, ${user.name.split(" ")[0]}! All tasks done! 🎉`
-              : `Keep going, ${user.name.split(" ")[0]}!`}
-          </p>
-        </div>
-      )}
 
       </div>
       {/* FAB */}

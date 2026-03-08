@@ -4,14 +4,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Plus,
-  Clock,
-  Timer,
   CalendarDays,
   TrendingUp,
   TrendingDown,
   CheckCircle2,
-  Circle,
-  Repeat,
+  List,
 } from "lucide-react";
 import {
   format,
@@ -31,6 +28,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
 import { getTasksForDate, getTaskCompletionForDate } from "../../lib/taskService";
 import TaskForm from "../../components/todo/TaskForm";
+import TaskCard from "../../components/todo/TaskCard";
 import type { Task } from "../../types/todo";
 
 interface DayInfo {
@@ -50,6 +48,8 @@ export default function CalendarPage() {
   const [showForm, setShowForm] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [loadingDay, setLoadingDay] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<"all" | "do" | "dont">("all");
+  const [completedCount, setCompletedCount] = useState(0);
 
   // Build calendar grid
   const monthStart = startOfMonth(currentMonth);
@@ -103,6 +103,12 @@ export default function CalendarPage() {
       try {
         const tasks = await getTasksForDate(user.id, dateStr);
         setDayTasks(tasks);
+        let done = 0;
+        for (const t of tasks) {
+          const { isCompleted } = await getTaskCompletionForDate(t, dateStr);
+          if (isCompleted) done++;
+        }
+        setCompletedCount(done);
       } finally {
         setLoadingDay(false);
       }
@@ -117,17 +123,25 @@ export default function CalendarPage() {
     loadDayTasks(dateStr);
   }
 
-  const TypeIcon = (type: Task["type"]) => {
-    if (type === "time-based") return <Clock className="w-3 h-3" />;
-    if (type === "duration") return <Timer className="w-3 h-3" />;
-    return <CalendarDays className="w-3 h-3" />;
-  };
+  function handleEdit(task: Task) {
+    setEditTask(task);
+    setShowForm(true);
+  }
 
-  const timeLabel = (task: Task) => {
-    if (task.type === "time-based" && task.time) return task.time;
-    if (task.type === "duration" && task.startTime) return `${task.startTime}–${task.endTime}`;
-    return "All day";
-  };
+  function handleCompletionChange(completed: boolean) {
+    setCompletedCount((prev) => (completed ? prev + 1 : Math.max(0, prev - 1)));
+  }
+
+  const filteredTasks = selectedDay
+    ? dayTasks.filter((t) => {
+        if (activeFilter === "all") return true;
+        return t.category === activeFilter;
+      })
+    : [];
+  const totalCount = dayTasks.length;
+  const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const doTasks = filteredTasks.filter((t) => t.category === "do");
+  const dontTasks = filteredTasks.filter((t) => t.category === "dont");
 
   return (
     <div className="flex flex-col min-h-full">
@@ -229,112 +243,156 @@ export default function CalendarPage() {
         </AnimatePresence>
       </div>
 
-      {/* Selected Day Tasks */}
-      <AnimatePresence>
-        {selectedDay && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 8 }}
-            transition={{ duration: 0.3 }}
-            className="flex-1 mt-3 border-t border-border/30 px-4 md:px-6 lg:px-8 pt-4 pb-4"
+      {/* Tasks panel - always visible */}
+      <motion.div
+        initial={false}
+        className="flex-1 mt-3 border-t border-border/30 px-4 md:px-6 lg:px-8 pt-4 pb-4 min-h-[200px] flex flex-col"
+      >
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">
+              {selectedDay
+                ? isToday(parseISO(selectedDay + "T12:00:00"))
+                  ? "Today"
+                  : format(parseISO(selectedDay + "T12:00:00"), "EEE, MMM d")
+                : "Tasks"}
+            </h3>
+            <p className="text-xs text-foreground/40 mt-0.5">
+              {selectedDay
+                ? `${dayTasks.length} task${dayTasks.length !== 1 ? "s" : ""}`
+                : "Select a day from the calendar"}
+            </p>
+          </div>
+          <motion.button
+            type="button"
+            onClick={() => { setEditTask(null); setShowForm(true); }}
+            whileTap={{ scale: 0.88 }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 text-primary text-xs font-medium hover:bg-primary/25 transition-colors"
           >
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-sm font-bold text-foreground">
-                  {isToday(parseISO(selectedDay + "T12:00:00"))
-                    ? "Today"
-                    : format(parseISO(selectedDay + "T12:00:00"), "EEE, MMM d")}
-                </h3>
-                <p className="text-xs text-foreground/40 mt-0.5">
-                  {dayTasks.length} task{dayTasks.length !== 1 ? "s" : ""}
-                </p>
-              </div>
-              <motion.button
-                type="button"
-                onClick={() => { setEditTask(null); setShowForm(true); }}
-                whileTap={{ scale: 0.88 }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 text-primary text-xs font-medium hover:bg-primary/25 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                Add Task
-              </motion.button>
+            <Plus className="w-3.5 h-3.5" />
+            Add Task
+          </motion.button>
+        </div>
+
+        {!selectedDay ? (
+          <div className="flex flex-col items-center justify-center flex-1 py-10 gap-3">
+            <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
+              <CalendarDays className="w-6 h-6 text-foreground/20" />
             </div>
-
-            {loadingDay ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-border border-t-primary rounded-full animate-spin" />
-              </div>
-            ) : dayTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 gap-3">
-                <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
-                  <CheckCircle2 className="w-6 h-6 text-foreground/20" />
+            <p className="text-sm text-foreground/30">Select a day from the calendar above to view tasks</p>
+          </div>
+        ) : loadingDay ? (
+          <div className="flex flex-col items-center justify-center flex-1 py-12 gap-3">
+            <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
+            <p className="text-sm text-foreground/40">Loading tasks...</p>
+          </div>
+        ) : dayTasks.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center flex-1 py-16 gap-4"
+          >
+            <div className="w-16 h-16 rounded-2xl bg-accent/30 flex items-center justify-center">
+              <CheckCircle2 className="w-8 h-8 text-foreground/20" />
+            </div>
+            <div className="text-center">
+              <p className="text-base font-semibold text-foreground/40">No tasks for this day</p>
+              <p className="text-sm text-foreground/30 mt-1">Tap Add Task to create one</p>
+            </div>
+          </motion.div>
+        ) : (
+          <>
+            {/* Progress bar - same as Today */}
+            {totalCount > 0 && (
+              <div className="space-y-1.5 mb-3">
+                <div className="flex items-center justify-between text-xs text-foreground/50">
+                  <span>{completedCount} / {totalCount} tasks</span>
+                  <span>{progressPct}%</span>
                 </div>
-                <p className="text-sm text-foreground/30">No tasks for this day</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {dayTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={cn(
-                      "flex items-start gap-3 p-3 rounded-xl border bg-card transition-all",
-                      task.status === "completed" ? "opacity-60 border-border/40" : "border-border",
-                      task.category === "dont" && "border-l-2 border-l-orange-400/50"
-                    )}
-                  >
-                    <div className="mt-0.5 flex-shrink-0">
-                      {task.status === "completed" ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-400" />
-                      ) : (
-                        <Circle className="w-4 h-4 text-foreground/30" />
-                      )}
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <p
-                        className={cn(
-                          "text-sm font-medium text-foreground leading-snug",
-                          task.status === "completed" && "line-through text-foreground/40"
-                        )}
-                      >
-                        {task.title}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 mt-1">
-                        <span className="inline-flex items-center gap-1 text-xs text-foreground/40">
-                          {TypeIcon(task.type)}
-                          {timeLabel(task)}
-                        </span>
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium",
-                            task.category === "do"
-                              ? "bg-green-500/10 text-green-400"
-                              : "bg-orange-500/10 text-orange-400"
-                          )}
-                        >
-                          {task.category === "do" ? (
-                            <TrendingUp className="w-2.5 h-2.5" />
-                          ) : (
-                            <TrendingDown className="w-2.5 h-2.5" />
-                          )}
-                          {task.category === "do" ? "Do" : "Don't"}
-                        </span>
-                        {task.isRepeating && (
-                          <span className="inline-flex items-center gap-1 text-xs text-primary/60 bg-primary/10 px-1.5 py-0.5 rounded-full">
-                            <Repeat className="w-2.5 h-2.5" />
-                            Repeat
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                <div className="w-full h-1.5 bg-accent rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full bg-primary rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPct}%` }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                  />
+                </div>
               </div>
             )}
-          </motion.div>
+
+            {/* Filter tabs - same as Today */}
+            <div className="flex gap-2 pb-2">
+              {[
+                { key: "all" as const, label: "All", icon: List },
+                { key: "do" as const, label: "Do's", icon: TrendingUp },
+                { key: "dont" as const, label: "Don'ts", icon: TrendingDown },
+              ].map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveFilter(key)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                    activeFilter === key
+                      ? "bg-primary/15 text-primary border border-primary/30"
+                      : "bg-accent/30 text-foreground/50 border border-transparent hover:bg-accent/50"
+                  )}
+                >
+                  <Icon className="w-3 h-3" />
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* Task list with TaskCard - same as Today */}
+            <div className="space-y-4 pt-1 flex-1 min-h-0">
+              {doTasks.length > 0 && (
+                <div className="space-y-2">
+                  {activeFilter === "all" && (
+                    <div className="flex items-center gap-2 px-1">
+                      <TrendingUp className="w-3.5 h-3.5 text-green-400" />
+                      <span className="text-xs font-semibold text-foreground/50 uppercase tracking-wider">
+                        Do&apos;s ({doTasks.length})
+                      </span>
+                    </div>
+                  )}
+                  <AnimatePresence mode="popLayout">
+                    {doTasks.map((task) => (
+                      <TaskCard key={task.id} task={task} date={selectedDay!} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {dontTasks.length > 0 && (
+                <div className="space-y-2">
+                  {activeFilter === "all" && (
+                    <div className="flex items-center gap-2 px-1">
+                      <TrendingDown className="w-3.5 h-3.5 text-orange-400" />
+                      <span className="text-xs font-semibold text-foreground/50 uppercase tracking-wider">
+                        Don&apos;ts ({dontTasks.length})
+                      </span>
+                    </div>
+                  )}
+                  <AnimatePresence mode="popLayout">
+                    {dontTasks.map((task) => (
+                      <TaskCard key={task.id} task={task} date={selectedDay!} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              {filteredTasks.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 gap-3">
+                  <p className="text-sm text-foreground/40">
+                    {activeFilter === "all" ? "No tasks for this day" : `No ${activeFilter === "do" ? "Do's" : "Don'ts"}`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
         )}
-      </AnimatePresence>
+      </motion.div>
       </div>
 
       {/* Task Form */}

@@ -141,11 +141,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
   if (!res.ok) throw new Error("Failed to reset password");
 }
 
-export async function changePassword(
-  userId: string,
-  currentPassword: string,
-  newPassword: string
-): Promise<void> {
+export async function changePassword(userId: string, newPassword: string): Promise<void> {
   const session = await getAnySession();
   const res = await fetch(`${API_BASE}/auth/change-password`, {
     method: "POST",
@@ -153,7 +149,7 @@ export async function changePassword(
       "Content-Type": "application/json",
       Authorization: `Bearer ${session?.accessToken}`,
     },
-    body: JSON.stringify({ currentPassword, newPassword }),
+    body: JSON.stringify({ newPassword }),
   });
   if (!res.ok) throw new Error("Failed to change password");
 }

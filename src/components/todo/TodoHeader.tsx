@@ -12,6 +12,7 @@ import {
   Shield,
   Scale,
   HelpCircle,
+  RefreshCw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../ui/button";
@@ -24,6 +25,7 @@ import {
 import { cn } from "../../lib/utils";
 import { openLink } from "../../lib/tauri";
 import SyncIndicator from "./SyncIndicator";
+import { useSync } from "../../contexts/SyncContext";
 import AboutModal from "../AboutModal";
 import LicenseModal from "../LicenseModal";
 
@@ -46,6 +48,7 @@ interface TodoHeaderProps {
 function TodoHeader({ title = "Roboticela ToDo", rightContent }: TodoHeaderProps) {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const { triggerSync, isSyncing } = useSync();
   const currentTheme = themes.find((t) => t.name === theme);
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
@@ -74,6 +77,20 @@ function TodoHeader({ title = "Roboticela ToDo", rightContent }: TodoHeaderProps
         <SyncIndicator />
 
         {rightContent}
+
+        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 rounded-xl h-9 px-3 inline-flex items-center justify-center"
+            onClick={() => triggerSync()}
+            disabled={isSyncing}
+            title="Sync"
+          >
+            <RefreshCw className={cn("w-4 h-4 shrink-0", isSyncing && "animate-spin")} />
+            <span className="hidden sm:inline text-xs leading-none">{isSyncing ? "Syncing..." : "Sync"}</span>
+          </Button>
+        </motion.div>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

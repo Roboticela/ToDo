@@ -17,7 +17,7 @@ interface TaskContextType {
   selectedDate: string;
   isLoading: boolean;
   setSelectedDate: (date: string) => void;
-  refreshTasks: () => Promise<void>;
+  refreshTasks: (options?: { silent?: boolean }) => Promise<void>;
   createTask: (data: TaskFormData) => Promise<Task>;
   updateTask: (task: Task, data: Partial<TaskFormData>) => Promise<Task>;
   deleteTask: (taskId: string) => Promise<void>;
@@ -33,17 +33,18 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const [selectedDate, setSelectedDateState] = useState(getTodayString());
   const [isLoading, setIsLoading] = useState(false);
 
-  const refreshTasks = useCallback(async () => {
+  const refreshTasks = useCallback(async (options?: { silent?: boolean }) => {
     if (!user) {
       setTasks([]);
       return;
     }
-    setIsLoading(true);
+    const silent = options?.silent === true;
+    if (!silent) setIsLoading(true);
     try {
       const fetched = await getTasksForDate(user.id, selectedDate);
       setTasks(fetched);
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [user, selectedDate]);
 
@@ -85,7 +86,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const completeTask = useCallback(
     async (task: Task): Promise<void> => {
       await svcComplete(task, selectedDate);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
     },
     [selectedDate, refreshTasks]
   );
@@ -93,7 +94,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const uncompleteTask = useCallback(
     async (task: Task): Promise<void> => {
       await svcUncomplete(task, selectedDate);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
     },
     [selectedDate, refreshTasks]
   );

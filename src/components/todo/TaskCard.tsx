@@ -23,9 +23,11 @@ interface TaskCardProps {
   task: Task;
   date: string;
   onEdit: (task: Task) => void;
+  /** Called when the user toggles completion so the parent can update progress bar etc. */
+  onCompletionChange?: (completed: boolean) => void;
 }
 
-export default function TaskCard({ task, date, onEdit }: TaskCardProps) {
+export default function TaskCard({ task, date, onEdit, onCompletionChange }: TaskCardProps) {
   const { completeTask, uncompleteTask, deleteTask } = useTasks();
   const [isCompleted, setIsCompleted] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -41,9 +43,11 @@ export default function TaskCard({ task, date, onEdit }: TaskCardProps) {
     if (isCompleted) {
       await uncompleteTask(task);
       setIsCompleted(false);
+      onCompletionChange?.(false);
     } else {
       await completeTask(task);
       setIsCompleted(true);
+      onCompletionChange?.(true);
     }
   }
 
