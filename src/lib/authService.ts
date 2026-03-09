@@ -218,6 +218,26 @@ export async function updateProfile(userId: string, updates: Partial<User>): Pro
   return updated;
 }
 
+// ─── Request email change (sends verification link to new email) ───────────────
+
+export async function requestEmailChange(newEmail: string): Promise<void> {
+  const session = await getAnySession();
+  if (!session) throw new Error("Not signed in");
+  const res = await fetch(`${API_BASE}/api/auth/request-email-change`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    body: JSON.stringify({ newEmail: newEmail.trim().toLowerCase() }),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || "Failed to send confirmation email.");
+  }
+}
+
 // ─── Delete Account ───────────────────────────────────────────────────────────
 
 export async function deleteAccount(userId: string): Promise<void> {

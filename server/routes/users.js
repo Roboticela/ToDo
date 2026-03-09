@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
-import { uploadAvatarFromDataUrl } from "../services/r2Service.js";
+import { uploadAvatarFromDataUrl, deleteAvatarByUrl } from "../services/r2Service.js";
 
 const router = Router();
 
@@ -27,17 +27,14 @@ router.patch("/:userId", requireAuth, async (req, res) => {
   if (req.params.userId !== req.user.id) {
     return res.status(403).json({ error: "Forbidden" });
   }
-  const { name, email, avatarUrl, subscribedToReminders } = req.body;
+  const { name, avatarUrl, subscribedToReminders } = req.body;
+  // Email cannot be changed via PATCH; use request-email-change + confirm-email-change flow
   const updates = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
-  if (typeof email === "string" && email.trim()) {
-    const existing = await prisma.user.findFirst({
-      where: { email: email.trim().toLowerCase(), NOT: { id: req.user.id } },
-    });
-    if (existing) return res.status(409).json({ error: "Email already in use" });
-    updates.email = email.trim().toLowerCase();
-  }
   if (avatarUrl !== undefined) {
+    if (req.user.avatarUrl) {
+      await deleteAvatarByUrl(req.user.avatarUrl);
+    }
     if (typeof avatarUrl === "string" && avatarUrl.trim()) {
       if (avatarUrl.startsWith("data:")) {
         const r2Url = await uploadAvatarFromDataUrl(avatarUrl, req.user.id);

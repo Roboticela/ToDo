@@ -1,5 +1,5 @@
-import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useRef, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
@@ -24,15 +24,20 @@ import { cn } from "../../lib/utils";
 import { useIsDesktop } from "../../hooks/useIsDesktop";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
-import { updateProfile, changePassword, deleteAccount } from "../../lib/authService";
+import { updateProfile, changePassword, deleteAccount, requestEmailChange } from "../../lib/authService";
+import { saveUser } from "../../lib/db";
+import type { User as UserType } from "../../types/todo";
 import { getExportData, importTasksFromData } from "../../lib/taskService";
 import { PLAN_FEATURES } from "../../types/todo";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
+const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+
 export default function SettingsPage() {
   const navigate = useNavigate();
-  const { user, updateUser, logout } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user, updateUser, logout, session } = useAuth();
   const { refreshTasks } = useTasks();
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -41,6 +46,43 @@ export default function SettingsPage() {
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [newsletterUpdating, setNewsletterUpdating] = useState(false);
+  const [emailChangedSuccess, setEmailChangedSuccess] = useState(false);
+
+  // After email change confirmation (redirect from link), refetch user and clear param
+  useEffect(() => {
+    if (searchParams.get("email_changed") !== "1" || !session) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/users/me`, {
+          headers: { Authorization: `Bearer ${session.accessToken}` },
+        });
+        if (res.ok) {
+          const userData = await res.json();
+          const updatedUser: UserType = {
+            id: userData.id,
+            name: userData.name,
+            email: userData.email,
+            avatarUrl: userData.avatarUrl,
+            plan: userData.plan,
+            planExpiresAt: userData.planExpiresAt,
+            emailVerifiedAt: userData.emailVerifiedAt,
+            subscribedToReminders: userData.subscribedToReminders ?? true,
+            createdAt: userData.createdAt,
+          };
+          await saveUser(updatedUser);
+          updateUser(updatedUser);
+          setEmailChangedSuccess(true);
+          setTimeout(() => setEmailChangedSuccess(false), 5000);
+        }
+      } finally {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("email_changed");
+          return next;
+        }, { replace: true });
+      }
+    })();
+  }, [searchParams, session, updateUser, setSearchParams]);
 
   if (!user) return null;
 
@@ -119,6 +161,11 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col min-h-full">
+      {emailChangedSuccess && (
+        <div className="flex-shrink-0 mx-4 mt-2 mb-1 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-sm font-medium text-center">
+          Email updated successfully. Your new address is verified.
+        </div>
+      )}
       <div className="flex-1 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto px-4 md:px-6 lg:px-8 py-6 space-y-5 overflow-y-auto custom-scrollbar">
         {/* Avatar + Name */}
         <motion.div
@@ -477,7 +524,6 @@ function EditNameModal({
 function EditEmailModal({
   currentEmail,
   userId,
-  onSave,
   onClose,
 }: {
   currentEmail: string;
@@ -489,10 +535,11 @@ function EditEmailModal({
   const [confirmEmail, setConfirmEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sentTo, setSentTo] = useState<string | null>(null);
 
   async function handleSave() {
     setError("");
-    const trimmed = email.trim();
+    const trimmed = email.trim().toLowerCase();
     if (!trimmed) {
       setError("Enter your new email");
       return;
@@ -501,7 +548,7 @@ function EditEmailModal({
       setError("Enter a valid email address");
       return;
     }
-    if (trimmed !== confirmEmail.trim()) {
+    if (trimmed !== confirmEmail.trim().toLowerCase()) {
       setError("Emails do not match");
       return;
     }
@@ -511,13 +558,37 @@ function EditEmailModal({
     }
     setIsLoading(true);
     try {
-      const updated = await updateProfile(userId, { email: trimmed });
-      onSave(updated.email);
-    } catch {
-      setError("Failed to update email. Please try again.");
+      await requestEmailChange(trimmed);
+      setSentTo(trimmed);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send confirmation email.");
     } finally {
       setIsLoading(false);
     }
+  }
+
+  if (sentTo) {
+    return (
+      <BottomSheet title="Check your email" onClose={onClose}>
+        <div className="space-y-4">
+          <div className="flex flex-col items-center gap-3 py-2">
+            <div className="w-12 h-12 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Mail className="w-6 h-6 text-primary" />
+            </div>
+            <p className="text-sm text-foreground/80 text-center">
+              We sent a confirmation link to <strong>{sentTo}</strong>. Click the link in that email to complete the change. The link expires in 1 hour.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </BottomSheet>
+    );
   }
 
   return (
@@ -561,7 +632,7 @@ function EditEmailModal({
             whileTap={{ scale: 0.97 }}
             className="flex-1 h-11 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-60 transition-colors"
           >
-            {isLoading ? "Saving..." : "Save"}
+            {isLoading ? "Sending…" : "Send verification link"}
           </motion.button>
         </div>
       </div>

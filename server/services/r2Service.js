@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { config } from "../config.js";
 import { v4 as uuidv4 } from "uuid";
 
@@ -86,6 +86,26 @@ export async function uploadAvatarFromDataUrl(dataUrl, userId) {
   } catch (e) {
     console.error("[r2] uploadAvatarFromDataUrl", e);
     return null;
+  }
+}
+
+/**
+ * Delete an avatar object from R2 by its public URL (only if it's our R2 bucket).
+ * No-op if R2 not configured or URL is not from our publicUrl. Does not throw.
+ */
+export async function deleteAvatarByUrl(avatarUrl) {
+  if (!avatarUrl || typeof avatarUrl !== "string") return;
+  const client = getClient();
+  const { bucket, publicUrl } = config.r2;
+  if (!client || !bucket || !publicUrl) return;
+  const base = publicUrl.replace(/\/$/, "");
+  if (!avatarUrl.startsWith(base + "/")) return;
+  const key = avatarUrl.slice(base.length + 1);
+  if (!key.startsWith("avatars/")) return;
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (e) {
+    console.warn("[r2] deleteAvatarByUrl", key, e?.message || e);
   }
 }
 

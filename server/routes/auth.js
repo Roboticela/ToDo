@@ -374,6 +374,7 @@ router.get("/confirm-email-change", async (req, res) => {
     where: { id: user.id },
     data: {
       email: user.pendingEmail,
+      emailVerifiedAt: new Date(),
       pendingEmail: null,
       pendingEmailToken: null,
       pendingEmailTokenExpiresAt: null,
