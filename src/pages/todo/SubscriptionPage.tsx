@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
-import { Crown, Check, Zap, Infinity } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Crown, Check, Zap, Infinity, ChevronDown, HelpCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { type SubscriptionPlan } from "../../types/todo";
@@ -88,6 +88,29 @@ const PLANS: {
       "Priority support",
     ],
     icon: <Infinity className="w-5 h-5" />,
+  },
+];
+
+const FAQ_ITEMS = [
+  {
+    q: "Can I change or cancel my plan anytime?",
+    a: "Yes. You can upgrade, downgrade, or cancel your subscription at any time. Changes take effect at the end of your current billing period.",
+  },
+  {
+    q: "What payment methods do you accept?",
+    a: "We accept all major credit and debit cards through our secure payment provider. Payment is processed securely and we never store your full card details.",
+  },
+  {
+    q: "What happens to my data if I downgrade to Free?",
+    a: "Your account and tasks remain. You'll keep access to the Free plan limits: 2 days of history, up to 5 repeat tasks, and up to 10 daily tasks per day. Older history may become read-only.",
+  },
+  {
+    q: "Do you offer refunds?",
+    a: "If you're not satisfied, contact us within 14 days of your purchase for a full refund. See our Terms of Service for full details.",
+  },
+  {
+    q: "How does the free trial work?",
+    a: "You can use the Free plan indefinitely at no cost. When you upgrade to Basic or Pro, you're charged immediately and can cancel anytime before the next billing date.",
   },
 ];
 
@@ -232,7 +255,69 @@ export default function SubscriptionPage() {
             Subscriptions managed securely. Cancel anytime.
           </p>
         </div>
+
+        {/* FAQ */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+          className="pt-8 pb-4"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <HelpCircle className="w-5 h-5 text-foreground/60" />
+            <h3 className="text-lg font-semibold text-foreground">Frequently Asked Questions</h3>
+          </div>
+          <ul className="space-y-2">
+            {FAQ_ITEMS.map((item, i) => (
+              <FAQItem key={i} question={item.q} answer={item.a} index={i} />
+            ))}
+          </ul>
+        </motion.section>
       </div>
     </div>
+  );
+}
+
+function FAQItem({
+  question,
+  answer,
+  index,
+}: {
+  question: string;
+  answer: string;
+  index: number;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <motion.li
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, delay: index * 0.04 }}
+      className="bg-card border border-border rounded-xl overflow-hidden"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-accent/30 transition-colors"
+      >
+        <span className="text-sm font-medium text-foreground">{question}</span>
+        <ChevronDown
+          className={cn("w-4 h-4 shrink-0 text-foreground/50 transition-transform", open && "rotate-180")}
+        />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="border-t border-border"
+          >
+            <p className="px-4 py-3 text-sm text-foreground/70 leading-relaxed">{answer}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.li>
   );
 }

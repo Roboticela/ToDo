@@ -45,7 +45,7 @@ interface TodoHeaderProps {
   rightContent?: React.ReactNode;
 }
 
-function TodoHeader({ title = "Roboticela ToDo", rightContent }: TodoHeaderProps) {
+function TodoHeader({ title: _title = "Roboticela ToDo", rightContent }: TodoHeaderProps) {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const { triggerSync, isSyncing } = useSync();

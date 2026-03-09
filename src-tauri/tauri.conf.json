@@ -73,7 +73,9 @@
     },
     "deep-link": {
       "desktop": {
-        "schemes": ["roboticela-todo"]
+        "schemes": [
+          "roboticela-todo"
+        ]
       }
     }
   }

@@ -85,20 +85,21 @@ export default function SettingsPage() {
   }, [searchParams, session, updateUser, setSearchParams]);
 
   if (!user) return null;
+  const currentUser = user;
 
   async function handleNewsletterToggle() {
-    const next = !(user.subscribedToReminders ?? true);
+    const next = !(currentUser.subscribedToReminders ?? true);
     setNewsletterUpdating(true);
     try {
-      const updated = await updateProfile(user.id, { subscribedToReminders: next });
+      const updated = await updateProfile(currentUser.id, { subscribedToReminders: next });
       updateUser(updated);
     } finally {
       setNewsletterUpdating(false);
     }
   }
 
-  const plan = PLAN_FEATURES[user.plan];
-  const planLabel = user.plan === "free" ? "Free" : user.plan === "basic" ? "$2/mo" : "$5/mo";
+  const plan = PLAN_FEATURES[currentUser.plan];
+  const planLabel = currentUser.plan === "free" ? "Free" : currentUser.plan === "basic" ? "$2/mo" : "$5/mo";
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -110,7 +111,7 @@ export default function SettingsPage() {
     setExportLoading(true);
     setImportMessage(null);
     try {
-      const data = await getExportData(user.id);
+      const data = await getExportData(currentUser.id);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -145,7 +146,7 @@ export default function SettingsPage() {
       if (!window.confirm(`Import ${count} task${count === 1 ? "" : "s"}? They will be added to your account.`)) {
         return;
       }
-      const result = await importTasksFromData(user.id, data);
+      const result = await importTasksFromData(currentUser.id, data);
       await refreshTasks();
       if (result.errors.length > 0) {
         setImportMessage(`Imported ${result.imported} task(s). ${result.errors.length} error(s): ${result.errors.slice(0, 3).join("; ")}${result.errors.length > 3 ? "…" : ""}`);
@@ -175,8 +176,8 @@ export default function SettingsPage() {
         >
           <div className="relative">
             <div className="w-20 h-20 rounded-2xl bg-primary/20 border-2 border-primary/30 flex items-center justify-center overflow-hidden">
-              {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+              {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt={currentUser.name} className="w-full h-full object-cover" />
               ) : (
                 <User className="w-10 h-10 text-primary/60" />
               )}
@@ -190,8 +191,8 @@ export default function SettingsPage() {
             </button>
           </div>
           <div className="text-center">
-            <h2 className="text-xl font-bold text-foreground">{user.name}</h2>
-            <p className="text-sm text-foreground/50 mt-0.5">{user.email}</p>
+            <h2 className="text-xl font-bold text-foreground">{currentUser.name}</h2>
+            <p className="text-sm text-foreground/50 mt-0.5">{currentUser.email}</p>
           </div>
 
           {/* Plan badge */}
@@ -200,16 +201,16 @@ export default function SettingsPage() {
             onClick={() => navigate("/todo/subscription")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold transition-all hover:scale-105",
-              user.plan === "free"
+              currentUser.plan === "free"
                 ? "bg-accent/30 border-border text-foreground/60"
-                : user.plan === "basic"
+                : currentUser.plan === "basic"
                 ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
                 : "bg-amber-500/10 border-amber-500/30 text-amber-400"
             )}
           >
             <Crown className="w-3.5 h-3.5" />
-            {user.plan === "free" ? "Free Plan" : user.plan === "basic" ? "Basic Plan" : "Pro Plan"}
-            {user.plan === "free" && <span className="text-xs text-primary/70 ml-1">Upgrade →</span>}
+            {currentUser.plan === "free" ? "Free Plan" : currentUser.plan === "basic" ? "Basic Plan" : "Pro Plan"}
+            {currentUser.plan === "free" && <span className="text-xs text-primary/70 ml-1">Upgrade →</span>}
           </button>
         </motion.div>
 
@@ -218,13 +219,13 @@ export default function SettingsPage() {
           <SettingsRow
             icon={<User className="w-4 h-4 text-primary/70" />}
             label="Name"
-            value={user.name}
+            value={currentUser.name}
             onClick={() => setActiveModal("edit-name")}
           />
           <SettingsRow
             icon={<Mail className="w-4 h-4 text-primary/70" />}
             label="Email"
-            value={user.email}
+            value={currentUser.email}
             onClick={() => setActiveModal("edit-email")}
           />
           <SettingsRow
@@ -244,28 +245,28 @@ export default function SettingsPage() {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">Subscription reminders & tips</p>
                 <p className="text-xs text-foreground/50 mt-0.5">
-                  {user.subscribedToReminders !== false ? "You receive occasional emails." : "You're unsubscribed."}
+                  {currentUser.subscribedToReminders !== false ? "You receive occasional emails." : "You're unsubscribed."}
                 </p>
               </div>
             </div>
             <button
               type="button"
               role="switch"
-              aria-checked={user.subscribedToReminders !== false}
+              aria-checked={currentUser.subscribedToReminders !== false}
               disabled={newsletterUpdating}
               onClick={handleNewsletterToggle}
               className={cn(
                 "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-background",
-                user.subscribedToReminders !== false ? "bg-primary/20" : "bg-foreground/10",
+                currentUser.subscribedToReminders !== false ? "bg-primary/20" : "bg-foreground/10",
                 newsletterUpdating && "opacity-70 cursor-not-allowed"
               )}
             >
               <motion.div
-                animate={{ x: user.subscribedToReminders !== false ? 20 : 2 }}
+                animate={{ x: currentUser.subscribedToReminders !== false ? 20 : 2 }}
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}
                 className={cn(
                   "absolute top-1 w-4 h-4 rounded-full shadow-sm transition-colors duration-200",
-                  user.subscribedToReminders !== false ? "bg-primary" : "bg-foreground"
+                  currentUser.subscribedToReminders !== false ? "bg-primary" : "bg-foreground"
                 )}
               />
             </button>
@@ -325,7 +326,7 @@ export default function SettingsPage() {
                 {plan.maxDailyTasks === null ? "Unlimited" : `Max ${plan.maxDailyTasks}/day`}
               </span>
             </div>
-            {user.plan !== "pro" && (
+            {currentUser.plan !== "pro" && (
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.97 }}
@@ -369,37 +370,37 @@ export default function SettingsPage() {
             />
             {activeModal === "edit-name" && (
               <EditNameModal
-                currentName={user.name}
-                userId={user.id}
-                onSave={(name) => { updateUser({ ...user, name }); setActiveModal(null); }}
+                currentName={currentUser.name}
+                userId={currentUser.id}
+                onSave={(name) => { updateUser({ ...currentUser, name }); setActiveModal(null); }}
                 onClose={() => setActiveModal(null)}
               />
             )}
             {activeModal === "edit-email" && (
               <EditEmailModal
-                currentEmail={user.email}
-                userId={user.id}
-                onSave={(email) => { updateUser({ ...user, email }); setActiveModal(null); }}
+                currentEmail={currentUser.email}
+                userId={currentUser.id}
+                onSave={(email) => { updateUser({ ...currentUser, email }); setActiveModal(null); }}
                 onClose={() => setActiveModal(null)}
               />
             )}
             {activeModal === "change-avatar" && (
               <ChangeAvatarModal
-                currentAvatarUrl={user.avatarUrl}
-                userId={user.id}
-                onSave={(avatarUrl) => { updateUser({ ...user, avatarUrl }); setActiveModal(null); }}
+                currentAvatarUrl={currentUser.avatarUrl}
+                userId={currentUser.id}
+                onSave={(avatarUrl) => { updateUser({ ...currentUser, avatarUrl }); setActiveModal(null); }}
                 onClose={() => setActiveModal(null)}
               />
             )}
             {activeModal === "change-password" && (
               <ChangePasswordModal
-                userId={user.id}
+                userId={currentUser.id}
                 onClose={() => setActiveModal(null)}
               />
             )}
             {activeModal === "delete-account" && (
               <DeleteAccountModal
-                userId={user.id}
+                userId={currentUser.id}
                 onDeleted={() => { logout(); navigate("/auth/login", { replace: true }); }}
                 onClose={() => setActiveModal(null)}
               />
@@ -523,7 +524,7 @@ function EditNameModal({
 
 function EditEmailModal({
   currentEmail,
-  userId,
+  userId: _userId,
   onClose,
 }: {
   currentEmail: string;

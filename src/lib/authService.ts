@@ -155,7 +155,7 @@ export async function resendVerification(): Promise<void> {
   }
 }
 
-export async function changePassword(userId: string, newPassword: string): Promise<void> {
+export async function changePassword(_userId: string, newPassword: string): Promise<void> {
   const session = await getAnySession();
   const res = await fetch(`${API_BASE}/api/auth/change-password`, {
     method: "POST",

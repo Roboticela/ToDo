@@ -15,7 +15,7 @@ const pageVariants = {
   exit: { opacity: 0, y: -6 },
 };
 
-const pageTransition = { type: "tween", duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] };
+const pageTransition = { type: "tween" as const, duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] as const };
 
 const ROUTE_TITLES: Record<string, string> = {
   "/todo": "Today",

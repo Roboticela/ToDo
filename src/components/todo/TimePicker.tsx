@@ -26,7 +26,7 @@ interface DrumColumnProps {
 function DrumColumn({ items, selectedIndex, onSelect, ariaLabel }: DrumColumnProps) {
   const scrollRef    = useRef<HTMLDivElement>(null);
   const isUserDriving = useRef(false);   // true while user is touching/dragging
-  const snapTimer    = useRef<ReturnType<typeof setTimeout>>();
+  const snapTimer    = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const didMount     = useRef(false);
 
   // ── scroll helper ──────────────────────────────────────────────────────────

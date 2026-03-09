@@ -11,7 +11,7 @@ import { resendVerification } from "../../lib/authService";
 import { cn } from "../../lib/utils";
 
 export default function VerificationBanner() {
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
   const [dismissed, setDismissed] = useState(false);
   const [resending, setResending] = useState(false);
   const [message, setMessage] = useState<"success" | "error" | null>(null);
