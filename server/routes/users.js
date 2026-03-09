@@ -14,6 +14,7 @@ function toUserResponse(user) {
     plan: user.plan,
     planExpiresAt: user.planExpiresAt ? user.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
+    subscribedToReminders: user.subscribedToReminders ?? true,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -26,7 +27,7 @@ router.patch("/:userId", requireAuth, async (req, res) => {
   if (req.params.userId !== req.user.id) {
     return res.status(403).json({ error: "Forbidden" });
   }
-  const { name, email, avatarUrl } = req.body;
+  const { name, email, avatarUrl, subscribedToReminders } = req.body;
   const updates = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
   if (typeof email === "string" && email.trim()) {
@@ -48,6 +49,7 @@ router.patch("/:userId", requireAuth, async (req, res) => {
       updates.avatarUrl = null;
     }
   }
+  if (typeof subscribedToReminders === "boolean") updates.subscribedToReminders = subscribedToReminders;
   if (Object.keys(updates).length === 0) {
     return res.json(toUserResponse(req.user));
   }

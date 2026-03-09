@@ -118,15 +118,15 @@ export function loginWithGoogleRedirect(): void {
 // ─── Forgot / Reset Password ──────────────────────────────────────────────────
 
 export async function forgotPassword(email: string): Promise<void> {
-  try {
-    await fetch(`${API_BASE}/api/auth/forgot-password`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email }),
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    // Silently handle - user sees success message
+  const res = await fetch(`${API_BASE}/api/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || "Request failed. Please try again.");
   }
 }
 

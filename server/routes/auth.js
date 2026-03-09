@@ -28,6 +28,7 @@ function toUserResponse(user) {
     plan: user.plan,
     planExpiresAt: user.planExpiresAt ? user.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
+    subscribedToReminders: user.subscribedToReminders ?? true,
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -197,26 +198,30 @@ router.post("/logout", requireAuth, async (req, res) => {
 router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
-    if (!email) {
+    if (!email || typeof email !== "string") {
       return res.status(400).json({ error: "Email is required" });
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await prisma.user.findUnique({
-      where: { email: email.trim().toLowerCase() },
+      where: { email: normalizedEmail },
     });
-    if (user) {
-      const token = uuidv4();
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-      await prisma.passwordResetToken.create({
-        data: {
-          userId: user.id,
-          token,
-          expiresAt,
-        },
-      });
-      await sendPasswordResetEmail(user.email, token, user.name, user.id);
+
+    if (!user) {
+      return res.status(404).json({ error: "No account found with this email address." });
     }
-    // Always return success to avoid email enumeration
+
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        token,
+        expiresAt,
+      },
+    });
+    await sendPasswordResetEmail(user.email, token, user.name, user.id);
+
     res.json({ message: "If an account exists, you will receive reset instructions." });
   } catch (e) {
     console.error("[auth] forgot-password", e);

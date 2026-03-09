@@ -17,6 +17,7 @@ import {
   Check,
   Download,
   Upload,
+  Bell,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../lib/utils";
@@ -39,8 +40,20 @@ export default function SettingsPage() {
   const [importLoading, setImportLoading] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const [newsletterUpdating, setNewsletterUpdating] = useState(false);
 
   if (!user) return null;
+
+  async function handleNewsletterToggle() {
+    const next = !(user.subscribedToReminders ?? true);
+    setNewsletterUpdating(true);
+    try {
+      const updated = await updateProfile(user.id, { subscribedToReminders: next });
+      updateUser(updated);
+    } finally {
+      setNewsletterUpdating(false);
+    }
+  }
 
   const plan = PLAN_FEATURES[user.plan];
   const planLabel = user.plan === "free" ? "Free" : user.plan === "basic" ? "$2/mo" : "$5/mo";
@@ -172,6 +185,44 @@ export default function SettingsPage() {
             label="Change Password"
             onClick={() => setActiveModal("change-password")}
           />
+        </Section>
+
+        {/* Newsletter / Email preferences */}
+        <Section label="Newsletter">
+          <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="shrink-0">
+                <Bell className="w-4 h-4 text-primary/70" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Subscription reminders & tips</p>
+                <p className="text-xs text-foreground/50 mt-0.5">
+                  {user.subscribedToReminders !== false ? "You receive occasional emails." : "You're unsubscribed."}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={user.subscribedToReminders !== false}
+              disabled={newsletterUpdating}
+              onClick={handleNewsletterToggle}
+              className={cn(
+                "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-background",
+                user.subscribedToReminders !== false ? "bg-primary/20" : "bg-foreground/10",
+                newsletterUpdating && "opacity-70 cursor-not-allowed"
+              )}
+            >
+              <motion.div
+                animate={{ x: user.subscribedToReminders !== false ? 20 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className={cn(
+                  "absolute top-1 w-4 h-4 rounded-full shadow-sm transition-colors duration-200",
+                  user.subscribedToReminders !== false ? "bg-primary" : "bg-foreground"
+                )}
+              />
+            </button>
+          </div>
         </Section>
 
         {/* Data: Export / Import */}

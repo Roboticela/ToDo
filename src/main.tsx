@@ -18,6 +18,7 @@ import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import AuthCallbackPage from "./pages/auth/AuthCallbackPage";
 import DesktopSuccessPage from "./pages/auth/DesktopSuccessPage";
 import VerifiedPage from "./pages/auth/VerifiedPage";
+import EmailPreferencesPage from "./pages/auth/EmailPreferencesPage";
 
 // App layout + pages
 import AppLayout from "./components/todo/AppLayout";
@@ -58,6 +59,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="/auth/desktop-success" element={<DesktopSuccessPage />} />
               <Route path="/auth/verified" element={<VerifiedPage />} />
+              <Route path="/auth/email-preferences" element={<EmailPreferencesPage />} />
 
               {/* App */}
               <Route path="/todo" element={<AppLayout />}>

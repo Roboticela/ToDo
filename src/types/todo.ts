@@ -71,6 +71,7 @@ export interface User {
   plan: SubscriptionPlan;
   planExpiresAt?: string;
   emailVerifiedAt?: string;
+  subscribedToReminders?: boolean;
   createdAt: string;
 }
 

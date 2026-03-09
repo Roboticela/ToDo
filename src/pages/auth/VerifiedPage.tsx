@@ -42,6 +42,7 @@ export default function VerifiedPage() {
           plan: userData.plan,
           planExpiresAt: userData.planExpiresAt,
           emailVerifiedAt: userData.emailVerifiedAt,
+          subscribedToReminders: userData.subscribedToReminders ?? true,
           createdAt: userData.createdAt,
         };
         await saveUser(user);
