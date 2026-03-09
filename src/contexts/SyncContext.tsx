@@ -1,14 +1,19 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
 import { syncTasksToServer } from "../lib/syncApi";
+
+const BACKGROUND_SYNC_INTERVAL_MS = 60 * 1000; // 1 minute
+const SCHEDULED_SYNC_DEBOUNCE_MS = 500; // when online, sync soon after changes
 
 interface SyncContextType {
   isOnline: boolean;
   isSyncing: boolean;
   lastSyncAt: string | null;
+  syncError: string | null;
   pendingCount: number;
-  triggerSync: () => void;
+  triggerSync: () => Promise<void>;
+  scheduleSync: () => void;
 }
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
@@ -18,16 +23,26 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const scheduleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncInProgressRef = useRef(false);
 
   const triggerSync = useCallback(async () => {
-    if (isSyncing || !navigator.onLine) return;
+    if (!navigator.onLine) return;
+    if (syncInProgressRef.current) return;
+    syncInProgressRef.current = true;
+    setSyncError(null);
     setIsSyncing(true);
     try {
       if (user) {
         const result = await syncTasksToServer(user.id);
         if (result) {
-          // Server sync succeeded; queue is logically synced
+          setLastSyncAt(new Date().toISOString());
+          setSyncError(null);
+          window.dispatchEvent(new CustomEvent("tasks-synced"));
+        } else {
+          setSyncError("Sync failed");
         }
       }
       const { getSyncQueue, removeSyncQueueItem } = await import("../lib/db");
@@ -37,15 +52,25 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           await new Promise((r) => setTimeout(r, 50));
           await removeSyncQueueItem(item.id);
         } catch {
-          // Keep failed items in queue
+          // keep failed items
         }
       }
       setPendingCount(0);
-      setLastSyncAt(new Date().toISOString());
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : "Sync failed");
     } finally {
+      syncInProgressRef.current = false;
       setIsSyncing(false);
     }
-  }, [isSyncing, user]);
+  }, [user]);
+
+  const scheduleSync = useCallback(() => {
+    if (scheduleRef.current) clearTimeout(scheduleRef.current);
+    scheduleRef.current = setTimeout(() => {
+      scheduleRef.current = null;
+      triggerSync();
+    }, SCHEDULED_SYNC_DEBOUNCE_MS);
+  }, [triggerSync]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -53,7 +78,6 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       triggerSync();
     };
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
     return () => {
@@ -61,6 +85,26 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("offline", handleOffline);
     };
   }, [triggerSync]);
+
+  useEffect(() => {
+    if (!user || !navigator.onLine) return;
+    const interval = setInterval(triggerSync, BACKGROUND_SYNC_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [user, triggerSync]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible" && user && navigator.onLine) {
+        triggerSync();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [user, triggerSync]);
+
+  useEffect(() => {
+    if (user && navigator.onLine) triggerSync();
+  }, [user]);
 
   useEffect(() => {
     async function checkPending() {
@@ -78,7 +122,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <SyncContext.Provider value={{ isOnline, isSyncing, lastSyncAt, pendingCount, triggerSync }}>
+    <SyncContext.Provider value={{ isOnline, isSyncing, lastSyncAt, syncError, pendingCount, triggerSync, scheduleSync }}>
       {children}
     </SyncContext.Provider>
   );

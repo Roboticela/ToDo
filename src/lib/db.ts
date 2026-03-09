@@ -153,6 +153,33 @@ export async function getAllCompletionsByUser(userId: string): Promise<TaskCompl
   return all.filter((c) => c.userId === userId);
 }
 
+/** Replace all tasks and completions for a user with server state (after sync). */
+export async function replaceTasksAndCompletionsFromServer(
+  userId: string,
+  tasks: Task[],
+  completions: TaskCompletion[]
+): Promise<void> {
+  const db = await getDB();
+  const existingTasks = await db.getAllFromIndex("tasks", "by-userId", userId);
+  const existingCompletions = await getAllCompletionsByUser(userId);
+  const tx = db.transaction(["tasks", "completions"], "readwrite");
+  const taskStore = tx.objectStore("tasks");
+  const compStore = tx.objectStore("completions");
+  for (const t of existingTasks) {
+    taskStore.delete(t.id);
+  }
+  for (const c of existingCompletions) {
+    compStore.delete(c.id);
+  }
+  for (const t of tasks) {
+    taskStore.put({ ...t, syncStatus: "synced" as const });
+  }
+  for (const c of completions) {
+    compStore.put({ ...c, syncStatus: "synced" as const });
+  }
+  await tx.done;
+}
+
 // ─── Notification Operations ───────────────────────────────────────────────────
 
 export async function saveNotification(notif: ScheduledNotification): Promise<void> {

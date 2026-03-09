@@ -1,11 +1,16 @@
 import type { Task, TaskCompletion } from "../types/todo";
-import { getAnySession, getAllTasksByUser, getAllCompletionsByUser } from "./db";
+import {
+  getSession,
+  getAllTasksByUser,
+  getAllCompletionsByUser,
+  replaceTasksAndCompletionsFromServer,
+} from "./db";
 
 const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]; completions: TaskCompletion[] } | null> {
-  const session = await getAnySession();
-  if (!session || session.userId !== userId) return null;
+  const session = await getSession(userId);
+  if (!session) return null;
 
   const [tasks, completions] = await Promise.all([
     getAllTasksByUser(userId),
@@ -53,7 +58,13 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
     signal: AbortSignal.timeout(15000),
   });
 
-  if (!res.ok) return null;
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || (res.status === 401 ? "Unauthorized" : `Sync failed (${res.status})`));
+  }
   const data = await res.json();
-  return { tasks: data.tasks || [], completions: data.completions || [] };
+  const serverTasks: Task[] = data.tasks || [];
+  const serverCompletions: TaskCompletion[] = data.completions || [];
+  await replaceTasksAndCompletionsFromServer(userId, serverTasks, serverCompletions);
+  return { tasks: serverTasks, completions: serverCompletions };
 }

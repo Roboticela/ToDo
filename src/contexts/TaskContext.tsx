@@ -11,6 +11,7 @@ import {
   getTodayString,
 } from "../lib/taskService";
 import { useAuth } from "./AuthContext";
+import { useSync } from "./SyncContext";
 
 interface TaskContextType {
   tasks: Task[];
@@ -29,6 +30,7 @@ const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 export function TaskProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const { scheduleSync } = useSync();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDateState] = useState(getTodayString());
   const [isLoading, setIsLoading] = useState(false);
@@ -52,6 +54,12 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     refreshTasks();
   }, [refreshTasks]);
 
+  useEffect(() => {
+    const handler = () => refreshTasks({ silent: true });
+    window.addEventListener("tasks-synced", handler);
+    return () => window.removeEventListener("tasks-synced", handler);
+  }, [refreshTasks]);
+
   const setSelectedDate = useCallback((date: string) => {
     setSelectedDateState(date);
   }, []);
@@ -61,42 +69,47 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       if (!user) throw new Error("Not authenticated");
       const task = await svcCreate(user.id, data);
       await refreshTasks();
+      scheduleSync();
       return task;
     },
-    [user, refreshTasks]
+    [user, refreshTasks, scheduleSync]
   );
 
   const updateTask = useCallback(
     async (task: Task, data: Partial<TaskFormData>): Promise<Task> => {
       const updated = await svcUpdate(task, data);
       await refreshTasks();
+      scheduleSync();
       return updated;
     },
-    [refreshTasks]
+    [refreshTasks, scheduleSync]
   );
 
   const deleteTask = useCallback(
     async (taskId: string): Promise<void> => {
       await svcDelete(taskId);
       await refreshTasks();
+      scheduleSync();
     },
-    [refreshTasks]
+    [refreshTasks, scheduleSync]
   );
 
   const completeTask = useCallback(
     async (task: Task): Promise<void> => {
       await svcComplete(task, selectedDate);
       await refreshTasks({ silent: true });
+      scheduleSync();
     },
-    [selectedDate, refreshTasks]
+    [selectedDate, refreshTasks, scheduleSync]
   );
 
   const uncompleteTask = useCallback(
     async (task: Task): Promise<void> => {
       await svcUncomplete(task, selectedDate);
       await refreshTasks({ silent: true });
+      scheduleSync();
     },
-    [selectedDate, refreshTasks]
+    [selectedDate, refreshTasks, scheduleSync]
   );
 
   return (
