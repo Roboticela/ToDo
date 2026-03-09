@@ -1,6 +1,6 @@
 # ToDo API Server
 
-Express backend with PostgreSQL (Prisma), JWT auth, Google OAuth, Paddle subscriptions, and Nodemailer (SMTP) for email.
+Express backend with PostgreSQL (Prisma), JWT auth, Google OAuth, Paddle subscriptions, Nodemailer (SMTP) for email, and Cloudflare R2 for avatar storage.
 
 ## Setup
 
@@ -21,6 +21,7 @@ Express backend with PostgreSQL (Prisma), JWT auth, Google OAuth, Paddle subscri
      Add redirect URI: `https://your-api-domain/api/auth/google/callback`
    - SMTP settings for Nodemailer (forgot password, welcome email)
    - Paddle API key, webhook secret, and price IDs (Basic/Pro)
+   - **R2** (optional): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_URL` – for storing avatars in Cloudflare R2 instead of using Google’s image URL directly. If unset, Google avatars are not stored and profile uploads are not persisted to R2.
 
 3. **Database**
    ```bash

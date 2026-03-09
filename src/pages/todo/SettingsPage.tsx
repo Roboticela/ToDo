@@ -559,7 +559,7 @@ function ChangeAvatarModal({
     setIsLoading(true);
     setError("");
     try {
-      const updated = await updateProfile(userId, { avatarUrl: undefined });
+      const updated = await updateProfile(userId, { avatarUrl: "" });
       onSave(updated.avatarUrl);
       onClose();
     } catch {

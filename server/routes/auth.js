@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { config } from "../config.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken, getExpirySeconds } from "../services/jwtService.js";
 import { sendPasswordResetEmail, sendWelcomeEmail } from "../services/emailService.js";
+import { uploadAvatarFromUrl } from "../services/r2Service.js";
 import { requireAuth } from "../middleware/auth.js";
 
 const router = Router();
@@ -282,7 +283,7 @@ router.get("/google", (req, res) => {
     access_type: "offline",
     scope,
     state,
-    redirect_uri: `${req.protocol}://${req.get("host")}/api/auth/google/callback`,
+    redirect_uri: `${config.backendUrl}/api/auth/google/callback`,
     prompt: "consent",
   });
   res.redirect(url);
@@ -309,7 +310,7 @@ router.get("/google/callback", async (req, res) => {
     }
   }
 
-  const redirectUri = `${req.protocol}://${req.get("host")}/api/auth/google/callback`;
+  const redirectUri = `${config.backendUrl}/api/auth/google/callback`;
   const { tokens } = await googleClient.getToken({ code, redirect_uri: redirectUri });
   googleClient.setCredentials({ access_token: tokens.id_token });
   const ticket = await googleClient.verifyIdToken({ idToken: tokens.id_token, audience: config.google.clientId });
@@ -317,6 +318,7 @@ router.get("/google/callback", async (req, res) => {
   const googleId = payload.sub;
   const email = payload.email;
   const name = payload.name || payload.email?.split("@")[0] || "User";
+  const googlePictureUrl = payload.picture || null;
 
   let user = await prisma.user.findFirst({
     where: { OR: [{ googleId }, { email }] },
@@ -330,11 +332,25 @@ router.get("/google/callback", async (req, res) => {
         plan: "free",
       },
     });
-  } else if (!user.googleId) {
-    user = await prisma.user.update({
-      where: { id: user.id },
-      data: { googleId },
-    });
+  } else {
+    const updateData = {};
+    if (!user.googleId) updateData.googleId = googleId;
+    if (Object.keys(updateData).length > 0) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: updateData,
+      });
+    }
+  }
+
+  if (googlePictureUrl && !user.avatarUrl) {
+    const r2AvatarUrl = await uploadAvatarFromUrl(googlePictureUrl, user.id);
+    if (r2AvatarUrl) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { avatarUrl: r2AvatarUrl },
+      });
+    }
   }
 
   const accessToken = signAccessToken({ userId: user.id });
@@ -357,13 +373,13 @@ router.get("/google/callback", async (req, res) => {
   }
 
   // Web: redirect to SPA with tokens in hash (base64 JSON; hash not sent to server)
-  const payload = {
+  const sessionPayload = {
     accessToken,
     refreshToken,
     expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.accessExpiry) * 1000).toISOString(),
     userId: user.id,
   };
-  const hash = Buffer.from(JSON.stringify(payload)).toString("base64");
+  const hash = Buffer.from(JSON.stringify(sessionPayload)).toString("base64");
   return res.redirect(`${config.frontendUrl}/auth/callback#${hash}`);
 });
 

@@ -1,8 +1,12 @@
 /** @type {import('./config.d.ts')} */
+const port = Number(process.env.PORT) || 3000;
+const defaultBackendUrl = `http://localhost:${port}`;
+
 export const config = {
-  port: Number(process.env.PORT) || 3000,
+  port,
   nodeEnv: process.env.NODE_ENV || "development",
-  frontendUrl: process.env.FRONTEND_URL || "http://localhost:5173",
+  frontendUrl: (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/$/, ""),
+  backendUrl: (process.env.BACKEND_URL || defaultBackendUrl).replace(/\/$/, ""),
   appDeepLinkScheme: process.env.APP_DEEP_LINK_SCHEME || "roboticela-todo",
 
   jwt: {
@@ -31,5 +35,13 @@ export const config = {
     webhookSecret: process.env.PADDLE_WEBHOOK_SECRET || "",
     priceIdBasic: process.env.PADDLE_PRICE_ID_BASIC || "",
     priceIdPro: process.env.PADDLE_PRICE_ID_PRO || "",
+  },
+
+  r2: {
+    accountId: process.env.R2_ACCOUNT_ID || "",
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || "",
+    bucket: process.env.R2_BUCKET || "",
+    publicUrl: (process.env.R2_PUBLIC_URL || "").replace(/\/$/, ""),
   },
 };

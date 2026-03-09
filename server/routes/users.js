@@ -1,7 +1,7 @@
 import { Router } from "express";
-import bcrypt from "bcryptjs";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { uploadAvatarFromDataUrl } from "../services/r2Service.js";
 
 const router = Router();
 
@@ -25,7 +25,7 @@ router.patch("/:userId", requireAuth, async (req, res) => {
   if (req.params.userId !== req.user.id) {
     return res.status(403).json({ error: "Forbidden" });
   }
-  const { name, email } = req.body;
+  const { name, email, avatarUrl } = req.body;
   const updates = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
   if (typeof email === "string" && email.trim()) {
@@ -34,6 +34,18 @@ router.patch("/:userId", requireAuth, async (req, res) => {
     });
     if (existing) return res.status(409).json({ error: "Email already in use" });
     updates.email = email.trim().toLowerCase();
+  }
+  if (avatarUrl !== undefined) {
+    if (typeof avatarUrl === "string" && avatarUrl.trim()) {
+      if (avatarUrl.startsWith("data:")) {
+        const r2Url = await uploadAvatarFromDataUrl(avatarUrl, req.user.id);
+        updates.avatarUrl = r2Url || req.user.avatarUrl;
+      } else {
+        updates.avatarUrl = avatarUrl.trim();
+      }
+    } else {
+      updates.avatarUrl = null;
+    }
   }
   if (Object.keys(updates).length === 0) {
     return res.json(toUserResponse(req.user));

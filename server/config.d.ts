@@ -2,6 +2,7 @@ export declare const config: {
   port: number;
   nodeEnv: string;
   frontendUrl: string;
+  backendUrl: string;
   appDeepLinkScheme: string;
   jwt: {
     accessSecret: string;
@@ -26,5 +27,12 @@ export declare const config: {
     webhookSecret: string;
     priceIdBasic: string;
     priceIdPro: string;
+  };
+  r2: {
+    accountId: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    bucket: string;
+    publicUrl: string;
   };
 };
