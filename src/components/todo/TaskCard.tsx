@@ -12,6 +12,7 @@ import {
   ChevronDown,
   TrendingUp,
   TrendingDown,
+  Flag,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import type { Task } from "../../types/todo";
@@ -142,6 +143,19 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                       <TrendingDown className="w-3 h-3" />
                     )}
                     {task.category === "do" ? "Do" : "Don't"}
+                  </span>
+
+                  {/* Priority badge */}
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full",
+                      (task.priority ?? "medium") === "high" && "bg-red-500/10 text-red-400",
+                      (task.priority ?? "medium") === "medium" && "bg-amber-500/10 text-amber-400",
+                      (task.priority ?? "medium") === "low" && "bg-slate-500/10 text-slate-400"
+                    )}
+                  >
+                    <Flag className="w-3 h-3" />
+                    {(task.priority ?? "medium").charAt(0).toUpperCase() + (task.priority ?? "medium").slice(1)}
                   </span>
 
                   {/* Repeat badge */}

@@ -2,6 +2,7 @@
 
 export type TaskType = "time-based" | "daily" | "duration";
 export type TaskCategory = "do" | "dont";
+export type TaskPriority = "low" | "medium" | "high";
 export type TaskStatus = "pending" | "completed" | "missed" | "skipped";
 export type RepeatDay = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun, 1=Mon, ..., 6=Sat
 export type SyncStatus = "synced" | "pending" | "failed";
@@ -14,6 +15,7 @@ export interface Task {
   description?: string;
   type: TaskType;
   category: TaskCategory;
+  priority?: TaskPriority; // default "medium" when missing (e.g. legacy data)
 
   // Time-based & Duration fields
   date: string;           // ISO date string "YYYY-MM-DD"
@@ -152,6 +154,7 @@ export interface TaskFormData {
   description?: string;
   type: TaskType;
   category: TaskCategory;
+  priority: TaskPriority;
   date: string;
   time?: string;
   startTime?: string;

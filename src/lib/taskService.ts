@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "./uuid";
 import { format } from "date-fns";
-import type { Task, TaskCompletion, TaskFormData, RepeatDay } from "../types/todo";
+import type { Task, TaskCompletion, TaskFormData, TaskPriority, RepeatDay } from "../types/todo";
 import {
   saveTask,
   getTasksByUserAndDate,
@@ -26,6 +26,7 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
     description: data.description,
     type: data.type,
     category: data.category,
+    priority: data.priority ?? "medium",
     date: data.date,
     time: data.time,
     startTime: data.startTime,
@@ -127,9 +128,11 @@ export async function getTasksForDate(userId: string, date: string): Promise<Tas
   // Get tasks directly assigned to this date
   const directTasks = await getTasksByUserAndDate(userId, date);
 
-  // Get repeating tasks that match this weekday
+  // Get repeating tasks that match this weekday and are on or after the task's start date (no past dates)
   const repeatTasks = await getRepeatTasksByUser(userId);
-  const matchingRepeat = repeatTasks.filter((t) => t.repeatDays.includes(dayOfWeek));
+  const matchingRepeat = repeatTasks.filter(
+    (t) => t.repeatDays.includes(dayOfWeek) && date >= t.date
+  );
 
   // Merge, avoiding duplicates
   const seen = new Set(directTasks.map((t) => t.id));
@@ -173,11 +176,19 @@ export async function getAnalyticsForDateRange(
   totalTasks: number;
   completedTasks: number;
   missedTasks: number;
+  inProgressTasks: number;
   completionRate: number;
-  dailyStats: Array<{ date: string; completed: number; total: number; rate: number }>;
+  dailyStats: Array<{
+    date: string;
+    completed: number;
+    missed: number;
+    inProgress: number;
+    total: number;
+    rate: number;
+  }>;
 }> {
-  const allTasks = await getAllTasksByUser(userId);
   const allCompletions = await getAllCompletionsByUser(userId);
+  const todayStr = getTodayString();
 
   const start = new Date(startDate + "T00:00:00");
   const end = new Date(endDate + "T23:59:59");
@@ -190,7 +201,16 @@ export async function getAnalyticsForDateRange(
 
   let totalTasks = 0;
   let completedTasks = 0;
-  const dailyStats: Array<{ date: string; completed: number; total: number; rate: number }> = [];
+  let missedTasks = 0;
+  let inProgressTasks = 0;
+  const dailyStats: Array<{
+    date: string;
+    completed: number;
+    missed: number;
+    inProgress: number;
+    total: number;
+    rate: number;
+  }> = [];
 
   for (const day of days) {
     const tasksForDay = await getTasksForDate(userId, day);
@@ -199,29 +219,45 @@ export async function getAnalyticsForDateRange(
     );
 
     let dayCompleted = 0;
+    let dayMissed = 0;
+    let dayInProgress = 0;
     for (const task of tasksForDay) {
       totalTasks++;
-      if (task.isRepeating) {
-        const isComp = completionsForDay.some((c) => c.taskId === task.id);
-        if (isComp) dayCompleted++;
-      } else if (task.status === "completed") {
+      const isCompleted = task.isRepeating
+        ? completionsForDay.some((c) => c.taskId === task.id)
+        : task.status === "completed";
+      if (isCompleted) {
         dayCompleted++;
+      } else if (day < todayStr) {
+        dayMissed++;
+      } else {
+        dayInProgress++;
       }
     }
 
     completedTasks += dayCompleted;
+    missedTasks += dayMissed;
+    inProgressTasks += dayInProgress;
     dailyStats.push({
       date: day,
       completed: dayCompleted,
+      missed: dayMissed,
+      inProgress: dayInProgress,
       total: tasksForDay.length,
       rate: tasksForDay.length > 0 ? Math.round((dayCompleted / tasksForDay.length) * 100) : 0,
     });
   }
 
-  const missedTasks = totalTasks - completedTasks;
   const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  return { totalTasks, completedTasks, missedTasks, completionRate, dailyStats };
+  return {
+    totalTasks,
+    completedTasks,
+    missedTasks,
+    inProgressTasks,
+    completionRate,
+    dailyStats,
+  };
 }
 
 // ─── Get Earliest Task Date ───────────────────────────────────────────────────
@@ -293,6 +329,7 @@ export async function importTasksFromData(
       description: t.description?.trim() || undefined,
       type: t.type ?? "daily",
       category: t.category ?? "do",
+      priority: (t.priority as TaskPriority) ?? "medium",
       date: t.date ?? getTodayString(),
       time: t.time,
       startTime: t.startTime,

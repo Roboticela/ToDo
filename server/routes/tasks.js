@@ -13,6 +13,7 @@ function taskToJson(t) {
     description: t.description ?? undefined,
     type: t.type,
     category: t.category,
+    priority: t.priority ?? "medium",
     date: t.date,
     time: t.time ?? undefined,
     startTime: t.startTime ?? undefined,
@@ -75,6 +76,7 @@ router.post("/", requireAuth, async (req, res) => {
       description: body.description ?? null,
       type: body.type,
       category: body.category,
+      priority: body.priority ?? "medium",
       date: body.date,
       time: body.time ?? null,
       startTime: body.startTime ?? null,
@@ -101,6 +103,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
   if (body.description !== undefined) data.description = body.description;
   if (body.type !== undefined) data.type = body.type;
   if (body.category !== undefined) data.category = body.category;
+  if (body.priority !== undefined) data.priority = body.priority;
   if (body.date !== undefined) data.date = body.date;
   if (body.time !== undefined) data.time = body.time;
   if (body.startTime !== undefined) data.startTime = body.startTime;
@@ -180,6 +183,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         description: t.description ?? null,
         type: t.type,
         category: t.category,
+        priority: t.priority ?? "medium",
         date: t.date,
         time: t.time ?? null,
         startTime: t.startTime ?? null,
@@ -194,6 +198,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         description: t.description ?? null,
         type: t.type,
         category: t.category,
+        priority: t.priority ?? "medium",
         date: t.date,
         time: t.time ?? null,
         startTime: t.startTime ?? null,

@@ -20,6 +20,7 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
       description: t.description,
       type: t.type,
       category: t.category,
+      priority: t.priority ?? "medium",
       date: t.date,
       time: t.time,
       startTime: t.startTime,

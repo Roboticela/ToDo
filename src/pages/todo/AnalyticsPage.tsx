@@ -122,8 +122,16 @@ export default function AnalyticsPage() {
     totalTasks: number;
     completedTasks: number;
     missedTasks: number;
+    inProgressTasks: number;
     completionRate: number;
-    dailyStats: Array<{ date: string; completed: number; total: number; rate: number }>;
+    dailyStats: Array<{
+      date: string;
+      completed: number;
+      missed: number;
+      inProgress: number;
+      total: number;
+      rate: number;
+    }>;
   } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [effectiveFrom, setEffectiveFrom] = useState("");
@@ -179,15 +187,20 @@ export default function AnalyticsPage() {
       .map((d) => ({
         date: format(new Date(d.date + "T12:00:00"), xDateFmt),
         Completed: d.completed,
-        Missed: d.total - d.completed,
+        Missed: d.missed,
+        "In progress": d.inProgress,
         Rate: d.rate,
       })) || [];
 
   const pieData = stats
-    ? [
-        { name: "Completed", value: stats.completedTasks, color: "#22c55e" },
-        { name: "Missed", value: stats.missedTasks, color: "#ef4444" },
-      ]
+    ? (() => {
+        const arr = [
+          { name: "Completed", value: stats.completedTasks, color: "#22c55e" },
+          { name: "Missed", value: stats.missedTasks, color: "#ef4444" },
+          { name: "In progress", value: stats.inProgressTasks, color: "#eab308" },
+        ].filter((d) => d.value > 0);
+        return arr.length > 0 ? arr : [{ name: "No data", value: 1, color: "var(--color-border)" }];
+      })()
     : [];
 
   const hasTasks = stats && stats.totalTasks > 0;
@@ -384,7 +397,7 @@ export default function AnalyticsPage() {
             className="space-y-5"
           >
             {/* Stats grid */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <StatCard
                 label="Completion Rate"
                 value={`${stats!.completionRate}%`}
@@ -414,110 +427,117 @@ export default function AnalyticsPage() {
                 color="bg-red-500/10"
                 delay={0.15}
               />
+              <StatCard
+                label="In progress"
+                value={stats!.inProgressTasks}
+                icon={<TrendingUp className="w-4 h-4 text-amber-400" />}
+                color="bg-amber-500/10"
+                delay={0.2}
+              />
             </div>
 
-            {/* Bar chart */}
-            {chartData.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="bg-card border border-border rounded-2xl p-4"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <BarChart3 className="w-4 h-4 text-primary/70" />
-                    <h3 className="text-sm font-bold text-foreground">Daily Progress</h3>
+            {/* Bar chart — always show for the selected range */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-card border border-border rounded-2xl p-4"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-primary/70" />
+                  <h3 className="text-sm font-bold text-foreground">Daily Progress</h3>
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                    <span className="text-xs text-foreground/50">Completed</span>
                   </div>
-                  <div className="flex gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-green-400" />
-                      <span className="text-xs text-foreground/50">Done</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <div className="w-2 h-2 rounded-full bg-red-400" />
-                      <span className="text-xs text-foreground/50">Missed</span>
-                    </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-red-400" />
+                    <span className="text-xs text-foreground/50">Missed</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-amber-400" />
+                    <span className="text-xs text-foreground/50">In progress</span>
                   </div>
                 </div>
-                <ResponsiveContainer width="100%" height={160}>
-                  <BarChart data={chartData} barSize={barSize} barGap={1}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="var(--color-border)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "var(--color-foreground)", fontSize: 10, opacity: 0.5 }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval={daySpan <= 14 ? 0 : daySpan <= 31 ? 2 : "preserveStartEnd"}
-                    />
-                    <YAxis hide />
-                    <Tooltip
-                      content={<CustomTooltip />}
-                      wrapperStyle={TOOLTIP_WRAPPER_STYLE}
-                      cursor={{ fill: "var(--color-accent)", opacity: 0.4, radius: 6 }}
-                    />
-                    <Bar dataKey="Completed" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Missed" fill="#ef4444" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </motion.div>
-            )}
+              </div>
+              <ResponsiveContainer width="100%" height={160}>
+                <BarChart data={chartData.length > 0 ? chartData : [{ date: "-", Completed: 0, Missed: 0, "In progress": 0, Rate: 0 }]} barSize={barSize} barGap={1}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: "var(--color-foreground)", fontSize: 10, opacity: 0.5 }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={daySpan <= 14 ? 0 : daySpan <= 31 ? 2 : "preserveStartEnd"}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    content={<CustomTooltip />}
+                    wrapperStyle={TOOLTIP_WRAPPER_STYLE}
+                    cursor={{ fill: "var(--color-accent)", opacity: 0.4, radius: 6 }}
+                  />
+                  <Bar dataKey="Completed" fill="#22c55e" radius={[3, 3, 0, 0]} stackId="a" />
+                  <Bar dataKey="Missed" fill="#ef4444" radius={[3, 3, 0, 0]} stackId="a" />
+                  <Bar dataKey="In progress" fill="#eab308" radius={[3, 3, 0, 0]} stackId="a" />
+                </BarChart>
+              </ResponsiveContainer>
+            </motion.div>
 
-            {/* Line chart — completion rate */}
-            {chartData.length > 1 && (
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.25 }}
-                className="bg-card border border-border rounded-2xl p-4"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <TrendingUp className="w-4 h-4 text-primary/70" />
-                  <h3 className="text-sm font-bold text-foreground">Success Rate Trend</h3>
-                </div>
-                <ResponsiveContainer width="100%" height={140}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="var(--color-border)"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fill: "var(--color-foreground)", fontSize: 10, opacity: 0.5 }}
-                      axisLine={false}
-                      tickLine={false}
-                      interval={daySpan <= 14 ? 0 : "preserveStartEnd"}
-                    />
-                    <YAxis
-                      hide
-                      domain={[0, 100]}
-                    />
-                    <Tooltip
-                      content={<CustomTooltip />}
-                      wrapperStyle={TOOLTIP_WRAPPER_STYLE}
-                      cursor={{ stroke: "var(--color-primary)", strokeWidth: 1, strokeDasharray: "4 2", opacity: 0.5 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="Rate"
-                      stroke="var(--color-primary)"
-                      strokeWidth={2}
-                      dot={daySpan <= 14 ? { fill: "var(--color-primary)", r: 3 } : false}
-                      activeDot={{ r: 5 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </motion.div>
-            )}
+            {/* Line chart — completion rate; always show */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25 }}
+              className="bg-card border border-border rounded-2xl p-4"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-4 h-4 text-primary/70" />
+                <h3 className="text-sm font-bold text-foreground">Success Rate Trend</h3>
+              </div>
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={chartData.length > 0 ? chartData : [{ date: "-", Rate: 0 }]}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="var(--color-border)"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: "var(--color-foreground)", fontSize: 10, opacity: 0.5 }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={daySpan <= 14 ? 0 : "preserveStartEnd"}
+                  />
+                  <YAxis
+                    hide
+                    domain={[0, 100]}
+                  />
+                  <Tooltip
+                    content={<CustomTooltip />}
+                    wrapperStyle={TOOLTIP_WRAPPER_STYLE}
+                    cursor={{ stroke: "var(--color-primary)", strokeWidth: 1, strokeDasharray: "4 2", opacity: 0.5 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="Rate"
+                    stroke="var(--color-primary)"
+                    strokeWidth={2}
+                    dot={daySpan <= 14 ? { fill: "var(--color-primary)", r: 3 } : false}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </motion.div>
 
-            {/* Pie chart + legend */}
-            {(stats!.completedTasks > 0 || stats!.missedTasks > 0) && (
-              <motion.div
+            {/* Pie chart + legend; always show */}
+            <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
@@ -577,8 +597,17 @@ export default function AnalyticsPage() {
                         <div className="w-2.5 h-2.5 rounded-full bg-red-400" />
                         <span className="text-xs text-foreground/60">Missed</span>
                       </div>
-                      <span className="text-base font-bold text-foreground">
+                      <span className="text-base font-bold text-foreground/70">
                         {stats!.missedTasks}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                        <span className="text-xs text-foreground/60">In progress</span>
+                      </div>
+                      <span className="text-base font-bold text-foreground/70">
+                        {stats!.inProgressTasks}
                       </span>
                     </div>
                     <div className="h-px bg-border/50" />
@@ -591,10 +620,9 @@ export default function AnalyticsPage() {
                   </div>
                 </div>
               </motion.div>
-            )}
 
-            {/* Weekly breakdown table (only for wider ranges) */}
-            {daySpan > 14 && chartData.length > 0 && (
+            {/* Day breakdown table; always show for all ranges */}
+            {stats!.dailyStats.length > 0 && (
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -607,7 +635,6 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="space-y-1.5 max-h-60 overflow-y-auto custom-scrollbar">
                   {stats!.dailyStats
-                    .filter((d) => d.total > 0)
                     .slice()
                     .reverse()
                     .map((day) => (
@@ -640,6 +667,11 @@ export default function AnalyticsPage() {
                         </span>
                         <span className="text-xs text-foreground/35 shrink-0">
                           {day.completed}/{day.total}
+                          {day.total > 0 && (
+                            <span className="text-foreground/25 ml-0.5">
+                              ({day.missed} missed, {day.inProgress} in progress)
+                            </span>
+                          )}
                         </span>
                       </div>
                     ))}

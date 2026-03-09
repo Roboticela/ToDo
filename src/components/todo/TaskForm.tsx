@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
-import { X, Clock, Timer, CalendarDays, TrendingUp, TrendingDown, Repeat } from "lucide-react";
+import { X, Clock, Timer, CalendarDays, TrendingUp, TrendingDown, Repeat, Flag } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useIsDesktop } from "../../hooks/useIsDesktop";
-import type { Task, TaskFormData, TaskType, TaskCategory, RepeatDay } from "../../types/todo";
+import type { Task, TaskFormData, TaskType, TaskCategory, TaskPriority, RepeatDay } from "../../types/todo";
 import { useTasks } from "../../contexts/TaskContext";
 import { getTodayString } from "../../lib/taskService";
 import DatePicker from "./DatePicker";
@@ -34,6 +34,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("daily");
   const [category, setCategory] = useState<TaskCategory>("do");
+  const [priority, setPriority] = useState<TaskPriority>("medium");
   const [date, setDate] = useState(defaultDate || getTodayString());
   const [time, setTime] = useState("");
   const [startTime, setStartTime] = useState("");
@@ -49,6 +50,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
       setDescription(editTask.description || "");
       setType(editTask.type);
       setCategory(editTask.category);
+      setPriority(editTask.priority ?? "medium");
       setDate(editTask.date);
       setTime(editTask.time || "");
       setStartTime(editTask.startTime || "");
@@ -60,6 +62,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
       setDescription("");
       setType("daily");
       setCategory("do");
+      setPriority("medium");
       setDate(defaultDate || getTodayString());
       setTime("");
       setStartTime("");
@@ -97,6 +100,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
         description: description.trim() || undefined,
         type,
         category,
+        priority,
         date,
         time: type === "time-based" ? time : undefined,
         startTime: type === "duration" ? startTime : undefined,
@@ -238,6 +242,39 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
                         <TrendingDown className="w-4 h-4" />
                       )}
                       {cat === "do" ? "Do" : "Don't"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Priority */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground/80">Priority</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { value: "low" as TaskPriority, label: "Low" },
+                      { value: "medium" as TaskPriority, label: "Medium" },
+                      { value: "high" as TaskPriority, label: "High" },
+                    ]
+                  ).map(({ value, label }) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setPriority(value)}
+                      className={cn(
+                        "flex items-center justify-center gap-1.5 h-11 rounded-xl border text-sm font-medium transition-all",
+                        priority === value
+                          ? value === "high"
+                            ? "bg-red-500/15 border-red-500/40 text-red-400"
+                            : value === "medium"
+                              ? "bg-amber-500/15 border-amber-500/40 text-amber-400"
+                              : "bg-slate-500/15 border-slate-500/40 text-slate-400"
+                          : "border-border text-foreground/50 hover:bg-accent/30"
+                      )}
+                    >
+                      <Flag className="w-3.5 h-3.5" />
+                      {label}
                     </button>
                   ))}
                 </div>
