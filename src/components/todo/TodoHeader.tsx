@@ -59,7 +59,7 @@ function TodoHeader({ title = "Roboticela ToDo", rightContent }: TodoHeaderProps
       initial={{ y: -60, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.4 }}
-      className="sticky top-0 z-30 lg:z-50 w-full h-14 shrink-0 border-b border-border/40 bg-card/80 backdrop-blur-xl flex items-center px-4 md:px-6 lg:px-8 gap-2 lg:-ml-56 lg:w-screen"
+      className="sticky top-0 z-30 lg:z-40 w-full h-14 shrink-0 border-b border-border/40 bg-card/80 backdrop-blur-xl flex items-center px-4 md:px-6 lg:px-8 gap-2 lg:-ml-56 lg:w-screen"
     >
       <button
         type="button"

@@ -70,6 +70,7 @@ export interface User {
   avatarUrl?: string;
   plan: SubscriptionPlan;
   planExpiresAt?: string;
+  emailVerifiedAt?: string;
   createdAt: string;
 }
 

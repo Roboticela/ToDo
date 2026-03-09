@@ -6,6 +6,7 @@ import { TaskProvider } from "../../contexts/TaskContext";
 import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
 import TodoHeader from "./TodoHeader";
+import VerificationBanner from "./VerificationBanner";
 import { initNotificationScheduler, requestNotificationPermission } from "../../lib/notificationService";
 
 const pageVariants = {
@@ -87,11 +88,13 @@ export default function AppLayout() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.25 }}
-        className="h-screen min-h-screen overflow-hidden flex flex-col lg:flex-row w-full bg-background"
+        className="h-screen min-h-screen overflow-hidden flex flex-col w-full bg-background"
       >
-        <SideNav />
-        <main className="flex-1 flex flex-col min-h-0 min-w-0 w-full max-w-2xl md:max-w-4xl lg:max-w-none mx-auto lg:mx-0 lg:pl-56">
-          <TodoHeader title={headerTitle} />
+        <VerificationBanner />
+        <div className="flex-1 flex min-h-0 lg:flex-row w-full overflow-hidden">
+          <SideNav />
+          <main className="flex-1 flex flex-col min-h-0 min-w-0 w-full max-w-2xl md:max-w-4xl lg:max-w-none mx-auto lg:mx-0 lg:pl-56">
+            <TodoHeader title={headerTitle} />
           <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-16 lg:pb-0 w-full custom-scrollbar">
             <AnimatePresence mode="wait">
               <motion.div
@@ -107,8 +110,9 @@ export default function AppLayout() {
               </motion.div>
             </AnimatePresence>
           </div>
-          <BottomNav />
-        </main>
+            <BottomNav />
+          </main>
+        </div>
       </motion.div>
     </TaskProvider>
   );

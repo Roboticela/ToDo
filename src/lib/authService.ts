@@ -142,6 +142,19 @@ export async function resetPassword(token: string, newPassword: string): Promise
   }
 }
 
+export async function resendVerification(): Promise<void> {
+  const session = await getAnySession();
+  if (!session) throw new Error("Not signed in");
+  const res = await fetch(`${API_BASE}/api/auth/resend-verification`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.accessToken}` },
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || "Failed to send verification email");
+  }
+}
+
 export async function changePassword(userId: string, newPassword: string): Promise<void> {
   const session = await getAnySession();
   const res = await fetch(`${API_BASE}/api/auth/change-password`, {

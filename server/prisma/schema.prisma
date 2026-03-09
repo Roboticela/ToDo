@@ -20,6 +20,20 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Email verification
+  emailVerifiedAt                 DateTime?
+  emailVerificationToken          String?
+  emailVerificationTokenExpiresAt DateTime?
+
+  // Email change (pending new email)
+  pendingEmail          String?
+  pendingEmailToken     String?
+  pendingEmailTokenExpiresAt DateTime?
+
+  // Subscription reminder emails
+  subscribedToReminders    Boolean   @default(true)
+  lastSubscriptionReminderAt DateTime?
+
   sessions           Session[]
   passwordResetTokens PasswordResetToken[]
   tasks               Task[]

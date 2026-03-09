@@ -17,6 +17,7 @@ import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import AuthCallbackPage from "./pages/auth/AuthCallbackPage";
 import DesktopSuccessPage from "./pages/auth/DesktopSuccessPage";
+import VerifiedPage from "./pages/auth/VerifiedPage";
 
 // App layout + pages
 import AppLayout from "./components/todo/AppLayout";
@@ -56,6 +57,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
               <Route path="/auth/desktop-success" element={<DesktopSuccessPage />} />
+              <Route path="/auth/verified" element={<VerifiedPage />} />
 
               {/* App */}
               <Route path="/todo" element={<AppLayout />}>

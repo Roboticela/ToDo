@@ -13,6 +13,7 @@ function toUserResponse(user) {
     avatarUrl: user.avatarUrl ?? undefined,
     plan: user.plan,
     planExpiresAt: user.planExpiresAt ? user.planExpiresAt.toISOString() : undefined,
+    emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     createdAt: user.createdAt.toISOString(),
   };
 }

@@ -41,6 +41,7 @@ export async function handleAuthDeepLink(
       avatarUrl: userData.avatarUrl,
       plan: userData.plan,
       planExpiresAt: userData.planExpiresAt,
+      emailVerifiedAt: userData.emailVerifiedAt,
       createdAt: userData.createdAt,
     };
     const session: AuthSession = {

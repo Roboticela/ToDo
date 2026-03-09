@@ -23,7 +23,8 @@ function SideNav() {
       initial={{ x: -24, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ type: "spring", stiffness: 300, damping: 35, delay: 0.05 }}
-      className="hidden lg:flex lg:flex-col lg:w-56 lg:fixed lg:top-14 lg:bottom-0 lg:left-0 z-40 border-r border-border bg-card/95 backdrop-blur-xl shrink-0"
+      style={{ top: "var(--sidebar-top, 3.5rem)" }}
+      className="hidden lg:flex lg:flex-col lg:w-56 lg:fixed lg:bottom-0 lg:left-0 z-50 border-r border-border bg-card/95 backdrop-blur-xl shrink-0"
     >
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
         {NAV_ITEMS.map(({ path, label, icon: Icon }, i) => {

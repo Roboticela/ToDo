@@ -1,5 +1,19 @@
 import nodemailer from "nodemailer";
 import { config } from "../config.js";
+import { createUnsubscribeToken } from "./unsubscribeToken.js";
+import {
+  getVerificationEmail,
+  getEmailChangeEmail,
+  getPasswordResetEmail,
+  getWelcomeEmail,
+  getSubscriptionReminderEmail,
+} from "../EmailStructures/index.js";
+
+function getUnsubscribeUrl(userId) {
+  if (!userId) return null;
+  const token = createUnsubscribeToken(userId);
+  return `${config.backendUrl}/api/email/unsubscribe?token=${encodeURIComponent(token)}`;
+}
 
 let transporter = null;
 
@@ -39,40 +53,58 @@ export async function sendMail({ to, subject, text, html }) {
 }
 
 /**
- * Send password reset email with link.
+ * Email verification – confirm email address
  */
-export async function sendPasswordResetEmail(to, resetToken, userName) {
-  const resetUrl = `${config.frontendUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
-  await sendMail({
-    to,
-    subject: "Reset your Roboticela ToDo password",
-    text: `Hi ${userName},\n\nUse this link to reset your password (valid for 1 hour):\n${resetUrl}\n\nIf you didn't request this, ignore this email.`,
-    html: `
-      <div style="font-family: sans-serif; max-width: 480px;">
-        <p>Hi ${userName},</p>
-        <p>Use the link below to reset your password. It expires in 1 hour.</p>
-        <p><a href="${resetUrl}" style="display: inline-block; padding: 10px 20px; background: #6366f1; color: white; text-decoration: none; border-radius: 8px;">Reset password</a></p>
-        <p>If you didn't request this, you can ignore this email.</p>
-        <p style="color: #666; font-size: 12px;">Roboticela ToDo</p>
-      </div>
-    `,
-  });
+export async function sendVerificationEmail(to, userName, verifyToken, userId = null) {
+  const verifyUrl = `${config.backendUrl}/api/auth/verify-email?token=${encodeURIComponent(verifyToken)}`;
+  const unsubscribeUrl = getUnsubscribeUrl(userId);
+  const { subject, text, html } = getVerificationEmail({ verifyUrl, userName, unsubscribeUrl });
+  await sendMail({ to, subject, text, html });
 }
 
 /**
- * Send welcome email after registration.
+ * Email change – confirm new email address
  */
-export async function sendWelcomeEmail(to, userName) {
-  await sendMail({
-    to,
-    subject: "Welcome to Roboticela ToDo",
-    text: `Hi ${userName},\n\nWelcome to Roboticela ToDo. You can start organizing your tasks right away.\n\nBest,\nRoboticela ToDo`,
-    html: `
-      <div style="font-family: sans-serif; max-width: 480px;">
-        <p>Hi ${userName},</p>
-        <p>Welcome to Roboticela ToDo. You can start organizing your tasks right away.</p>
-        <p>Best,<br/>Roboticela ToDo</p>
-      </div>
-    `,
+export async function sendEmailChangeEmail(to, userName, newEmail, confirmToken, userId = null) {
+  const confirmUrl = `${config.backendUrl}/api/auth/confirm-email-change?token=${encodeURIComponent(confirmToken)}`;
+  const unsubscribeUrl = getUnsubscribeUrl(userId);
+  const { subject, text, html } = getEmailChangeEmail({ confirmUrl, userName, newEmail, unsubscribeUrl });
+  await sendMail({ to, subject, text, html });
+}
+
+/**
+ * Password reset
+ */
+export async function sendPasswordResetEmail(to, resetToken, userName, userId = null) {
+  const resetUrl = `${config.frontendUrl}/auth/reset-password?token=${encodeURIComponent(resetToken)}`;
+  const unsubscribeUrl = getUnsubscribeUrl(userId);
+  const { subject, text, html } = getPasswordResetEmail({ resetUrl, userName, unsubscribeUrl });
+  await sendMail({ to, subject, text, html });
+}
+
+/**
+ * Welcome after registration
+ */
+export async function sendWelcomeEmail(to, userName, userId = null) {
+  const unsubscribeUrl = getUnsubscribeUrl(userId);
+  const { subject, text, html } = getWelcomeEmail({
+    userName,
+    appUrl: config.frontendUrl,
+    unsubscribeUrl,
   });
+  await sendMail({ to, subject, text, html });
+}
+
+/**
+ * Subscription reminder (free plan). Include unsubscribe link using signed token.
+ */
+export async function sendSubscriptionReminderEmail(to, userName, unsubscribeToken) {
+  const subscriptionUrl = `${config.frontendUrl}/todo/subscription`;
+  const unsubscribeUrl = `${config.backendUrl}/api/email/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`;
+  const { subject, text, html } = getSubscriptionReminderEmail({
+    userName,
+    subscriptionUrl,
+    unsubscribeUrl,
+  });
+  await sendMail({ to, subject, text, html });
 }

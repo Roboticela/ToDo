@@ -82,6 +82,7 @@ export default function AuthCallbackPage() {
         avatarUrl: userData.avatarUrl,
         plan: userData.plan,
         planExpiresAt: userData.planExpiresAt,
+        emailVerifiedAt: userData.emailVerifiedAt,
         createdAt: userData.createdAt,
       };
       const session: AuthSession = {

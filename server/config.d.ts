@@ -22,6 +22,10 @@ export declare const config: {
     pass: string;
     from: string;
   };
+  email: {
+    subscriptionReminderIntervalDays: number;
+    unsubscribeSecret: string;
+  };
   paddle: {
     apiKey: string;
     webhookSecret: string;

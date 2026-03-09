@@ -30,6 +30,11 @@ export const config = {
     from: process.env.SMTP_FROM || "Roboticela ToDo <noreply@example.com>",
   },
 
+  email: {
+    subscriptionReminderIntervalDays: Number(process.env.SUBSCRIPTION_REMINDER_INTERVAL_DAYS) || 7,
+    unsubscribeSecret: process.env.EMAIL_UNSUBSCRIBE_SECRET || "change-me-unsubscribe-secret-min-32-chars",
+  },
+
   paddle: {
     apiKey: process.env.PADDLE_API_KEY || "",
     webhookSecret: process.env.PADDLE_WEBHOOK_SECRET || "",

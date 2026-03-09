@@ -72,9 +72,9 @@ export default function ResetPasswordPage() {
           <p className="text-sm text-foreground/60 mt-1">You can now sign in with your new password.</p>
           <Link
             to="/auth/login"
-            className="mt-4 inline-block w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm flex items-center justify-center hover:bg-primary/90"
+            className="mt-4 flex w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm items-center justify-center hover:bg-primary/90"
           >
-            Sign in
+            <span className="leading-none">Sign in</span>
           </Link>
         </motion.div>
       </div>

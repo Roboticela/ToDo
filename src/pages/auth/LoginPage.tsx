@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, CheckSquare } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
@@ -10,12 +10,21 @@ import { cn } from "../../lib/utils";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { setAuthData } = useAuth();
   const [email, setEmail] = useState("");
+  const [showVerifiedMessage, setShowVerifiedMessage] = useState(false);
 
   useEffect(() => {
     document.title = "Login - Roboticela ToDo";
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("verified") === "1") {
+      setShowVerifiedMessage(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -80,6 +89,11 @@ export default function LoginPage() {
 
         {/* Form Card */}
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+          {showVerifiedMessage && (
+            <div className="mb-4 p-3 rounded-xl bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-sm">
+              Email verified. You can sign in now.
+            </div>
+          )}
           {error && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}

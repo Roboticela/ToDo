@@ -7,6 +7,8 @@ import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/users.js";
 import taskRoutes from "./routes/tasks.js";
 import paddleRoutes from "./routes/paddle.js";
+import emailRoutes from "./routes/email.js";
+import { startSubscriptionReminderJob } from "./jobs/subscriptionReminderJob.js";
 
 const app = express();
 
@@ -30,6 +32,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/paddle", paddleRoutes);
+app.use("/api/email", emailRoutes);
 
 // Health
 app.get("/health", (req, res) => {
@@ -44,4 +47,5 @@ app.use((err, req, res, next) => {
 const port = config.port;
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+  startSubscriptionReminderJob();
 });
