@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Crown, Check, ArrowLeft, Zap, Infinity } from "lucide-react";
+import { Crown, Check, Zap, Infinity } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { type SubscriptionPlan } from "../../types/todo";
@@ -93,7 +92,6 @@ const PLANS: {
 ];
 
 export default function SubscriptionPage() {
-  const navigate = useNavigate();
   const { user, session } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState<SubscriptionPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -234,16 +232,6 @@ export default function SubscriptionPage() {
             Subscriptions managed securely. Cancel anytime.
           </p>
         </div>
-
-        <motion.button
-          type="button"
-          whileTap={{ scale: 0.97 }}
-          onClick={() => navigate(-1)}
-          className="w-full flex items-center justify-center gap-2 h-11 rounded-xl border border-border text-sm font-medium text-foreground/60 hover:bg-accent/30 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </motion.button>
       </div>
     </div>
   );
