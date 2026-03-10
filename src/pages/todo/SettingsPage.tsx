@@ -26,13 +26,13 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
 import { updateProfile, changePassword, deleteAccount, requestEmailChange } from "../../lib/authService";
 import { saveUser } from "../../lib/db";
+import { getApiBase } from "../../lib/apiBase";
 import type { User as UserType } from "../../types/todo";
 import { getExportData, importTasksFromData } from "../../lib/taskService";
 import { PLAN_FEATURES } from "../../types/todo";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -53,7 +53,7 @@ export default function SettingsPage() {
     if (searchParams.get("email_changed") !== "1" || !session) return;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/users/me`, {
+        const res = await fetch(`${getApiBase()}/api/users/me`, {
           headers: { Authorization: `Bearer ${session.accessToken}` },
         });
         if (res.ok) {

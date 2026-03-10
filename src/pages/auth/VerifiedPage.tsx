@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveUser } from "../../lib/db";
+import { getApiBase } from "../../lib/apiBase";
 import type { User } from "../../types/todo";
-
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 /**
  * Landed after clicking the email verification link.
@@ -26,7 +25,7 @@ export default function VerifiedPage() {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/users/me`, {
+        const res = await fetch(`${getApiBase()}/api/users/me`, {
           headers: { Authorization: `Bearer ${session.accessToken}` },
         });
         if (!res.ok || cancelled) {

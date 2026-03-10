@@ -2,9 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveUser, saveSession } from "../../lib/db";
+import { getApiBase } from "../../lib/apiBase";
 import type { User, AuthSession } from "../../types/todo";
-
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 /**
  * Handles OAuth callback from backend redirect.
@@ -68,7 +67,7 @@ export default function AuthCallbackPage() {
     userId: string
   ) {
     try {
-      const res = await fetch(`${API_BASE}/api/users/me`, {
+      const res = await fetch(`${getApiBase()}/api/users/me`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       if (!res.ok) {

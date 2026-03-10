@@ -1,8 +1,8 @@
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { saveUser, saveSession } from "./db";
+import { getApiBase } from "./apiBase";
 import type { User, AuthSession } from "../types/todo";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 function parseAuthUrl(url: string): { accessToken: string; refreshToken: string; userId: string } | null {
   try {
@@ -29,7 +29,7 @@ export async function handleAuthDeepLink(
   if (!parsed) return false;
 
   try {
-    const res = await fetch(`${API_BASE}/api/users/me`, {
+    const res = await fetch(`${getApiBase()}/api/users/me`, {
       headers: { Authorization: `Bearer ${parsed.accessToken}` },
     });
     if (!res.ok) return false;

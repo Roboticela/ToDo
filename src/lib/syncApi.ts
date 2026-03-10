@@ -5,8 +5,8 @@ import {
   getAllCompletionsByUser,
   replaceTasksAndCompletionsFromServer,
 } from "./db";
+import { getApiBase } from "./apiBase";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]; completions: TaskCompletion[] } | null> {
   const session = await getSession(userId);
@@ -48,7 +48,7 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
     })),
   };
 
-  const res = await fetch(`${API_BASE}/api/tasks/sync`, {
+  const res = await fetch(`${getApiBase()}/api/tasks/sync`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

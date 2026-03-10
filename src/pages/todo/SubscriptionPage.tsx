@@ -6,11 +6,11 @@ import { useAuth } from "../../contexts/AuthContext";
 import { type SubscriptionPlan } from "../../types/todo";
 import { openLink } from "../../lib/tauri";
 import { isTauri } from "../../lib/tauri";
+import { getApiBase } from "../../lib/apiBase";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 async function createCheckout(plan: "basic" | "pro", accessToken: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/paddle/create-checkout`, {
+  const res = await fetch(`${getApiBase()}/api/paddle/create-checkout`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

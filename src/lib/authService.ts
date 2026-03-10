@@ -2,8 +2,9 @@ import type { User, AuthSession } from "../types/todo";
 import { saveUser, getUser, saveSession, getAnySession, deleteSession } from "./db";
 import { v4 as uuidv4 } from "./uuid";
 import { isTauri } from "./tauri";
+import { getApiBase } from "./apiBase";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const API_BASE = getApiBase();
 
 // ─── Local Demo Auth (offline fallback) ───────────────────────────────────────
 
@@ -107,7 +108,7 @@ export async function login(
 // Native (Tauri): open system browser to same URL; callback redirects to /auth/desktop-success then deep link.
 
 export function getGoogleAuthUrl(): string {
-  return `${API_BASE}/api/auth/google?client=${isTauri() ? "desktop" : "web"}`;
+  return `${getApiBase()}/api/auth/google?client=${isTauri() ? "desktop" : "web"}`;
 }
 
 /** Starts Google OAuth. For web: redirects. For native: opens system browser; app should handle deep link or desktop-success page. */
