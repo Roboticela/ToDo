@@ -32,7 +32,7 @@ import { PLAN_FEATURES } from "../../types/todo";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
-const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 export default function SettingsPage() {
   const navigate = useNavigate();

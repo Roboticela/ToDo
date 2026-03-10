@@ -3,7 +3,7 @@ import { saveUser, getUser, saveSession, getAnySession, deleteSession } from "./
 import { v4 as uuidv4 } from "./uuid";
 import { isTauri } from "./tauri";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 // ─── Local Demo Auth (offline fallback) ───────────────────────────────────────
 

@@ -4,7 +4,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { saveUser, saveSession } from "../../lib/db";
 import type { User, AuthSession } from "../../types/todo";
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 /**
  * Handles OAuth callback from backend redirect.
