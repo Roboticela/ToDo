@@ -1,5 +1,6 @@
-# Frontend (nginx) only. All env from .env at repo root (copy from .env.example).
-# Run from repo root: docker compose -f docker-compose.frontend.yml up -d
+# Frontend (nginx) only. No .env file: set env vars in Dokploy (or host).
+# Build arg VITE_API_URL is required (see .env.example). Run from repo root:
+#   docker compose -f docker-compose.frontend.yml up -d
 
 services:
   frontend:
@@ -8,8 +9,6 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL}
-    env_file:
-      - .env
     ports:
       - "80:80"
     restart: unless-stopped
