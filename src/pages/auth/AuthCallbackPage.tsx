@@ -22,9 +22,10 @@ export default function AuthCallbackPage() {
     const tokenFromQuery = searchParams.get("token");
     const refreshFromQuery = searchParams.get("refresh");
     const userIdFromQuery = searchParams.get("userId");
+    const expiresAtFromQuery = searchParams.get("expiresAt");
 
     if (hash) {
-      // Web redirect: session in hash (base64 JSON)
+      // Web redirect: session in hash (base64 JSON) when proxies don't strip it
       try {
         const decoded = JSON.parse(atob(hash));
         const { accessToken, refreshToken, expiresAt, userId } = decoded;
@@ -41,11 +42,11 @@ export default function AuthCallbackPage() {
     }
 
     if (tokenFromQuery && userIdFromQuery) {
-      // Desktop success page: token in query (and optionally refresh)
+      // Web (query params) or desktop: token in query
       finishLogin(
         tokenFromQuery,
         refreshFromQuery || "",
-        new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+        expiresAtFromQuery || new Date(Date.now() + 15 * 60 * 1000).toISOString(),
         userIdFromQuery
       );
       return;

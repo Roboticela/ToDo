@@ -488,15 +488,14 @@ router.get("/google/callback", async (req, res) => {
     return res.redirect(successUrl);
   }
 
-  // Web: redirect to SPA with tokens in hash (base64 JSON; hash not sent to server)
-  const sessionPayload = {
-    accessToken,
-    refreshToken,
-    expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.accessExpiry) * 1000).toISOString(),
-    userId: user.id,
-  };
-  const hash = Buffer.from(JSON.stringify(sessionPayload)).toString("base64");
-  return res.redirect(`${config.frontendUrl}/auth/callback#${hash}`);
+  // Web: redirect to SPA with tokens in query params (hash is often stripped by proxies)
+  const expiresAt = new Date(Date.now() + getExpirySeconds(config.jwt.accessExpiry) * 1000).toISOString();
+  const callbackUrl = new URL(`${config.frontendUrl}/auth/callback`);
+  callbackUrl.searchParams.set("token", accessToken);
+  callbackUrl.searchParams.set("refresh", refreshToken);
+  callbackUrl.searchParams.set("userId", user.id);
+  callbackUrl.searchParams.set("expiresAt", expiresAt);
+  return res.redirect(callbackUrl.toString());
 });
 
 export default router;
