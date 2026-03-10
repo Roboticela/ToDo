@@ -1,6 +1,11 @@
 # Build stage: frontend only
 FROM node:22-alpine AS builder
 
+# API base URL is baked into the app at build time (Vite embeds import.meta.env.VITE_*).
+# Pass at build: docker build --build-arg VITE_API_URL=https://api.todo.roboticela.com .
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 WORKDIR /app
 
 # Copy package files
