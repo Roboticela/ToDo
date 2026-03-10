@@ -34,7 +34,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "npm run preview -- --host",
+    "preview": "vite preview --host",
     "tauri": "tauri",
     "prebuild": "node scripts/update-year.cjs",
     "build:desktop": "npm run build && npm run tauri build && node scripts/generate-checksums.cjs",
