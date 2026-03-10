@@ -1,0 +1,14 @@
+# Never bake secrets into the image.
+# In production (Dokploy), set all env vars in the service's environment config.
+.env
+.env.*
+!.env.example
+
+# Dev/build artifacts
+node_modules
+*.log
+
+# IDE and OS
+.vscode
+.idea
+.DS_Store

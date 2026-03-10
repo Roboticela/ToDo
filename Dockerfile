@@ -1,9 +1,9 @@
 # Build stage: frontend only
 FROM node:22-alpine AS builder
 
-# API base URL is baked into the app at build time (Vite embeds import.meta.env.VITE_*).
-# Pass at build: docker build --build-arg VITE_API_URL=https://api.todo.roboticela.com .
-ARG VITE_API_URL
+# Use a placeholder so the built bundle contains a known string we can replace at runtime.
+# This allows changing VITE_API_URL via a runtime env var without rebuilding the image.
+ARG VITE_API_URL=__VITE_API_URL_PLACEHOLDER__
 ENV VITE_API_URL=${VITE_API_URL}
 
 WORKDIR /app
@@ -42,6 +42,14 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
+# Entrypoint: replace the placeholder with the real VITE_API_URL env var at startup
+RUN printf '#!/bin/sh\n\
+set -e\n\
+: "${VITE_API_URL:?VITE_API_URL env var is required}"\n\
+find /usr/share/nginx/html -type f \\( -name "*.js" -o -name "*.html" \\) \\\n\
+  -exec sed -i "s|__VITE_API_URL_PLACEHOLDER__|${VITE_API_URL}|g" {} +\n\
+exec nginx -g "daemon off;"\n' > /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
+
 EXPOSE 80
 
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/docker-entrypoint.sh"]
