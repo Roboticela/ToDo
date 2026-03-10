@@ -9,9 +9,9 @@ COPY package.json package-lock.json* ./
 # Install dependencies (including devDependencies for build)
 RUN npm ci
 
-# Copy source and build
+# Copy source and build (skip prebuild - it needs src-tauri for Tauri/desktop)
 COPY . .
-RUN npm run build
+RUN npx tsc -b && npx vite build
 
 # Production stage: serve static files with nginx
 FROM nginx:alpine
