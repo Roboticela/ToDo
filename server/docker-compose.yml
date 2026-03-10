@@ -1,0 +1,13 @@
+# Backend API only. All env from .env (copy from .env.example).
+# Run from server dir: docker compose up -d
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    restart: unless-stopped

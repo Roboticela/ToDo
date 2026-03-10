@@ -1,0 +1,15 @@
+# Frontend (nginx) only. All env from .env at repo root (copy from .env.example).
+# Run from repo root: docker compose -f docker-compose.frontend.yml up -d
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL}
+    env_file:
+      - .env
+    ports:
+      - "80:80"
+    restart: unless-stopped
