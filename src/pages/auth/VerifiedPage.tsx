@@ -4,7 +4,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { saveUser } from "../../lib/db";
 import type { User } from "../../types/todo";
 
-const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:3000").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 
 /**
  * Landed after clicking the email verification link.
