@@ -27,27 +27,43 @@ RUN rm -rf /usr/share/nginx/html/*
 # Copy built frontend from builder
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# SPA fallback: serve index.html for client-side routing
-RUN echo 'server { \
-    listen 80; \
-    root /usr/share/nginx/html; \
-    index index.html; \
-    location / { \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location /health { \
-        access_log off; \
-        return 200 "OK"; \
-        add_header Content-Type text/plain; \
-    } \
-}' > /etc/nginx/conf.d/default.conf
+# SPA fallback + health endpoint served from a file written at container startup
+RUN printf 'server {\n\
+    listen 80;\n\
+    root /usr/share/nginx/html;\n\
+    index index.html;\n\
+    location / {\n\
+        try_files $uri $uri/ /index.html;\n\
+    }\n\
+    location /health {\n\
+        access_log off;\n\
+        default_type application/json;\n\
+        alias /usr/share/nginx/html/health.json;\n\
+    }\n\
+}\n' > /etc/nginx/conf.d/default.conf
 
-# Entrypoint: replace the placeholder with the real VITE_API_URL env var at startup
+# Entrypoint: validate env vars, replace placeholder in built assets, write health.json, start nginx
 RUN printf '#!/bin/sh\n\
 set -e\n\
-: "${VITE_API_URL:?VITE_API_URL env var is required}"\n\
+\n\
+# Fail fast if required env var is missing\n\
+if [ -z "$VITE_API_URL" ]; then\n\
+  echo "[startup] FATAL: VITE_API_URL env var is required but not set"\n\
+  exit 1\n\
+fi\n\
+\n\
+echo "[startup] Environment check:"\n\
+echo "  VITE_API_URL: SET -> $VITE_API_URL"\n\
+\n\
+echo "[startup] Injecting VITE_API_URL into static assets..."\n\
 find /usr/share/nginx/html -type f \\( -name "*.js" -o -name "*.html" \\) \\\n\
   -exec sed -i "s|__VITE_API_URL_PLACEHOLDER__|${VITE_API_URL}|g" {} +\n\
+echo "[startup] Done."\n\
+\n\
+# Write health.json so the /health endpoint shows live config (no secrets exposed)\n\
+printf '"'"'{"ok":true,"apiUrl":"%s"}'"'"' "$VITE_API_URL" \\\n\
+  > /usr/share/nginx/html/health.json\n\
+\n\
 exec nginx -g "daemon off;"\n' > /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 EXPOSE 80
