@@ -29,10 +29,15 @@ router.patch("/:userId", requireAuth, async (req, res) => {
   if (req.params.userId !== req.user.id) {
     return res.status(403).json({ error: "Forbidden" });
   }
-  const { name, avatarUrl, subscribedToReminders } = req.body;
+  const { name, avatarUrl, subscribedToReminders, plan } = req.body;
   // Email cannot be changed via PATCH; use request-email-change + confirm-email-change flow
   const updates = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
+  // Only allow setting plan to "free" when current plan is "pending" (new signup must choose plan)
+  if (plan === "free" && req.user.plan === "pending") {
+    updates.plan = "free";
+    updates.planExpiresAt = null;
+  }
   if (avatarUrl !== undefined) {
     if (req.user.avatarUrl) {
       await deleteAvatarByUrl(req.user.avatarUrl);

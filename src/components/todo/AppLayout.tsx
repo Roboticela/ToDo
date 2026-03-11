@@ -33,7 +33,7 @@ const ROUTE_TITLES: Record<string, string> = {
 };
 
 export default function AppLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const mainScrollRef = useRef<HTMLDivElement>(null);
@@ -62,6 +62,13 @@ export default function AppLayout() {
       navigate("/auth/login", { replace: true });
     }
   }, [isAuthenticated, isLoading, navigate]);
+
+  // New signups must choose a plan before using the app
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user?.plan === "pending" && location.pathname !== "/todo/subscription") {
+      navigate("/todo/subscription", { replace: true });
+    }
+  }, [isLoading, isAuthenticated, user?.plan, location.pathname, navigate]);
 
   useEffect(() => {
     if (isAuthenticated) {

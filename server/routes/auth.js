@@ -73,7 +73,7 @@ router.post("/register", async (req, res) => {
         name: name.trim(),
         email: email.trim().toLowerCase(),
         passwordHash,
-        plan: "free",
+        plan: "pending",
         emailVerificationToken: verificationToken,
         emailVerificationTokenExpiresAt: verificationExpiresAt,
       },
@@ -445,7 +445,7 @@ router.get("/google/callback", async (req, res) => {
         name,
         email,
         googleId,
-        plan: "free",
+        plan: "pending",
         emailVerifiedAt: new Date(),
       },
     });

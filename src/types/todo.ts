@@ -72,7 +72,7 @@ export interface User {
   name: string;
   email: string;
   avatarUrl?: string;
-  plan: SubscriptionPlan;
+  plan: SubscriptionPlan | "pending";
   planExpiresAt?: string;
   emailVerifiedAt?: string;
   subscribedToReminders?: boolean;

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Check, Zap, Infinity, ChevronDown, HelpCircle, ExternalLink } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -162,9 +163,11 @@ const FAQ_ITEMS = [
 ];
 
 export default function SubscriptionPage() {
+  const navigate = useNavigate();
   const { user, session, updateUser } = useAuth();
   const [billingInterval, setBillingInterval] = useState<BillingInterval>("yearly");
   const [loadingPlan, setLoadingPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectingFree, setSelectingFree] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -204,6 +207,32 @@ export default function SubscriptionPage() {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [refetchUser]);
+
+  async function handleSelectFree() {
+    if (!user?.id || !session?.accessToken) return;
+    setError(null);
+    setSelectingFree(true);
+    try {
+      const res = await fetch(`${getApiBase()}/api/users/${user.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.accessToken}`,
+        },
+        body: JSON.stringify({ plan: "free" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Could not select Free plan");
+      }
+      await refetchUser();
+      navigate("/todo", { replace: true });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not select Free plan");
+    } finally {
+      setSelectingFree(false);
+    }
+  }
 
   async function handleUpgrade(plan: SubscriptionPlan) {
     if (plan === "free" || !session?.accessToken) return;
@@ -258,7 +287,9 @@ export default function SubscriptionPage() {
         >
           <h2 className="text-xl font-bold text-foreground">Choose Your Plan</h2>
           <p className="text-sm text-foreground/50 mt-1">
-            Unlock more features to supercharge your productivity
+            {user?.plan === "pending"
+              ? "Choose a plan to get started"
+              : "Unlock more features to supercharge your productivity"}
           </p>
         </motion.div>
 
@@ -322,8 +353,10 @@ export default function SubscriptionPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch flex-wrap justify-center">
         {PLAN_META.map((plan, i) => {
           const isCurrentPlan = user?.plan === plan.id;
+          const isPendingSelectFree = plan.id === "free" && user?.plan === "pending";
           const isUpgrade = isPaidPlan(plan.id) && !isCurrentPlan;
           const isLoading = loadingPlan === plan.id;
+          const isSelectingFree = plan.id === "free" && selectingFree;
           const isLifetime = plan.id === "lifetime";
           const priceLabel =
             plan.id === "free"
@@ -416,8 +449,11 @@ export default function SubscriptionPage() {
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.97 }}
-                disabled={isCurrentPlan || isLoading}
-                onClick={() => isUpgrade && handleUpgrade(plan.id)}
+                disabled={isCurrentPlan || isLoading || isSelectingFree}
+                onClick={() => {
+                  if (isPendingSelectFree) handleSelectFree();
+                  else if (isUpgrade) handleUpgrade(plan.id);
+                }}
                 className={cn(
                   "w-full h-11 rounded-xl text-sm font-semibold transition-all",
                   isCurrentPlan
@@ -429,6 +465,10 @@ export default function SubscriptionPage() {
               >
                 {isCurrentPlan
                   ? "Current Plan"
+                  : isPendingSelectFree
+                  ? isSelectingFree
+                    ? "Selecting..."
+                    : "Choose Free"
                   : plan.id === "free"
                   ? "Downgrade to Free"
                   : isLoading

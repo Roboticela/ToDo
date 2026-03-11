@@ -14,7 +14,7 @@ model User {
   email         String    @unique
   passwordHash  String?   // null for Google-only users
   avatarUrl     String?
-  plan          String    @default("free") // free | basic | pro
+  plan          String    @default("free") // pending | free | basic | pro | lifetime
   planExpiresAt DateTime?
   googleId      String?   @unique
   createdAt     DateTime  @default(now())

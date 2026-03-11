@@ -16,6 +16,7 @@ export function getEffectivePlan(user) {
 
 /** Plan limits: historyDays (null = unlimited), maxRepeatTasks, maxDailyTasks */
 export const PLAN_LIMITS = {
+  pending: { historyDays: 2, maxRepeatTasks: 5, maxDailyTasks: 10 },
   free: { historyDays: 2, maxRepeatTasks: 5, maxDailyTasks: 10 },
   basic: { historyDays: 14, maxRepeatTasks: 10, maxDailyTasks: 15 },
   pro: { historyDays: null, maxRepeatTasks: null, maxDailyTasks: null },

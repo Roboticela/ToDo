@@ -95,7 +95,7 @@ export default function AuthCallbackPage() {
       await saveUser(user);
       await saveSession(session);
       setAuthData(user, session);
-      window.location.replace("/todo");
+      window.location.replace(user.plan === "pending" ? "/todo/subscription" : "/todo");
     } catch {
       setError("Something went wrong");
     }

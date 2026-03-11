@@ -43,7 +43,7 @@ export default function RegisterPage() {
     try {
       const { user, session } = await register(name, email, password);
       setAuthData(user, session);
-      navigate("/todo");
+      navigate("/todo/subscription");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
     } finally {
