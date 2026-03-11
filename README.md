@@ -12,7 +12,7 @@
 
 **Roboticela ToDo — your tasks, organized.**
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage-guide) • [Contributing](#-contributing) • [Support](#-support)
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage-guide) • [Server](#-server) • [Contributing](#-contributing) • [Support](#-support)
 
 ---
 
@@ -26,6 +26,7 @@
 - [Prerequisites](#-prerequisites)
 - [Installation](#-installation)
 - [Running the Application](#-running-the-application)
+- [Server](#-server)
 - [Building for Production](#-building-for-production)
 - [Usage Guide](#-usage-guide)
 - [Project Structure](#-project-structure)
@@ -42,16 +43,16 @@
 
 ## 🌟 About
 
-**Roboticela ToDo** is a modern, cross-platform application. Built with Tauri, React, and TypeScript.
+**Roboticela ToDo** is a modern, cross-platform task manager. Built with Tauri, React, and TypeScript, with an optional Node.js backend for sync, auth, and subscriptions.
 
 ### Why This Project?
 
 - ✅ **Free and Open Source** - Licensed under AGPL-3.0
 - ✅ **Cross-Platform** - Works on Linux, Windows, macOS, and runs in the browser
 - ✅ **Fast & Lightweight** - Built with Tauri and Rust for desktop; Vite for web
-- ✅ **Interactive Simulation** - Step through each layer with detailed data and protocols
-- ✅ **Modern & Legacy UI** - New app layout plus optional legacy version
-- ✅ **Educational** - Learn protocols, headers, and processes at each layer
+- ✅ **Tasks & Calendar** - Time-based, daily, and duration tasks with calendar and analytics
+- ✅ **Sync & Auth** - Optional backend for sign-up, Google OAuth, and cloud sync
+- ✅ **Subscriptions** - Optional Paddle billing (Basic, Pro, Lifetime)
 - ✅ **Theme Support** - Multiple themes including light, dark, navy, ocean, and more
 - ✅ **Actively Maintained** - Regular updates and community support
 
@@ -59,30 +60,28 @@
 
 ## ✨ Features
 
-### 📡 OSI Layers Simulation
-- **All Seven Layers** - Application, Presentation, Session, Transport, Network, Data Link, Physical
-- **Encapsulation & De-encapsulation** - Watch data move down (sending) and up (receiving)
-- **Protocols & Processes** - See which protocols and processes apply at each layer
-- **TCP Three-Way Handshake** - Connection setup visualization at the Transport layer
-- **Transmission Media** - Choose copper cable, optical fiber, or wireless and see timing differences
+### 📋 Tasks
+- **Task Types** - Time-based, daily, and duration tasks with priorities (low, medium, high)
+- **Categories** - Organize as “do” or “don’t” with repeat options and end dates
+- **Today & Calendar** - Today view and calendar for planning
+- **Analytics** - Insights and completion stats
+- **Sync** - Optional cloud sync when using the backend (desktop and web)
 
-### 🎯 Main App
-- **Simulation Settings** - Message input, animation speed, transmission medium
-- **Live Visualization** - Step-by-step view with layer-by-layer data transformation
-- **Theme Picker** - Multiple themes (Navy, Dark, Light, Sunset, Ocean, Forest, Purple, Midnight)
-- **Story / How it works** - Built-in guidance and about/license modals
-- **Banner to Legacy** - One-click access to the legacy version (dismissible)
+### 🔐 Auth & Account
+- **Email/Password** - Register, login, email verification, password reset
+- **Google OAuth** - Sign in with Google (web and desktop with deep link callback)
+- **Profile** - Avatar (optional R2 storage), email preferences, subscription reminders
 
-### 📜 Legacy Version
-- **Classic Layout** - Full-page layout with animated title and gradient background
-- **Standalone Simulator** - In-depth OSI simulation with manual or auto-step mode
-- **Banner to Main App** - Easy return to the main application
-- **Dedicated Favicon** - LegacyFavicon.svg for the legacy experience
+### 💳 Subscriptions (optional backend)
+- **Plans** - Free, Basic, Pro, and Lifetime via Paddle
+- **Webhooks** - Paddle webhook handling for subscription lifecycle
+- **Reminder emails** - Optional subscription reminder emails (configurable interval)
 
 ### 🎨 General
 - **Responsive Design** - Works on different screen sizes
 - **Smooth Animations** - Powered by Framer Motion
 - **Desktop or Web** - Run as Tauri desktop app or in the browser
+- **Offline-capable** - Local storage / IndexedDB when not using the server
 
 ---
 
@@ -93,13 +92,24 @@
 - **[TypeScript 5.9](https://www.typescriptlang.org/)** - Type-safe JavaScript
 - **[TailwindCSS 4](https://tailwindcss.com/)** - Utility-first CSS
 - **[Framer Motion 12](https://www.framer.com/motion/)** - Animations
-- **[React Router 7](https://reactrouter.com/)** - Client-side routing (main app + legacy)
+- **[React Router 7](https://reactrouter.com/)** - Client-side routing
 - **[Lucide React](https://lucide.dev/)** - Icons
 - **[Vite 7](https://vitejs.dev/)** - Build tool
+- **IndexedDB (idb)** - Local task storage when offline or without server
 
-### Backend
+### Desktop
 - **[Tauri 2](https://tauri.app/)** - Desktop application framework
 - **[Rust](https://www.rust-lang.org/)** - Systems programming language
+
+### Server (optional backend)
+- **Node.js** - Runtime
+- **[Express 5](https://expressjs.com/)** - API server
+- **[Prisma](https://www.prisma.io/)** - ORM with PostgreSQL
+- **JWT** - Access & refresh tokens; cookie-based refresh
+- **Google OAuth** - Sign-in with Google
+- **Nodemailer** - Email (verification, password reset, subscription reminders)
+- **Paddle** - Subscriptions (Basic, Pro, Lifetime)
+- **AWS SDK (S3-compatible)** - Cloudflare R2 for avatar storage
 
 ### Development Tools
 - **npm** - Package manager
@@ -224,6 +234,113 @@ Then open http://localhost:5173 in your browser.
 
 ---
 
+## 🖥️ Server
+
+The app can run without the server (local/offline mode). For sign-up, sync, Google OAuth, and subscriptions, run the optional Node.js backend.
+
+### Server Prerequisites
+
+- **Node.js** (v20 or higher)
+- **PostgreSQL** - Database for users, tasks, and subscriptions
+- **npm** - Package manager
+
+### Server Installation
+
+```bash
+cd server
+npm install
+cp .env.example .env
+# Edit .env with your database URL, JWT secrets, and optional services
+```
+
+### Database Setup
+
+```bash
+cd server
+npm run db:generate   # Generate Prisma client
+npm run db:push      # Push schema to database (dev)
+# or
+npm run db:migrate   # Run migrations (dev)
+```
+
+### Server Environment Variables
+
+Copy `server/.env.example` to `server/.env` and configure:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `JWT_ACCESS_SECRET` | Yes | Min 32 characters |
+| `JWT_REFRESH_SECRET` | Yes | Min 32 characters |
+| `FRONTEND_URL` | No | Frontend origin (e.g. http://localhost:5173) |
+| `BACKEND_URL` | No | Backend origin (e.g. http://localhost:3000) |
+| `APP_DEEP_LINK_SCHEME` | No | Desktop OAuth callback scheme (e.g. roboticela-todo) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | No | Google OAuth (for Sign in with Google) |
+| `SMTP_*` | No | Nodemailer SMTP (verification, password reset, reminders) |
+| `PADDLE_*` | No | Paddle API key, webhook secret, price IDs |
+| `R2_*` | No | Cloudflare R2 for avatar storage |
+| `PORT` | No | Server port (default 3000) |
+
+See `server/.env.example` for the full list and comments.
+
+### Running the Server
+
+**Development (with watch):**
+```bash
+cd server
+npm run dev
+```
+
+**Production:**
+```bash
+cd server
+npm run start
+```
+
+The API runs at `http://localhost:3000` by default. Set the frontend’s API base URL to this (e.g. via env or config) when using the backend.
+
+### Server API Overview
+
+| Prefix | Purpose |
+|--------|---------|
+| `/api/auth` | Login, register, refresh, Google OAuth, logout |
+| `/api/users` | Profile, avatar, email preferences |
+| `/api/tasks` | CRUD and sync for tasks and completions |
+| `/api/paddle` | Checkout, portal, webhook |
+| `/api/email` | Verification, password reset, unsubscribe |
+| `/health` | Health check (no auth) |
+
+### Server Project Structure
+
+```
+server/
+├── prisma/
+│   ├── schema.prisma    # User, Task, Session, Subscription, etc.
+│   └── migrations/
+├── routes/
+│   ├── auth.js          # Auth and Google OAuth
+│   ├── users.js         # User profile and avatar
+│   ├── tasks.js         # Tasks and completions
+│   ├── paddle.js        # Paddle checkout and webhooks
+│   └── email.js         # Email verification, reset, unsubscribe
+├── services/
+│   ├── jwtService.js
+│   ├── emailService.js
+│   ├── r2Service.js     # Avatar uploads (R2)
+│   └── unsubscribeToken.js
+├── middleware/
+│   └── auth.js          # JWT auth middleware
+├── jobs/
+│   └── subscriptionReminderJob.js
+├── EmailStructures/     # Email templates
+├── config.js            # Config from env
+├── server.js            # Express app entry
+├── .env.example
+└── package.json
+```
+
+---
+
 ## 📦 Building for Production
 
 ### Prerequisites
@@ -327,29 +444,29 @@ Before releasing:
 ### Getting Started
 
 1. **Launch the App** - Run `npm run tauri dev` or `npm run dev` and open the app.
-2. **Main App** - Use the simulation settings (left) to enter a message and choose options.
-3. **Run Simulation** - Start sending to see data move through the seven OSI layers step by step.
-4. **Navigate** - Use the visualization (right) to step forward/back and see encapsulation and de-encapsulation.
-5. **Legacy Version** - Use the top banner link or header menu to open the legacy simulator, then use its banner to return to the main app.
+2. **Sign in (optional)** - Use the server for account and sync: register or sign in with Google.
+3. **Today** - View and complete today’s tasks; add time-based, daily, or duration tasks.
+4. **Calendar** - Plan tasks by date and see repeats.
+5. **Analytics** - View completion stats and insights.
+6. **Settings** - Theme, profile, email preferences, subscription (if using backend).
 
-### Main App Simulation
+### Tasks
 
-- **Message** - Enter the text you want to “send” through the OSI layers.
-- **Transmission medium** - Affects how the physical layer is visualized and timing.
-- **Animation speed** - Control how fast steps advance.
-- **Steps** - Move through each layer on the sender side, then across the medium, then back up on the receiver side.
-
-### Legacy Simulator
-
-- **Manual or auto-step** - Advance with buttons/arrow keys or let it auto-step.
-- **Step delay** - In auto mode, set the delay between steps.
-- **Detailed view** - Toggle between simplified and detailed layer information.
-- **Transmission media** - Copper cable, optical fiber, or wireless with different speeds and visuals.
+- **Task types** - Time-based (specific time), daily (repeat days), or duration (start–end).
+- **Categories** - Mark as “do” or “don’t”; set priority (low, medium, high).
+- **Repeating** - Choose repeat days and optional end date.
+- **Status** - Pending, completed, missed, or skipped.
 
 ### Routes
 
-- **/** - Main application (simulation settings + visualization).
-- **/legacy** - Legacy full-page OSI simulator.
+- **/** - Today (default)
+- **/calendar** - Calendar view
+- **/analytics** - Analytics
+- **/settings** - Settings, profile, subscription
+- **/auth/login**, **/auth/register** - Login and register
+- **/auth/forgot-password**, **/auth/reset-password** - Password reset
+- **/auth/callback** - OAuth callback (web)
+- **/auth/desktop-success** - Desktop OAuth success
 
 ---
 
@@ -360,66 +477,57 @@ ToDo/
 │
 ├── src/                          # React frontend source
 │   ├── components/               # React components
-│   │   ├── AppHeader.tsx         # Header with theme and menu
-│   │   ├── OSIInputForm.tsx      # Simulation settings form
-│   │   ├── OSIVisualization.tsx  # Main OSI layer visualization
-│   │   ├── ThemeScript.tsx       # Theme initialization
-│   │   ├── AboutModal.tsx        # About modal
-│   │   ├── LicenseModal.tsx      # License modal
-│   │   ├── StoryModal.tsx        # How it works / story
-│   │   ├── SignalVisualization.tsx
+│   │   ├── todo/                 # ToDo UI
+│   │   │   ├── AppLayout.tsx     # Main layout (nav + content)
+│   │   │   ├── TodoHeader.tsx
+│   │   │   ├── TaskForm.tsx
+│   │   │   ├── TaskCard.tsx
+│   │   │   ├── SideNav.tsx, BottomNav.tsx
+│   │   │   ├── SyncIndicator.tsx
+│   │   │   └── ...
 │   │   ├── ui/                   # UI primitives (button, dropdown)
-│   │   └── lagacy/               # Legacy version components
-│   │       ├── OSISimulator.tsx  # Legacy simulator
-│   │       ├── AnimatedTitle.tsx
-│   │       ├── ThemeToggle.tsx
-│   │       ├── OSILayer.tsx
-│   │       ├── TransmissionMedia.tsx
-│   │       └── ...
+│   │   ├── ThemeScript.tsx
+│   │   ├── AboutModal.tsx, LicenseModal.tsx, StoryModal.tsx
+│   │   ├── DeepLinkAuthSetup.tsx
+│   │   └── VerificationBanner.tsx
 │   │
 │   ├── contexts/
-│   │   ├── OSISimulatorContext.tsx  # Simulation state
-│   │   ├── ThemeContext.tsx        # Theme state
+│   │   ├── AuthContext.tsx
+│   │   ├── ThemeContext.tsx
+│   │   ├── TaskContext.tsx
+│   │   ├── SyncContext.tsx
 │   │   └── HeaderVisibilityContext.tsx
 │   │
 │   ├── pages/
-│   │   └── LegacyPage.tsx        # Legacy route page
+│   │   ├── auth/                 # Login, register, reset password, callback, etc.
+│   │   └── todo/                 # TodayPage, CalendarPage, AnalyticsPage, SettingsPage, SubscriptionPage
 │   │
-│   ├── lib/                      # Utilities
-│   │   ├── osiSimulation.ts      # OSI simulation logic
+│   ├── lib/                      # Utilities and services
+│   │   ├── authService.ts        # Auth API and tokens
 │   │   ├── tauri.ts              # Tauri helpers
 │   │   └── utils.ts
 │   │
-│   ├── utils/lagacy/             # Legacy utilities
-│   │   ├── osiUtils.ts
-│   │   └── themeUtils.ts
-│   │
-│   ├── types/
-│   │   └── osi.ts                # OSI-related types
-│   │
-│   ├── App.tsx                   # Main app component
-│   ├── App.css                   # Global styles
-│   └── main.tsx                 # Entry point + router
+│   ├── App.css
+│   └── main.tsx                  # Entry point + router
 │
-├── src-tauri/                    # Tauri/Rust backend
+├── server/                       # Optional Node.js backend (see Server section)
+│   ├── prisma/
+│   ├── routes/, services/, middleware/, jobs/
+│   ├── config.js, server.js
+│   └── .env.example
+│
+├── src-tauri/                    # Tauri desktop
 │   ├── src/
-│   │   ├── main.rs
-│   │   └── lib.rs
-│   ├── icons/                    # App icons
-│   ├── capabilities/
+│   ├── icons/, capabilities/
 │   ├── Cargo.toml
-│   ├── build.rs
 │   └── tauri.conf.json
 │
-├── public/                       # Public static assets
-│   ├── Favicon.svg
-│   └── LagacyFavicon.svg
-│
+├── public/
 ├── index.html
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
-├── LICENSE                       # AGPL-3.0
+├── LICENSE
 ├── INSTALL_DEPENDENCIES.md
 ├── SIGNING.md
 └── README.md
@@ -433,9 +541,13 @@ ToDo/
 
 The `src-tauri/tauri.conf.json` file contains Tauri settings: app identifier, version, window size and title, capabilities, and bundle options. Modify it to change desktop app behavior.
 
-### Environment Variables
+### Frontend Environment
 
-No environment variables are required for normal use. Configuration is done through the UI.
+The frontend may use an environment variable (e.g. `VITE_API_URL` or similar) to point to the backend URL when using the server. Check the project’s env handling for the exact name.
+
+### Server Environment
+
+Server configuration is via environment variables. Copy `server/.env.example` to `server/.env` and set values as described in the [Server](#-server) section.
 
 ---
 
@@ -455,7 +567,7 @@ We welcome contributions! Whether it's bug fixes, features, docs, or feedback, e
 
 1. **Fork the Repository**
    ```bash
-   git clone https://github.com/YOUR-USERNAME/ToDo.git
+   git clone https://github.com/Roboticela/ToDo.git
    cd ToDo
    ```
 
@@ -537,8 +649,8 @@ A: Yes, subject to AGPL-3.0. If you distribute or run a modified version over a 
 **Q: Web only or desktop too?**  
 A: Both. Use `npm run dev` for web or `npm run tauri dev` / built installer for desktop.
 
-**Q: What’s the difference between main app and legacy?**  
-A: Main app is the new layout (settings + visualization). Legacy is the classic full-page simulator with its own UI and flow.
+**Q: Do I need the server to use the app?**  
+A: No. You can use the app locally (desktop or web) without the server. The server is for accounts, sync, Google sign-in, and subscriptions.
 
 **Q: How do I report a security issue?**  
 A: Open a GitHub issue or contact the maintainers directly.
@@ -549,20 +661,19 @@ A: Open a GitHub issue or contact the maintainers directly.
 
 ### Possible Future Improvements
 
-- [ ] **Export / Share** - Export simulation state or shareable links
-- [ ] **More Protocols** - Deeper protocol examples at each layer
-- [ ] **Quizzes / Exercises** - Simple quizzes to reinforce OSI concepts
+- [ ] **Export / Backup** - Export tasks or backup/restore
+- [ ] **Reminders** - Notifications for upcoming tasks
 - [ ] **i18n** - Multiple languages for the UI
 - [ ] **Accessibility** - Enhanced keyboard and screen reader support
+- [ ] **Mobile** - Tauri mobile or PWA improvements
 
 ### Version History
 
 **v0.1.0** (Current)
-- Main app: simulation settings + OSI visualization
-- Legacy route with full-page simulator
-- Multiple themes
-- Tauri desktop support
-- React Router for main and legacy
+- Tasks: time-based, daily, duration; today, calendar, analytics
+- Auth: email/password, Google OAuth, verification, password reset
+- Optional server: Prisma/PostgreSQL, JWT, Paddle, R2 avatars, subscription reminders
+- Multiple themes, Tauri desktop, React Router
 
 See [Releases](https://github.com/Roboticela/ToDo/releases) for the full changelog.
 
@@ -633,8 +744,8 @@ To create accessible, privacy-conscious software that supports learning and open
 
 - 🔓 **Open Source** - Transparent, community-friendly development
 - 🔒 **Privacy** - No tracking of users beyond optional analytics you can control
-- 🚀 **Modern Stack** - Tauri, React, TypeScript
-- 🌍 **Education** - Clear explanation of the OSI model and networking concepts
+- 🚀 **Modern Stack** - Tauri, React, TypeScript, optional Node/Prisma backend
+- 📋 **Tasks** - Simple, powerful task management with optional cloud sync and subscriptions
 
 ### Get in Touch
 
