@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from "rea
 import type { ReactNode } from "react";
 import type { User, AuthSession } from "../types/todo";
 import { getAnySession, getUser } from "../lib/db";
-import { logout as authLogout } from "../lib/authService";
+import { logout as authLogout, refreshSession } from "../lib/authService";
 
 interface AuthContextType {
   user: User | null;
@@ -25,17 +25,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async function restoreSession() {
       try {
         const savedSession = await getAnySession();
-        if (savedSession) {
-          const expiresAt = new Date(savedSession.expiresAt);
-          if (expiresAt > new Date()) {
-            const savedUser = await getUser(savedSession.userId);
-            if (savedUser) {
-              setUser(savedUser);
-              setSession(savedSession);
-            }
-          } else {
-            await authLogout(savedSession.userId);
+        if (!savedSession) {
+          setIsLoading(false);
+          return;
+        }
+        const expiresAt = new Date(savedSession.expiresAt);
+        if (expiresAt > new Date()) {
+          const savedUser = await getUser(savedSession.userId);
+          if (savedUser) {
+            setUser(savedUser);
+            setSession(savedSession);
           }
+          setIsLoading(false);
+          return;
+        }
+        // Access token expired: try to refresh using refresh token (valid 7 days)
+        const refreshed = await refreshSession();
+        if (refreshed) {
+          setUser(refreshed.user);
+          setSession(refreshed.session);
+        } else {
+          await authLogout(savedSession.userId);
         }
       } catch {
         // ignore restore errors

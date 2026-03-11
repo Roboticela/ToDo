@@ -169,6 +169,30 @@ export async function changePassword(_userId: string, newPassword: string): Prom
   if (!res.ok) throw new Error("Failed to change password");
 }
 
+// ─── Refresh session (get new access token using refresh token) ─────────────────
+
+export async function refreshSession(): Promise<{ user: User; session: AuthSession } | null> {
+  const savedSession = await getAnySession();
+  if (!savedSession?.refreshToken || savedSession.refreshToken.startsWith("local_")) {
+    return null;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken: savedSession.refreshToken }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    await saveUser(data.user);
+    await saveSession(data.session);
+    return { user: data.user, session: data.session };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Logout ───────────────────────────────────────────────────────────────────
 
 export async function logout(userId: string): Promise<void> {
