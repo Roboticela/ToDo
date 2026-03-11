@@ -374,6 +374,84 @@ jobs:
             CI=true npm run tauri android init
           fi
 
+      - name: Apply Android app icon and display name (for Android builds)
+        if: contains(matrix.platform, 'android')
+        run: |
+          # Generate and place app icons into gen/android (replaces default Tauri icon)
+          ICON_SRC="src-tauri/icons/icon.png"
+          if [ -f "$ICON_SRC" ]; then
+            echo "Applying app icon from $ICON_SRC..."
+            npm run tauri icon "$ICON_SRC" || true
+          else
+            echo "Warning: $ICON_SRC not found; using 512x512 or icon.ico if available"
+            [ -f "src-tauri/icons/512x512.png" ] && npm run tauri icon src-tauri/icons/512x512.png || true
+          fi
+          # Ensure app display name is correct (template may show "Tauri")
+          STRINGS_XML="src-tauri/gen/android/app/src/main/res/values/strings.xml"
+          if [ -f "$STRINGS_XML" ]; then
+            sed -i.bak 's/<string name="app_name">.*<\/string>/<string name="app_name">Roboticela ToDo<\/string>/' "$STRINGS_XML" || true
+            echo "Patched app_name in $STRINGS_XML"
+          fi
+
+      - name: Configure Android release signing (for Android builds)
+        if: contains(matrix.platform, 'android')
+        run: |
+          # Tauri expects keystore.properties in gen/android for release signing.
+          # Without this, release APKs are unsigned and will not install.
+          if [ -n "${ANDROID_KEYSTORE_PATH:-}" ] && [ -d "src-tauri/gen/android" ]; then
+            KEY_ALIAS="${ANDROID_KEY_ALIAS:-my-alias}"
+            KEY_PASS="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+            {
+              echo "storeFile=$ANDROID_KEYSTORE_PATH"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "password=$ANDROID_KEYSTORE_PASSWORD"
+            } > src-tauri/gen/android/keystore.properties
+            echo "Wrote keystore.properties for release signing"
+            # Ensure Gradle uses it: add signing config to app/build.gradle.kts if missing
+            GRADLE_APP="src-tauri/gen/android/app/build.gradle.kts"
+            if [ -f "$GRADLE_APP" ] && ! grep -q "signingConfigs.getByName" "$GRADLE_APP"; then
+              python3 << 'PY'
+          import re
+          path = "src-tauri/gen/android/app/build.gradle.kts"
+          with open(path) as f:
+              content = f.read()
+          if "signingConfigs.getByName" in content:
+              print("Signing config already present")
+              exit(0)
+          # Add imports at top if missing
+          if "import java.util.Properties" not in content:
+              content = "import java.util.Properties\nimport java.io.FileInputStream\n\n" + content
+          signing_block = '''
+            signingConfigs {
+              create("release") {
+                val keystorePropertiesFile = rootProject.file("keystore.properties")
+                val keystoreProperties = Properties()
+                if (keystorePropertiesFile.exists()) {
+                  keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+                }
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["password"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["password"] as String
+              }
+            }
+            '''
+          content = content.replace("buildTypes {", signing_block + "buildTypes {", 1)
+          content = re.sub(
+              r'(getByName\("release"\)\s*\{\s*)',
+              r'\1\n        signingConfig = signingConfigs.getByName("release")\n      ',
+              content,
+              count=1
+          )
+          with open(path, "w") as f:
+              f.write(content)
+          print("Patched build.gradle.kts for release signing")
+          PY
+            fi
+          else
+            echo "Release keystore not set or gen/android missing; release APK may be unsigned (install can fail)."
+          fi
+
       - name: Configure iOS code signing (for iOS builds)
         if: contains(matrix.platform, 'ios')
         run: |
