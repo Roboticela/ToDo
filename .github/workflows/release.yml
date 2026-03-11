@@ -415,6 +415,8 @@ jobs:
           fi
 
       - name: Build Vite app
+        env:
+          VITE_API_URL: https://api.todo.roboticela.com
         run: npm run build
 
       - name: Verify build artifacts exist
