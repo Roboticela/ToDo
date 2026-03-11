@@ -26,6 +26,8 @@ export interface Task {
   // Repeat
   isRepeating: boolean;
   repeatDays: RepeatDay[]; // weekdays to repeat on
+  /** If set, repeating task only shows on dates <= endDate (YYYY-MM-DD). */
+  endDate?: string;
 
   // Status
   status: TaskStatus;

@@ -77,6 +77,7 @@ model Task {
   endTime     String?
   isRepeating Boolean  @default(false)
   repeatDays  Int[]    @default([]) // 0-6
+  endDate     String?  // YYYY-MM-DD; if set, repeat task only shows on dates <= endDate
   status      String   @default("pending") // pending | completed | missed | skipped
   completedAt DateTime?
   createdAt   DateTime @default(now())

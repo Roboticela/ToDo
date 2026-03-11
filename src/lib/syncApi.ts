@@ -1,7 +1,7 @@
 import type { Task, TaskCompletion } from "../types/todo";
 import {
   getSession,
-  getAllTasksByUser,
+  getAllTasksByUserForSync,
   getAllCompletionsByUser,
   replaceTasksAndCompletionsFromServer,
 } from "./db";
@@ -13,7 +13,7 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
   if (!session) return null;
 
   const [tasks, completions] = await Promise.all([
-    getAllTasksByUser(userId),
+    getAllTasksByUserForSync(userId),
     getAllCompletionsByUser(userId),
   ]);
 
@@ -32,6 +32,7 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
       endTime: t.endTime,
       isRepeating: t.isRepeating,
       repeatDays: t.repeatDays,
+      endDate: t.endDate,
       status: t.status,
       completedAt: t.completedAt,
       createdAt: t.createdAt,

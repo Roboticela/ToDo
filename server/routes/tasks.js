@@ -21,6 +21,7 @@ function taskToJson(t) {
     endTime: t.endTime ?? undefined,
     isRepeating: t.isRepeating,
     repeatDays: t.repeatDays,
+    endDate: t.endDate ?? undefined,
     status: t.status,
     completedAt: t.completedAt ? t.completedAt.toISOString() : undefined,
     syncStatus: "synced",
@@ -152,6 +153,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
   if (body.endTime !== undefined) data.endTime = body.endTime;
   if (body.isRepeating !== undefined) data.isRepeating = body.isRepeating;
   if (body.repeatDays !== undefined) data.repeatDays = body.repeatDays;
+  if (body.endDate !== undefined) data.endDate = body.endDate;
   if (body.status !== undefined) data.status = body.status;
   if (body.completedAt !== undefined) data.completedAt = body.completedAt ? new Date(body.completedAt) : null;
   if (body.deletedAt !== undefined) data.deletedAt = body.deletedAt ? new Date(body.deletedAt) : null;
@@ -232,8 +234,10 @@ router.post("/sync", requireAuth, async (req, res) => {
         endTime: t.endTime ?? null,
         isRepeating: Boolean(t.isRepeating),
         repeatDays: Array.isArray(t.repeatDays) ? t.repeatDays : [],
+        endDate: t.endDate ?? null,
         status: t.status || "pending",
         completedAt: t.completedAt ? new Date(t.completedAt) : null,
+        deletedAt: t.deletedAt ? new Date(t.deletedAt) : null,
       },
       update: {
         title: t.title,
@@ -247,6 +251,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         endTime: t.endTime ?? null,
         isRepeating: Boolean(t.isRepeating),
         repeatDays: Array.isArray(t.repeatDays) ? t.repeatDays : [],
+        endDate: t.endDate ?? null,
         status: t.status || "pending",
         completedAt: t.completedAt ? new Date(t.completedAt) : null,
         deletedAt: t.deletedAt ? new Date(t.deletedAt) : null,

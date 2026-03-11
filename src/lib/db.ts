@@ -119,9 +119,19 @@ export async function getAllTasksByUser(userId: string): Promise<Task[]> {
   return tasks.filter((t) => !t.deletedAt);
 }
 
+/** All tasks for user including soft-deleted (for sync so server can apply deletes). */
+export async function getAllTasksByUserForSync(userId: string): Promise<Task[]> {
+  const db = await getDB();
+  return db.getAllFromIndex("tasks", "by-userId", userId);
+}
+
 export async function deleteTask(id: string): Promise<void> {
   const db = await getDB();
-  await db.delete("tasks", id);
+  const task = await db.get("tasks", id);
+  if (task) {
+    const now = new Date().toISOString();
+    await db.put("tasks", { ...task, deletedAt: now, updatedAt: now, syncStatus: "pending" });
+  }
 }
 
 export async function getRepeatTasksByUser(userId: string): Promise<Task[]> {

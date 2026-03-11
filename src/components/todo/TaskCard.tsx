@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Clock,
@@ -18,7 +18,7 @@ import { cn } from "../../lib/utils";
 import type { Task } from "../../types/todo";
 import { useTasks } from "../../contexts/TaskContext";
 import { getTaskCompletionForDate } from "../../lib/taskService";
-import { useEffect } from "react";
+import DeleteConfirmDialog, { type DeleteChoice } from "./DeleteConfirmDialog";
 
 interface TaskCardProps {
   task: Task;
@@ -31,10 +31,11 @@ interface TaskCardProps {
 }
 
 export default function TaskCard({ task, date, onEdit, onCompletionChange, staggerDelay = 0 }: TaskCardProps) {
-  const { completeTask, uncompleteTask, deleteTask } = useTasks();
+  const { completeTask, uncompleteTask, deleteTask, skipTaskForDate, setTaskEndDate } = useTasks();
   const [isCompleted, setIsCompleted] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   useEffect(() => {
     getTaskCompletionForDate(task, date).then(({ isCompleted: c }) => {
@@ -54,11 +55,24 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
     }
   }
 
-  async function handleDelete() {
+  function handleDeleteClick() {
+    setShowDeleteDialog(true);
+  }
+
+  async function handleDeleteConfirm(choice: DeleteChoice) {
     setIsDeleting(true);
     try {
-      await deleteTask(task.id);
+      if (choice === "this_date") {
+        await skipTaskForDate(task, date);
+      } else if (choice === "future") {
+        await setTaskEndDate(task, date);
+      } else {
+        await deleteTask(task.id);
+      }
+      setShowDeleteDialog(false);
     } catch {
+      setIsDeleting(false);
+    } finally {
       setIsDeleting(false);
     }
   }
@@ -76,6 +90,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
     task.type === "time-based" ? Clock : task.type === "duration" ? Timer : CalendarDays;
 
   return (
+    <>
     <motion.div
       layout
       initial={{ opacity: 0, y: 8 }}
@@ -180,7 +195,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                 </motion.button>
                 <motion.button
                   type="button"
-                  onClick={handleDelete}
+                  onClick={handleDeleteClick}
                   whileTap={{ scale: 0.85 }}
                   className="p-1.5 rounded-lg text-foreground/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                 >
@@ -221,5 +236,15 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
         </AnimatePresence>
       </div>
     </motion.div>
+
+    <DeleteConfirmDialog
+      isOpen={showDeleteDialog}
+      onClose={() => setShowDeleteDialog(false)}
+      task={task}
+      date={date}
+      onConfirm={handleDeleteConfirm}
+      isDeleting={isDeleting}
+    />
+  </>
   );
 }

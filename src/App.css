@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* Prevent horizontal scrollbar during page transitions (AnimatePresence popLayout) */
+html,
+body,
+#root {
+  overflow-x: hidden;
+}
+
+#root {
+  min-width: 0;
+}
 
 :root {
   --background: #ffffff;

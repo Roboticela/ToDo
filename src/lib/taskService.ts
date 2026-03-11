@@ -3,10 +3,10 @@ import { format } from "date-fns";
 import type { Task, TaskCompletion, TaskFormData, TaskPriority, RepeatDay } from "../types/todo";
 import {
   saveTask,
+  getTask,
   getTasksByUserAndDate,
   getAllTasksByUser,
   getRepeatTasksByUser,
-  deleteTask as dbDeleteTask,
   saveCompletion,
   getCompletionsByUserAndDate,
   getCompletionsByTask,
@@ -63,7 +63,11 @@ export async function updateTask(task: Task, data: Partial<TaskFormData>): Promi
 
 export async function deleteTask(taskId: string): Promise<void> {
   await deleteNotificationsByTask(taskId);
-  await dbDeleteTask(taskId);
+  const task = await getTask(taskId);
+  if (task) {
+    const now = new Date().toISOString();
+    await saveTask({ ...task, deletedAt: now, updatedAt: now, syncStatus: "pending" });
+  }
 }
 
 // ─── Complete Task ─────────────────────────────────────────────────────────────
@@ -94,6 +98,42 @@ export async function completeTask(task: Task, date: string): Promise<void> {
     };
     await saveTask(updated);
   }
+}
+
+// ─── Skip repeating task for one date (hide this occurrence only) ──────────────
+
+export async function skipTaskForDate(task: Task, date: string): Promise<void> {
+  if (!task.isRepeating) return;
+  const now = new Date().toISOString();
+  const completions = await getCompletionsByTask(task.id);
+  const existing = completions.find((c) => c.date === date);
+  if (existing) {
+    await saveCompletion({ ...existing, status: "skipped", completedAt: now, syncStatus: "pending" });
+  } else {
+    const completion: TaskCompletion = {
+      id: uuidv4(),
+      taskId: task.id,
+      userId: task.userId,
+      date,
+      status: "skipped",
+      completedAt: now,
+      syncStatus: "pending",
+    };
+    await saveCompletion(completion);
+  }
+}
+
+// ─── Set end date for repeating task (stops showing after this date) ────────────
+
+export async function setTaskEndDate(task: Task, endDate: string): Promise<Task> {
+  const updated: Task = {
+    ...task,
+    endDate,
+    updatedAt: new Date().toISOString(),
+    syncStatus: "pending",
+  };
+  await saveTask(updated);
+  return updated;
 }
 
 // ─── Uncomplete Task ───────────────────────────────────────────────────────────
@@ -128,10 +168,21 @@ export async function getTasksForDate(userId: string, date: string): Promise<Tas
   // Get tasks directly assigned to this date
   const directTasks = await getTasksByUserAndDate(userId, date);
 
-  // Get repeating tasks that match this weekday and are on or after the task's start date (no past dates)
+  // Get repeating tasks that match this weekday, on or after start date, and before endDate (if set)
   const repeatTasks = await getRepeatTasksByUser(userId);
+  const [dateCompletions] = await Promise.all([
+    getCompletionsByUserAndDate(userId, date),
+  ]);
+  const skippedTaskIds = new Set(
+    dateCompletions.filter((c) => c.status === "skipped").map((c) => c.taskId)
+  );
+
   const matchingRepeat = repeatTasks.filter(
-    (t) => t.repeatDays.includes(dayOfWeek) && date >= t.date
+    (t) =>
+      t.repeatDays.includes(dayOfWeek) &&
+      date >= t.date &&
+      (!t.endDate || date <= t.endDate) &&
+      !skippedTaskIds.has(t.id)
   );
 
   // Merge, avoiding duplicates

@@ -7,6 +7,8 @@ import {
   deleteTask as svcDelete,
   completeTask as svcComplete,
   uncompleteTask as svcUncomplete,
+  skipTaskForDate as svcSkipTaskForDate,
+  setTaskEndDate as svcSetTaskEndDate,
   getTasksForDate,
   getTodayString,
 } from "../lib/taskService";
@@ -22,6 +24,8 @@ interface TaskContextType {
   createTask: (data: TaskFormData) => Promise<Task>;
   updateTask: (task: Task, data: Partial<TaskFormData>) => Promise<Task>;
   deleteTask: (taskId: string) => Promise<void>;
+  skipTaskForDate: (task: Task, date: string) => Promise<void>;
+  setTaskEndDate: (task: Task, endDate: string) => Promise<Task>;
   completeTask: (task: Task) => Promise<void>;
   uncompleteTask: (task: Task) => Promise<void>;
 }
@@ -94,6 +98,25 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     [refreshTasks, scheduleSync]
   );
 
+  const skipTaskForDate = useCallback(
+    async (task: Task, date: string): Promise<void> => {
+      await svcSkipTaskForDate(task, date);
+      await refreshTasks();
+      scheduleSync();
+    },
+    [refreshTasks, scheduleSync]
+  );
+
+  const setTaskEndDate = useCallback(
+    async (task: Task, endDate: string): Promise<Task> => {
+      const updated = await svcSetTaskEndDate(task, endDate);
+      await refreshTasks();
+      scheduleSync();
+      return updated;
+    },
+    [refreshTasks, scheduleSync]
+  );
+
   const completeTask = useCallback(
     async (task: Task): Promise<void> => {
       await svcComplete(task, selectedDate);
@@ -123,6 +146,8 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         createTask,
         updateTask,
         deleteTask,
+        skipTaskForDate,
+        setTaskEndDate,
         completeTask,
         uncompleteTask,
       }}

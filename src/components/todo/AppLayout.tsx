@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../contexts/AuthContext";
@@ -9,13 +9,19 @@ import TodoHeader from "./TodoHeader";
 import VerificationBanner from "./VerificationBanner";
 import { initNotificationScheduler, requestNotificationPermission } from "../../lib/notificationService";
 
+// Opacity-only transition to avoid layout/scroll jump when changing pages quickly
 const pageVariants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -6 },
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
 };
 
-const pageTransition = { type: "tween" as const, duration: 0.2, ease: [0.25, 0.46, 0.45, 0.94] as const };
+const pageTransition = { type: "tween" as const, duration: 0.15, ease: "easeOut" as const };
+
+function scrollMainToTop(el: HTMLDivElement | null) {
+  if (!el) return;
+  el.scrollTop = 0;
+}
 
 const ROUTE_TITLES: Record<string, string> = {
   "/todo": "Today",
@@ -30,6 +36,18 @@ export default function AppLayout() {
   const { isAuthenticated, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const mainScrollRef = useRef<HTMLDivElement>(null);
+
+  // Reset scroll to top when route changes so new page is visible (runs after DOM update and again after paint)
+  useLayoutEffect(() => {
+    scrollMainToTop(mainScrollRef.current);
+    const raf = requestAnimationFrame(() => {
+      scrollMainToTop(mainScrollRef.current);
+      requestAnimationFrame(() => scrollMainToTop(mainScrollRef.current));
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [location.pathname]);
+
   const headerTitle = useMemo(
     () => ROUTE_TITLES[location.pathname] ?? "Today",
     [location.pathname]
@@ -95,20 +113,25 @@ export default function AppLayout() {
           <SideNav />
           <main className="flex-1 flex flex-col min-h-0 min-w-0 w-full max-w-2xl md:max-w-4xl lg:max-w-none mx-auto lg:mx-0 lg:pl-56">
             <TodoHeader title={headerTitle} />
-          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pb-16 lg:pb-0 w-full custom-scrollbar">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={location.pathname}
-                variants={pageVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                transition={pageTransition}
-                className="min-h-full flex flex-col"
-              >
-                <Outlet />
-              </motion.div>
-            </AnimatePresence>
+          <div
+            ref={mainScrollRef}
+            className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pb-16 lg:pb-0 w-full custom-scrollbar"
+          >
+            <div className="min-h-full min-w-0 overflow-x-hidden">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div
+                  key={location.pathname}
+                  variants={pageVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={pageTransition}
+                  className="min-h-full min-w-0 flex flex-col overflow-x-hidden"
+                >
+                  <Outlet />
+                </motion.div>
+              </AnimatePresence>
+            </div>
           </div>
             <BottomNav />
           </main>
