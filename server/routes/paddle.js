@@ -22,10 +22,13 @@ async function paddleRequest(method, path, body = null) {
   if (!res.ok) {
     const detail = data.error?.detail ?? data.error?.message ?? data.message;
     const code = data.error?.code;
-    const msg = [detail, code ? `(${code})` : null].filter(Boolean).join(" ") || `Paddle API ${res.status}`;
     if (process.env.NODE_ENV !== "production") {
       console.error("[paddle] API error response", JSON.stringify(data, null, 2));
+      if (res.status === 403 || code === "forbidden") {
+        console.error("[paddle] Hint: 403 forbidden = API key missing permission. In Paddle Dashboard → Developer tools → Authentication, ensure your API key has **Transactions: Write**.");
+      }
     }
+    const msg = [detail, code ? `(${code})` : null].filter(Boolean).join(" ") || `Paddle API ${res.status}`;
     throw new Error(msg);
   }
   return data;
