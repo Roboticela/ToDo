@@ -98,7 +98,8 @@ export default function SettingsPage() {
     }
   }
 
-  const plan = PLAN_FEATURES[currentUser.plan];
+  const planKey = currentUser.plan === "pending" ? "free" : currentUser.plan;
+  const plan = PLAN_FEATURES[planKey];
   const planLabel =
     currentUser.plan === "free"
       ? "Free"

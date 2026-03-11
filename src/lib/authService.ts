@@ -105,15 +105,50 @@ export async function login(
 
 // ─── Google Login ─────────────────────────────────────────────────────────────
 // Web: redirect to backend Google OAuth flow; callback redirects to /auth/callback with session.
-// Native (Tauri): open system browser to same URL; callback redirects to /auth/desktop-success then deep link.
+// Native (Tauri): app gets auth URL from backend, opens browser, polls backend for code, then exchanges code for tokens.
 
 export function getGoogleAuthUrl(): string {
   return `${getApiBase()}/api/auth/google?client=${isTauri() ? "desktop" : "web"}`;
 }
 
-/** Starts Google OAuth. For web: redirects. For native: opens system browser; app should handle deep link or desktop-success page. */
+/** Starts Google OAuth. For web: redirects. For native: use startDesktopGoogleLogin + poll instead. */
 export function loginWithGoogleRedirect(): void {
   window.location.href = getGoogleAuthUrl();
+}
+
+/** Desktop only: get auth URL from backend (includes requestId in state). App opens this URL in browser then polls desktop-pending. */
+export async function startDesktopGoogleLogin(): Promise<{ authUrl: string; requestId: string }> {
+  const res = await fetch(`${API_BASE}/api/auth/desktop-login-start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+    signal: AbortSignal.timeout(10000),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to start Google sign-in");
+  }
+  return res.json();
+}
+
+/** Desktop only: poll backend for one-time code (after user completed Google sign-in in browser). Returns code or null on timeout. */
+export async function pollDesktopPending(
+  requestId: string,
+  options: { intervalMs?: number; timeoutMs?: number } = {}
+): Promise<string | null> {
+  const { intervalMs = 2000, timeoutMs = 5 * 60 * 1000 } = options;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const res = await fetch(`${API_BASE}/api/auth/desktop-pending?requestId=${encodeURIComponent(requestId)}`, {
+      signal: AbortSignal.timeout(intervalMs + 1000),
+    });
+    if (res.status === 200) {
+      const data = await res.json();
+      if (data?.code) return data.code;
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return null;
 }
 
 // ─── Forgot / Reset Password ──────────────────────────────────────────────────
@@ -277,12 +312,7 @@ export async function deleteAccount(userId: string): Promise<void> {
     // ignore
   }
   await deleteSession(userId);
-  // Clear all local data
-  const { getDB } = await import("./db");
-  const db = await getDB();
-  await db.clear("tasks");
-  await db.clear("completions");
-  await db.clear("notifications");
-  await db.clear("users");
-  await db.clear("syncQueue");
+  // Clear all local data (IndexedDB or native SQLite in Tauri)
+  const { clearAll } = await import("./db");
+  await clearAll();
 }

@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ToDo | Roboticela",
+        "title": "Roboticela ToDo",
         "width": 1200,
         "height": 800,
         "center": true,

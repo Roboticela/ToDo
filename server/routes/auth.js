@@ -1,4 +1,5 @@
 import { Router } from "express";
+import crypto from "crypto";
 import bcrypt from "bcryptjs";
 import { OAuth2Client } from "google-auth-library";
 import { v4 as uuidv4 } from "uuid";
@@ -16,6 +17,31 @@ import { requireAuth } from "../middleware/auth.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
 
 const router = Router();
+
+// One-time codes for desktop OAuth: app gets code by polling (no tokens in browser URL)
+const DESKTOP_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const desktopAuthCodes = new Map(); // code -> { accessToken, refreshToken, userId, expiresAt }
+const desktopPendingAuth = new Map(); // requestId -> { code }
+
+function createDesktopAuthCode(accessToken, refreshToken, userId) {
+  const code = crypto.randomBytes(24).toString("hex");
+  desktopAuthCodes.set(code, {
+    accessToken,
+    refreshToken,
+    userId,
+    expiresAt: Date.now() + DESKTOP_CODE_TTL_MS,
+  });
+  return code;
+}
+
+function consumeDesktopAuthCode(code) {
+  if (!code || typeof code !== "string") return null;
+  const entry = desktopAuthCodes.get(code);
+  desktopAuthCodes.delete(code);
+  if (!entry || Date.now() > entry.expiresAt) return null;
+  return entry;
+}
+
 const googleClient = config.google.clientId && config.google.clientSecret
   ? new OAuth2Client(config.google.clientId, config.google.clientSecret, undefined)
   : null;
@@ -393,7 +419,6 @@ router.get("/google", (req, res) => {
   }
   const client = req.query.client || "web"; // web | desktop
   const state = Buffer.from(JSON.stringify({ client })).toString("base64url");
-  const redirectUri = `${config.frontendUrl}/auth/callback`;
   const scope = "openid email profile";
   const url = googleClient.generateAuthUrl({
     access_type: "offline",
@@ -403,6 +428,38 @@ router.get("/google", (req, res) => {
     prompt: "consent",
   });
   res.redirect(url);
+});
+
+// ─── Desktop: app gets auth URL from backend, then polls for code (no deep link / paste) ───
+
+router.post("/desktop-login-start", (req, res) => {
+  if (!googleClient) {
+    return res.status(503).json({ error: "Google sign-in is not configured" });
+  }
+  const requestId = uuidv4();
+  const state = Buffer.from(JSON.stringify({ client: "desktop", requestId })).toString("base64url");
+  const scope = "openid email profile";
+  const authUrl = googleClient.generateAuthUrl({
+    access_type: "offline",
+    scope,
+    state,
+    redirect_uri: `${config.backendUrl}/api/auth/google/callback`,
+    prompt: "consent",
+  });
+  res.json({ authUrl, requestId });
+});
+
+router.get("/desktop-pending", (req, res) => {
+  const requestId = req.query.requestId;
+  if (!requestId) {
+    return res.status(400).json({ error: "Missing requestId" });
+  }
+  const entry = desktopPendingAuth.get(requestId);
+  desktopPendingAuth.delete(requestId);
+  if (!entry?.code) {
+    return res.status(204).send();
+  }
+  res.json({ code: entry.code });
 });
 
 // ─── Google OAuth: callback (exchange code, create session, redirect) ───────────
@@ -417,10 +474,12 @@ router.get("/google/callback", async (req, res) => {
   }
 
   let client = "web";
+  let requestId = null;
   if (state) {
     try {
       const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
       client = decoded.client || "web";
+      requestId = decoded.requestId || null;
     } catch {
       // ignore
     }
@@ -484,10 +543,12 @@ router.get("/google/callback", async (req, res) => {
   });
 
   if (client === "desktop") {
-    // Native app: redirect to success page that redirects to app deep link
-    const deepUrl = `${config.appDeepLinkScheme}://auth?accessToken=${encodeURIComponent(accessToken)}&refreshToken=${encodeURIComponent(refreshToken)}&userId=${encodeURIComponent(user.id)}`;
-    const successUrl = `${config.frontendUrl}/auth/desktop-success?token=${encodeURIComponent(accessToken)}&refresh=${encodeURIComponent(refreshToken)}&userId=${encodeURIComponent(user.id)}`;
-    return res.redirect(successUrl);
+    // Native app: store code on backend keyed by requestId; app polls GET desktop-pending and exchanges code via API
+    const authCode = createDesktopAuthCode(accessToken, refreshToken, user.id);
+    if (requestId) {
+      desktopPendingAuth.set(requestId, { code: authCode });
+    }
+    return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
   }
 
   // Web: redirect to SPA with tokens in query params (hash is often stripped by proxies)
@@ -498,6 +559,21 @@ router.get("/google/callback", async (req, res) => {
   callbackUrl.searchParams.set("userId", user.id);
   callbackUrl.searchParams.set("expiresAt", expiresAt);
   return res.redirect(callbackUrl.toString());
+});
+
+// ─── Desktop: exchange one-time code for tokens (no tokens in URL / deep link) ───
+
+router.post("/desktop-exchange", async (req, res) => {
+  const { code } = req.body || {};
+  const entry = consumeDesktopAuthCode(code);
+  if (!entry) {
+    return res.status(401).json({ error: "Invalid or expired code. Please sign in with Google again." });
+  }
+  res.json({
+    accessToken: entry.accessToken,
+    refreshToken: entry.refreshToken,
+    userId: entry.userId,
+  });
 });
 
 export default router;

@@ -244,12 +244,28 @@ jobs:
           
           # Create Android SDK directory
           mkdir -p "$ANDROID_HOME"
-          
-          # Download command line tools
           cd "$ANDROID_HOME"
-          curl -o sdk-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip || \
-          curl -o sdk-tools.zip https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip
-          unzip -q sdk-tools.zip -d cmdline-tools
+          
+          # Download command line tools (use -f to fail on HTTP errors, -L to follow redirects)
+          # Minimum expected size ~50MB; smaller = likely HTML error page
+          SDK_ZIP="sdk-tools.zip"
+          MIN_SIZE=50000000
+          for url in \
+            "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" \
+            "https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip"
+          do
+            echo "Trying: $url"
+            if curl -fL --retry 2 --retry-delay 5 -o "$SDK_ZIP" "$url" && [ -f "$SDK_ZIP" ] && [ "$(stat -c%s "$SDK_ZIP")" -ge "$MIN_SIZE" ]; then
+              break
+            fi
+            rm -f "$SDK_ZIP"
+          done
+          if [ ! -f "$SDK_ZIP" ] || [ "$(stat -c%s "$SDK_ZIP")" -lt "$MIN_SIZE" ]; then
+            echo "ERROR: Android SDK command line tools download failed or file too small (expected >= 50MB)"
+            exit 1
+          fi
+          unzip -q "$SDK_ZIP" -d cmdline-tools
+          rm -f "$SDK_ZIP"
           mv cmdline-tools/cmdline-tools cmdline-tools/latest || true
           
           # Accept licenses and install components
@@ -486,6 +502,8 @@ jobs:
           fi
 
       - name: Build Vite app
+        env:
+          VITE_API_URL: https://api.todo.roboticela.com
         run: npm run build
 
       - name: Verify build artifacts exist
