@@ -1,6 +1,6 @@
 mod db;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Set to `true` to open the WebView inspector (devtools) on app startup.
 /// Only has effect in debug builds when the `devtools` Cargo feature is enabled.
