@@ -277,12 +277,7 @@ export async function deleteAccount(userId: string): Promise<void> {
     // ignore
   }
   await deleteSession(userId);
-  // Clear all local data
-  const { getDB } = await import("./db");
-  const db = await getDB();
-  await db.clear("tasks");
-  await db.clear("completions");
-  await db.clear("notifications");
-  await db.clear("users");
-  await db.clear("syncQueue");
+  // Clear all local data (IndexedDB or native SQLite in Tauri)
+  const { clearAll } = await import("./db");
+  await clearAll();
 }

@@ -30,3 +30,5 @@ tauri-plugin-deep-link = "2"
 icns = "0.3"
 base64 = "0.22"
 image = "0.25"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = "0.4"

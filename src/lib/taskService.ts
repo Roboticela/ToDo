@@ -144,9 +144,8 @@ export async function uncompleteTask(task: Task, date: string): Promise<void> {
     const completions = await getCompletionsByTask(task.id);
     const comp = completions.find((c) => c.date === date);
     if (comp) {
-      const { getDB } = await import("./db");
-      const db = await getDB();
-      await db.delete("completions", comp.id);
+      const { deleteCompletion } = await import("./db");
+      await deleteCompletion(comp.id);
     }
   } else {
     const updated: Task = {
