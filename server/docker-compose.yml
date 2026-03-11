@@ -1,4 +1,4 @@
-# Backend API only. Set all env vars in Dokploy's "Environment Variables" tab.
+# Backend API only. Uses env vars from .env (or set in Dokploy "Environment Variables").
 # Run from server dir: docker compose up -d
 
 services:
@@ -6,14 +6,16 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    env_file:
+      - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       JWT_ACCESS_EXPIRY: ${JWT_ACCESS_EXPIRY:-15m}
       JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
-      FRONTEND_URL: ${FRONTEND_URL}
-      BACKEND_URL: ${BACKEND_URL}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      BACKEND_URL: ${BACKEND_URL:-http://localhost:3000}
       APP_DEEP_LINK_SCHEME: ${APP_DEEP_LINK_SCHEME:-roboticela-todo}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
@@ -27,8 +29,11 @@ services:
       EMAIL_UNSUBSCRIBE_SECRET: ${EMAIL_UNSUBSCRIBE_SECRET}
       PADDLE_API_KEY: ${PADDLE_API_KEY}
       PADDLE_WEBHOOK_SECRET: ${PADDLE_WEBHOOK_SECRET}
-      PADDLE_PRICE_ID_BASIC: ${PADDLE_PRICE_ID_BASIC}
-      PADDLE_PRICE_ID_PRO: ${PADDLE_PRICE_ID_PRO}
+      PADDLE_PRICE_ID_BASIC_MONTHLY: ${PADDLE_PRICE_ID_BASIC_MONTHLY}
+      PADDLE_PRICE_ID_BASIC_YEARLY: ${PADDLE_PRICE_ID_BASIC_YEARLY}
+      PADDLE_PRICE_ID_PRO_MONTHLY: ${PADDLE_PRICE_ID_PRO_MONTHLY}
+      PADDLE_PRICE_ID_PRO_YEARLY: ${PADDLE_PRICE_ID_PRO_YEARLY}
+      PADDLE_PRICE_ID_LIFETIME: ${PADDLE_PRICE_ID_LIFETIME}
       R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
