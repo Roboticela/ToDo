@@ -1,7 +1,7 @@
 //! Persistent SQLite storage for the Tauri app. Data is stored in app data dir
 //! so it survives app updates and is never cleared by the system.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -29,11 +29,9 @@ impl AppDb {
              INSERT OR IGNORE INTO meta (key, value) VALUES ('version', 0);",
         )?;
         let version: u32 = conn
-            .query_row(
-                "SELECT value FROM meta WHERE key = 'version'",
-                [],
-                |r| r.get(0),
-            )
+            .query_row("SELECT value FROM meta WHERE key = 'version'", [], |r| {
+                r.get(0)
+            })
             .unwrap_or(0);
         if version >= DB_VERSION {
             return Ok(());
@@ -62,7 +60,10 @@ impl AppDb {
                 "#,
             )?;
         }
-        conn.execute("UPDATE meta SET value = ?1 WHERE key = 'version'", [DB_VERSION])?;
+        conn.execute(
+            "UPDATE meta SET value = ?1 WHERE key = 'version'",
+            [DB_VERSION],
+        )?;
         Ok(())
     }
 }
@@ -70,42 +71,99 @@ impl AppDb {
 // ─── Command payloads (JSON from frontend) ────────────────────────────────────
 
 #[derive(Deserialize)]
-#[serde(tag = "method", content = "args", rename_all = "camelCase")]
+#[serde(tag = "method", rename_all = "camelCase")]
 pub enum DbMethod {
-    SaveTask { task: serde_json::Value },
-    GetTask { id: String },
-    GetTasksByUserAndDate { user_id: String, date: String },
-    GetAllTasksByUser { user_id: String },
-    GetAllTasksByUserForSync { user_id: String },
-    DeleteTask { id: String },
-    GetRepeatTasksByUser { user_id: String },
+    SaveTask {
+        task: serde_json::Value,
+    },
+    GetTask {
+        id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetTasksByUserAndDate {
+        user_id: String,
+        date: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetAllTasksByUser {
+        user_id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetAllTasksByUserForSync {
+        user_id: String,
+    },
+    DeleteTask {
+        id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetRepeatTasksByUser {
+        user_id: String,
+    },
 
-    SaveCompletion { completion: serde_json::Value },
-    GetCompletionsByUserAndDate { user_id: String, date: String },
-    GetCompletionsByTask { task_id: String },
-    GetAllCompletionsByUser { user_id: String },
-    DeleteCompletion { id: String },
+    SaveCompletion {
+        completion: serde_json::Value,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetCompletionsByUserAndDate {
+        user_id: String,
+        date: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetCompletionsByTask {
+        task_id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetAllCompletionsByUser {
+        user_id: String,
+    },
+    DeleteCompletion {
+        id: String,
+    },
+    #[serde(rename_all = "camelCase")]
     ReplaceTasksAndCompletionsFromServer {
         user_id: String,
         tasks: Vec<serde_json::Value>,
         completions: Vec<serde_json::Value>,
     },
 
-    SaveNotification { notification: serde_json::Value },
+    SaveNotification {
+        notification: serde_json::Value,
+    },
     GetPendingNotifications,
-    MarkNotificationFired { id: String },
-    DeleteNotificationsByTask { task_id: String },
+    MarkNotificationFired {
+        id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    DeleteNotificationsByTask {
+        task_id: String,
+    },
 
-    SaveUser { user: serde_json::Value },
-    GetUser { id: String },
-    SaveSession { session: serde_json::Value },
-    GetSession { user_id: String },
+    SaveUser {
+        user: serde_json::Value,
+    },
+    GetUser {
+        id: String,
+    },
+    SaveSession {
+        session: serde_json::Value,
+    },
+    #[serde(rename_all = "camelCase")]
+    GetSession {
+        user_id: String,
+    },
     GetAnySession,
-    DeleteSession { user_id: String },
+    #[serde(rename_all = "camelCase")]
+    DeleteSession {
+        user_id: String,
+    },
 
-    AddToSyncQueue { item: serde_json::Value },
+    AddToSyncQueue {
+        item: serde_json::Value,
+    },
     GetSyncQueue,
-    RemoveSyncQueueItem { id: String },
+    RemoveSyncQueueItem {
+        id: String,
+    },
 
     ClearAll,
 }
@@ -144,10 +202,7 @@ fn sync_queue_row(value: &serde_json::Value) -> (String, String, String) {
     (id, created_at, data)
 }
 
-pub fn db_exec(
-    state: tauri::State<AppDb>,
-    method: DbMethod,
-) -> Result<serde_json::Value, String> {
+pub fn db_exec(state: tauri::State<AppDb>, method: DbMethod) -> Result<serde_json::Value, String> {
     let conn = state.conn().map_err(|e| e.to_string())?;
 
     match method {
@@ -220,7 +275,8 @@ pub fn db_exec(
                 .query_row("SELECT data FROM tasks WHERE id = ?1", [&id], |r| r.get(0))
                 .ok();
             if let Some(data) = row {
-                let mut task: serde_json::Value = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+                let mut task: serde_json::Value =
+                    serde_json::from_str(&data).map_err(|e| e.to_string())?;
                 let now = chrono::Utc::now().to_rfc3339();
                 task["deletedAt"] = serde_json::json!(now);
                 task["updatedAt"] = serde_json::json!(now);
@@ -246,7 +302,9 @@ pub fn db_exec(
             let out: Vec<serde_json::Value> = rows
                 .iter()
                 .filter_map(|s| serde_json::from_str(s).ok())
-                .filter(|v: &serde_json::Value| v["isRepeating"].as_bool().unwrap_or(false) && v["deletedAt"].is_null())
+                .filter(|v: &serde_json::Value| {
+                    v["isRepeating"].as_bool().unwrap_or(false) && v["deletedAt"].is_null()
+                })
                 .collect();
             Ok(serde_json::to_value(out).map_err(|e| e.to_string())?)
         }
@@ -322,12 +380,13 @@ pub fn db_exec(
                 .map_err(|e| e.to_string())?;
             for t in &tasks {
                 let (id, uid, date, _, data) = task_row(t);
-                let data_merged = if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&data) {
-                    v["syncStatus"] = serde_json::json!("synced");
-                    serde_json::to_string(&v).unwrap_or(data)
-                } else {
-                    data
-                };
+                let data_merged =
+                    if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&data) {
+                        v["syncStatus"] = serde_json::json!("synced");
+                        serde_json::to_string(&v).unwrap_or(data)
+                    } else {
+                        data
+                    };
                 tx.execute(
                     "INSERT OR REPLACE INTO tasks (id, user_id, date, sync_status, data) VALUES (?1, ?2, ?3, ?4, ?5)",
                     params![id, uid, date, "synced", data_merged],
@@ -336,12 +395,13 @@ pub fn db_exec(
             }
             for c in &completions {
                 let (id, task_id, uid, date, _, data) = completion_row(c);
-                let data_merged = if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&data) {
-                    v["syncStatus"] = serde_json::json!("synced");
-                    serde_json::to_string(&v).unwrap_or(data)
-                } else {
-                    data
-                };
+                let data_merged =
+                    if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&data) {
+                        v["syncStatus"] = serde_json::json!("synced");
+                        serde_json::to_string(&v).unwrap_or(data)
+                    } else {
+                        data
+                    };
                 tx.execute(
                     "INSERT OR REPLACE INTO completions (id, task_id, user_id, date, sync_status, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     params![id, task_id, uid, date, "synced", data_merged],
@@ -379,10 +439,13 @@ pub fn db_exec(
         }
         DbMethod::MarkNotificationFired { id } => {
             let row: Option<String> = conn
-                .query_row("SELECT data FROM notifications WHERE id = ?1", [&id], |r| r.get(0))
+                .query_row("SELECT data FROM notifications WHERE id = ?1", [&id], |r| {
+                    r.get(0)
+                })
                 .ok();
             if let Some(data) = row {
-                let mut notif: serde_json::Value = serde_json::from_str(&data).map_err(|e| e.to_string())?;
+                let mut notif: serde_json::Value =
+                    serde_json::from_str(&data).map_err(|e| e.to_string())?;
                 notif["fired"] = serde_json::json!(true);
                 let (id, task_id, scheduled_at, data) = notification_row(&notif);
                 conn.execute(
@@ -402,8 +465,11 @@ pub fn db_exec(
         DbMethod::SaveUser { user } => {
             let id = user["id"].as_str().unwrap_or("").to_string();
             let data = serde_json::to_string(&user).unwrap_or_default();
-            conn.execute("INSERT OR REPLACE INTO users (id, data) VALUES (?1, ?2)", params![id, data])
-                .map_err(|e| e.to_string())?;
+            conn.execute(
+                "INSERT OR REPLACE INTO users (id, data) VALUES (?1, ?2)",
+                params![id, data],
+            )
+            .map_err(|e| e.to_string())?;
             Ok(serde_json::Value::Null)
         }
         DbMethod::GetUser { id } => {
@@ -426,7 +492,11 @@ pub fn db_exec(
         }
         DbMethod::GetSession { user_id } => {
             let row: Option<String> = conn
-                .query_row("SELECT data FROM sessions WHERE user_id = ?1", [&user_id], |r| r.get(0))
+                .query_row(
+                    "SELECT data FROM sessions WHERE user_id = ?1",
+                    [&user_id],
+                    |r| r.get(0),
+                )
                 .ok();
             Ok(row
                 .and_then(|s| serde_json::from_str(&s).ok())

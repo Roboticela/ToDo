@@ -13,7 +13,8 @@ import type {
 } from "../types/todo";
 
 async function dbExec<T = void>(payload: Record<string, unknown>): Promise<T> {
-  const result = await invoke<unknown>("run_db_exec", payload);
+  // Rust run_db_exec(state, method: DbMethod) expects key "method" matching the parameter name.
+  const result = await invoke<unknown>("run_db_exec", { method: payload });
   if (result === null || result === undefined) return undefined as T;
   return result as T;
 }

@@ -1,82 +1,57 @@
-import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { saveUser, saveSession } from "./db";
 import { getApiBase } from "./apiBase";
 import type { User, AuthSession } from "../types/todo";
 
-
-function parseAuthUrl(url: string): { accessToken: string; refreshToken: string; userId: string } | null {
-  try {
-    if (!url.startsWith("roboticela-todo://auth")) return null;
-    const u = new URL(url);
-    const accessToken = u.searchParams.get("accessToken");
-    const userId = u.searchParams.get("userId");
-    if (!accessToken || !userId) return null;
-    return {
-      accessToken,
-      refreshToken: u.searchParams.get("refreshToken") || "",
-      userId,
-    };
-  } catch {
-    return null;
-  }
-}
-
-export async function handleAuthDeepLink(
-  url: string,
+/**
+ * Exchange one-time code for tokens via backend, then save session and set auth.
+ * Used by the app after polling GET desktop-pending (desktop flow).
+ */
+export async function completeDesktopAuthWithCode(
+  code: string,
   setAuthData: (user: User, session: AuthSession) => void
 ): Promise<boolean> {
-  const parsed = parseAuthUrl(url);
-  if (!parsed) return false;
-
-  try {
-    const res = await fetch(`${getApiBase()}/api/users/me`, {
-      headers: { Authorization: `Bearer ${parsed.accessToken}` },
-    });
-    if (!res.ok) return false;
-    const userData = await res.json();
-    const user: User = {
-      id: userData.id,
-      name: userData.name,
-      email: userData.email,
-      avatarUrl: userData.avatarUrl,
-      plan: userData.plan,
-      planExpiresAt: userData.planExpiresAt,
-      emailVerifiedAt: userData.emailVerifiedAt,
-      subscribedToReminders: userData.subscribedToReminders ?? true,
-      createdAt: userData.createdAt,
-    };
-    const session: AuthSession = {
-      accessToken: parsed.accessToken,
-      refreshToken: parsed.refreshToken,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      userId: parsed.userId,
-    };
-    await saveUser(user);
-    await saveSession(session);
-    setAuthData(user, session);
-    return true;
-  } catch {
+  const apiBase = getApiBase();
+  if (!apiBase) {
+    console.error("[deepLink] getApiBase() is empty – set VITE_API_URL (e.g. in .env)");
     return false;
   }
-}
-
-export function setupDeepLinkAuth(setAuthData: (user: User, session: AuthSession) => void): () => void {
-  getCurrent().then((urls) => {
-    if (!urls || urls.length === 0) return;
-    const authUrl = urls.find((u) => u.startsWith("roboticela-todo://auth"));
-    if (authUrl) handleAuthDeepLink(authUrl, setAuthData);
+  const exchangeRes = await fetch(`${apiBase}/api/auth/desktop-exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
   });
+  if (!exchangeRes.ok) {
+    const err = await exchangeRes.json().catch(() => ({}));
+    console.warn("[deepLink] desktop-exchange failed", exchangeRes.status, err);
+    return false;
+  }
+  const { accessToken, refreshToken, userId } = await exchangeRes.json();
+  if (!accessToken || !userId) return false;
 
-  const unlisten = onOpenUrl((urls) => {
-    const authUrl = urls.find((u) => u.startsWith("roboticela-todo://auth"));
-    if (authUrl) {
-      handleAuthDeepLink(authUrl, setAuthData).then((handled) => {
-        if (handled) window.location.href = "/todo";
-      });
-    }
+  const meRes = await fetch(`${apiBase}/api/users/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
-
-  return () => {
-    if (typeof unlisten?.then === "function") unlisten.then((fn) => fn());
+  if (!meRes.ok) return false;
+  const userData = await meRes.json();
+  const user: User = {
+    id: userData.id,
+    name: userData.name,
+    email: userData.email,
+    avatarUrl: userData.avatarUrl,
+    plan: userData.plan,
+    planExpiresAt: userData.planExpiresAt,
+    emailVerifiedAt: userData.emailVerifiedAt,
+    subscribedToReminders: userData.subscribedToReminders ?? true,
+    createdAt: userData.createdAt,
   };
+  const session: AuthSession = {
+    accessToken,
+    refreshToken: refreshToken || "",
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    userId,
+  };
+  await saveUser(user);
+  await saveSession(session);
+  setAuthData(user, session);
+  return true;
 }
