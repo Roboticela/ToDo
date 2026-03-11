@@ -13,6 +13,7 @@ import {
 } from "../services/emailService.js";
 import { uploadAvatarFromUrl } from "../services/r2Service.js";
 import { requireAuth } from "../middleware/auth.js";
+import { getEffectivePlan } from "../lib/planUtils.js";
 
 const router = Router();
 const googleClient = config.google.clientId && config.google.clientSecret
@@ -20,13 +21,14 @@ const googleClient = config.google.clientId && config.google.clientSecret
   : null;
 
 function toUserResponse(user) {
+  const effective = getEffectivePlan(user);
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     avatarUrl: user.avatarUrl ?? undefined,
-    plan: user.plan,
-    planExpiresAt: user.planExpiresAt ? user.planExpiresAt.toISOString() : undefined,
+    plan: effective.plan,
+    planExpiresAt: effective.planExpiresAt ? effective.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
     createdAt: user.createdAt.toISOString(),

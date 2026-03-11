@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
+import { getEffectivePlan, getPlanLimits } from "../lib/planUtils.js";
 
 const router = Router();
 const PLAN_VALUES = ["free", "basic", "pro"];
@@ -41,11 +42,23 @@ function completionToJson(c) {
   };
 }
 
-// List tasks for user (optionally by date)
+// List tasks for user (optionally by date). Enforce plan history window.
 router.get("/", requireAuth, async (req, res) => {
   const { date } = req.query;
   const where = { userId: req.user.id, deletedAt: null };
   if (date && typeof date === "string") where.date = date;
+  const effective = getEffectivePlan(req.user);
+  const limits = getPlanLimits(effective.plan);
+  if (limits.historyDays != null) {
+    const minDate = new Date();
+    minDate.setDate(minDate.getDate() - limits.historyDays);
+    const minDateStr = minDate.toISOString().slice(0, 10);
+    if (where.date) {
+      if (where.date < minDateStr) return res.json([]);
+    } else {
+      where.date = { gte: minDateStr };
+    }
+  }
   const tasks = await prisma.task.findMany({
     where,
     orderBy: [{ date: "asc" }, { time: "asc" }],
@@ -62,12 +75,41 @@ router.get("/:id", requireAuth, async (req, res) => {
   res.json(taskToJson(task));
 });
 
-// Create task
+// Create task. Enforce plan limits (repeat tasks, daily tasks).
 router.post("/", requireAuth, async (req, res) => {
   const body = req.body;
   if (!body.id || !body.title || !body.type || !body.category || !body.date) {
     return res.status(400).json({ error: "id, title, type, category, date required" });
   }
+  const effective = getEffectivePlan(req.user);
+  const limits = getPlanLimits(effective.plan);
+  const userId = req.user.id;
+
+  if (Boolean(body.isRepeating) && limits.maxRepeatTasks != null) {
+    const repeatCount = await prisma.task.count({
+      where: { userId, deletedAt: null, isRepeating: true },
+    });
+    if (repeatCount >= limits.maxRepeatTasks) {
+      return res.status(403).json({
+        error: "Plan limit reached",
+        code: "MAX_REPEAT_TASKS",
+        limit: limits.maxRepeatTasks,
+      });
+    }
+  }
+  if (limits.maxDailyTasks != null) {
+    const dailyCount = await prisma.task.count({
+      where: { userId, deletedAt: null, date: body.date },
+    });
+    if (dailyCount >= limits.maxDailyTasks) {
+      return res.status(403).json({
+        error: "Plan limit reached",
+        code: "MAX_DAILY_TASKS",
+        limit: limits.maxDailyTasks,
+      });
+    }
+  }
+
   const task = await prisma.task.create({
     data: {
       id: body.id,

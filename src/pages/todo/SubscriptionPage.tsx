@@ -1,22 +1,30 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Crown, Check, Zap, Infinity, ChevronDown, HelpCircle } from "lucide-react";
+import { Crown, Check, Zap, Infinity, ChevronDown, HelpCircle, ExternalLink } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
-import { type SubscriptionPlan } from "../../types/todo";
+import { type SubscriptionPlan, type User } from "../../types/todo";
 import { openLink } from "../../lib/tauri";
 import { isTauri } from "../../lib/tauri";
 import { getApiBase } from "../../lib/apiBase";
+import { saveUser } from "../../lib/db";
 
+export type BillingInterval = "monthly" | "yearly";
 
-async function createCheckout(plan: "basic" | "pro", accessToken: string): Promise<string> {
+async function createCheckout(
+  plan: "basic" | "pro" | "lifetime",
+  accessToken: string,
+  interval?: BillingInterval
+): Promise<string> {
+  const body: { plan: string; interval?: BillingInterval } = { plan };
+  if (plan !== "lifetime" && interval) body.interval = interval;
   const res = await fetch(`${getApiBase()}/api/paddle/create-checkout`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
@@ -27,21 +35,38 @@ async function createCheckout(plan: "basic" | "pro", accessToken: string): Promi
   return data.checkoutUrl;
 }
 
-const PLANS: {
+async function getPortalUrl(accessToken: string): Promise<string> {
+  const res = await fetch(`${getApiBase()}/api/paddle/portal`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || "Could not open subscription management");
+  }
+  const data = await res.json();
+  if (!data.url) throw new Error("No portal URL");
+  return data.url;
+}
+
+const PLAN_META: {
   id: SubscriptionPlan;
   name: string;
-  price: string;
-  period: string;
   description: string;
   highlight?: boolean;
   features: string[];
   icon: React.ReactNode;
+  /** Price per month when monthly, or per month when yearly (display). Lifetime: one-time. */
+  priceMonthly: number;
+  priceYearlyPerMonth: number;
+  priceLifetime?: number;
 }[] = [
   {
     id: "free",
     name: "Free",
-    price: "$0",
-    period: "forever",
     description: "Get started with basic task management",
     features: [
       "2 days of task history",
@@ -52,12 +77,12 @@ const PLANS: {
       "Local notifications",
     ],
     icon: <Zap className="w-5 h-5" />,
+    priceMonthly: 0,
+    priceYearlyPerMonth: 0,
   },
   {
     id: "basic",
     name: "Basic",
-    price: "$2",
-    period: "/month",
     description: "More history and tasks for productive users",
     highlight: true,
     features: [
@@ -70,12 +95,12 @@ const PLANS: {
       "Analytics dashboard",
     ],
     icon: <Crown className="w-5 h-5" />,
+    priceMonthly: 5,
+    priceYearlyPerMonth: 3,
   },
   {
     id: "pro",
     name: "Pro",
-    price: "$5",
-    period: "/month",
     description: "Unlimited everything for power users",
     features: [
       "Unlimited history",
@@ -88,6 +113,28 @@ const PLANS: {
       "Priority support",
     ],
     icon: <Infinity className="w-5 h-5" />,
+    priceMonthly: 8,
+    priceYearlyPerMonth: 6,
+  },
+  {
+    id: "lifetime",
+    name: "Lifetime",
+    description: "Pay once, use forever",
+    features: [
+      "Unlimited history",
+      "Unlimited repeat tasks",
+      "Unlimited daily tasks",
+      "All 3 task types",
+      "Do's & Don'ts tracking",
+      "Local notifications",
+      "Advanced analytics",
+      "Priority support",
+      "One-time payment",
+    ],
+    icon: <Infinity className="w-5 h-5" />,
+    priceMonthly: 0,
+    priceYearlyPerMonth: 0,
+    priceLifetime: 79,
   },
 ];
 
@@ -115,16 +162,58 @@ const FAQ_ITEMS = [
 ];
 
 export default function SubscriptionPage() {
-  const { user, session } = useAuth();
+  const { user, session, updateUser } = useAuth();
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>("yearly");
   const [loadingPlan, setLoadingPlan] = useState<SubscriptionPlan | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const refetchUser = useCallback(async () => {
+    if (!session?.accessToken) return;
+    try {
+      const res = await fetch(`${getApiBase()}/api/users/me`, {
+        headers: { Authorization: `Bearer ${session.accessToken}` },
+      });
+      if (res.ok) {
+        const userData = await res.json();
+        const updatedUser: User = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          avatarUrl: userData.avatarUrl,
+          plan: userData.plan,
+          planExpiresAt: userData.planExpiresAt,
+          emailVerifiedAt: userData.emailVerifiedAt,
+          subscribedToReminders: userData.subscribedToReminders ?? true,
+          createdAt: userData.createdAt,
+        };
+        await saveUser(updatedUser);
+        updateUser(updatedUser);
+      }
+    } catch {
+      // ignore refetch errors
+    }
+  }, [session?.accessToken, updateUser]);
+
+  useEffect(() => {
+    refetchUser();
+  }, [refetchUser]);
+
+  useEffect(() => {
+    const onFocus = () => refetchUser();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refetchUser]);
 
   async function handleUpgrade(plan: SubscriptionPlan) {
     if (plan === "free" || !session?.accessToken) return;
     setError(null);
     setLoadingPlan(plan);
     try {
-      const checkoutUrl = await createCheckout(plan, session.accessToken);
+      const checkoutUrl =
+        plan === "lifetime"
+          ? await createCheckout("lifetime", session.accessToken)
+          : await createCheckout(plan as "basic" | "pro", session.accessToken, billingInterval);
       if (isTauri()) {
         await openLink(checkoutUrl, { openInNewTab: true });
       } else {
@@ -136,6 +225,27 @@ export default function SubscriptionPage() {
       setLoadingPlan(null);
     }
   }
+
+  async function handleManageSubscription() {
+    if (!session?.accessToken || (user?.plan !== "basic" && user?.plan !== "pro")) return;
+    setError(null);
+    setPortalLoading(true);
+    try {
+      const url = await getPortalUrl(session.accessToken);
+      if (isTauri()) {
+        await openLink(url, { openInNewTab: true });
+      } else {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not open subscription management");
+    } finally {
+      setPortalLoading(false);
+    }
+  }
+
+  const canManageSubscription = user?.plan === "basic" || user?.plan === "pro";
+  const isPaidPlan = (p: SubscriptionPlan) => p === "basic" || p === "pro" || p === "lifetime";
 
   return (
     <div className="flex flex-col min-h-full">
@@ -152,18 +262,89 @@ export default function SubscriptionPage() {
           </p>
         </motion.div>
 
+        {canManageSubscription && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex justify-center"
+          >
+            <button
+              type="button"
+              onClick={handleManageSubscription}
+              disabled={portalLoading}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-accent/40 text-foreground hover:bg-accent border border-border disabled:opacity-50"
+            >
+              <ExternalLink className="w-4 h-4" />
+              {portalLoading ? "Opening..." : "Manage subscription"}
+            </button>
+          </motion.div>
+        )}
+
         {error && (
           <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center">
             {error}
           </div>
         )}
 
+        {/* Billing toggle: Yearly (default) / Monthly - only for Basic & Pro */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex justify-center gap-1 p-2 rounded-xl bg-accent/20 border border-border w-fit mx-auto"
+        >
+          <button
+            type="button"
+            onClick={() => setBillingInterval("yearly")}
+            className={cn(
+              "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+              billingInterval === "yearly"
+                ? "bg-primary text-primary-foreground"
+                : "text-foreground/70 hover:text-foreground"
+            )}
+          >
+            Yearly
+          </button>
+          <button
+            type="button"
+            onClick={() => setBillingInterval("monthly")}
+            className={cn(
+              "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+              billingInterval === "monthly"
+                ? "bg-primary text-primary-foreground"
+                : "text-foreground/70 hover:text-foreground"
+            )}
+          >
+            Monthly
+          </button>
+        </motion.div>
+
         {/* Plan cards */}
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-        {PLANS.map((plan, i) => {
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch flex-wrap justify-center">
+        {PLAN_META.map((plan, i) => {
           const isCurrentPlan = user?.plan === plan.id;
-          const isUpgrade = plan.id !== "free" && !isCurrentPlan;
+          const isUpgrade = isPaidPlan(plan.id) && !isCurrentPlan;
           const isLoading = loadingPlan === plan.id;
+          const isLifetime = plan.id === "lifetime";
+          const priceLabel =
+            plan.id === "free"
+              ? "$0"
+              : isLifetime && plan.priceLifetime != null
+              ? `$${plan.priceLifetime}`
+              : billingInterval === "yearly"
+              ? `$${plan.priceYearlyPerMonth}`
+              : `$${plan.priceMonthly}`;
+          const periodLabel =
+            plan.id === "free"
+              ? "forever"
+              : isLifetime
+              ? "one-time"
+              : billingInterval === "yearly"
+              ? "/mo, billed yearly"
+              : "/month";
+          const savePct =
+            !isLifetime && plan.id !== "free" && billingInterval === "yearly" && plan.priceMonthly > 0
+              ? Math.round((1 - plan.priceYearlyPerMonth / plan.priceMonthly) * 100)
+              : 0;
           return (
             <motion.div
               key={plan.id}
@@ -171,17 +352,24 @@ export default function SubscriptionPage() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: i * 0.08 }}
               className={cn(
-                "relative bg-card border rounded-2xl p-5 overflow-hidden flex flex-col lg:flex-1 lg:min-w-0",
+                "relative bg-card border rounded-2xl p-5 overflow-hidden flex flex-col lg:flex-1 lg:min-w-0 min-w-[260px] max-w-[320px]",
                 plan.highlight
                   ? "border-primary/40 ring-1 ring-primary/20"
                   : "border-border",
                 isCurrentPlan && "ring-2 ring-green-500/30 border-green-500/30"
               )}
             >
-              {plan.highlight && (
+              {plan.highlight && !isLifetime && (
                 <div className="absolute top-0 right-0">
                   <div className="bg-primary text-primary-foreground text-[10px] font-bold px-3 py-1 rounded-bl-xl">
                     POPULAR
+                  </div>
+                </div>
+              )}
+              {isLifetime && (
+                <div className="absolute top-0 right-0">
+                  <div className="bg-amber-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl">
+                    BEST VALUE
                   </div>
                 </div>
               )}
@@ -198,15 +386,18 @@ export default function SubscriptionPage() {
                 <div
                   className={cn(
                     "p-2.5 rounded-xl",
-                    plan.highlight ? "bg-primary/15 text-primary" : "bg-accent/40 text-foreground/60"
+                    plan.highlight || isLifetime ? "bg-primary/15 text-primary" : "bg-accent/40 text-foreground/60"
                   )}
                 >
                   {plan.icon}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-2xl font-bold text-foreground">{plan.price}</span>
-                    <span className="text-sm text-foreground/50">{plan.period}</span>
+                  <div className="flex items-baseline gap-1 flex-wrap">
+                    <span className="text-2xl font-bold text-foreground">{priceLabel}</span>
+                    <span className="text-sm text-foreground/50">{periodLabel}</span>
+                    {savePct > 0 && (
+                      <span className="text-xs text-green-500 font-medium ml-1">Save {savePct}%</span>
+                    )}
                   </div>
                   <p className="text-base font-semibold text-foreground">{plan.name}</p>
                   <p className="text-xs text-foreground/50 mt-0.5">{plan.description}</p>
@@ -231,7 +422,7 @@ export default function SubscriptionPage() {
                   "w-full h-11 rounded-xl text-sm font-semibold transition-all",
                   isCurrentPlan
                     ? "bg-accent/30 text-foreground/40 cursor-default"
-                    : plan.highlight
+                    : plan.highlight || isLifetime
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "bg-accent/40 text-foreground hover:bg-accent border border-border"
                 )}
@@ -242,6 +433,8 @@ export default function SubscriptionPage() {
                   ? "Downgrade to Free"
                   : isLoading
                   ? "Opening checkout..."
+                  : isLifetime
+                  ? "Get Lifetime"
                   : `Upgrade to ${plan.name}`}
               </motion.button>
             </motion.div>

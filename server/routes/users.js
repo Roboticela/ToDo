@@ -2,17 +2,19 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { uploadAvatarFromDataUrl, deleteAvatarByUrl } from "../services/r2Service.js";
+import { getEffectivePlan } from "../lib/planUtils.js";
 
 const router = Router();
 
 function toUserResponse(user) {
+  const effective = getEffectivePlan(user);
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     avatarUrl: user.avatarUrl ?? undefined,
-    plan: user.plan,
-    planExpiresAt: user.planExpiresAt ? user.planExpiresAt.toISOString() : undefined,
+    plan: effective.plan,
+    planExpiresAt: effective.planExpiresAt ? effective.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
     createdAt: user.createdAt.toISOString(),

@@ -99,7 +99,14 @@ export default function SettingsPage() {
   }
 
   const plan = PLAN_FEATURES[currentUser.plan];
-  const planLabel = currentUser.plan === "free" ? "Free" : currentUser.plan === "basic" ? "$2/mo" : "$5/mo";
+  const planLabel =
+    currentUser.plan === "free"
+      ? "Free"
+      : currentUser.plan === "basic"
+        ? "$5/mo"
+        : currentUser.plan === "pro"
+          ? "$8/mo"
+          : "Lifetime";
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -204,12 +211,20 @@ export default function SettingsPage() {
               currentUser.plan === "free"
                 ? "bg-accent/30 border-border text-foreground/60"
                 : currentUser.plan === "basic"
-                ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                  ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
+                  : currentUser.plan === "lifetime"
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    : "bg-amber-500/10 border-amber-500/30 text-amber-400"
             )}
           >
             <Crown className="w-3.5 h-3.5" />
-            {currentUser.plan === "free" ? "Free Plan" : currentUser.plan === "basic" ? "Basic Plan" : "Pro Plan"}
+            {currentUser.plan === "free"
+              ? "Free Plan"
+              : currentUser.plan === "basic"
+                ? "Basic Plan"
+                : currentUser.plan === "lifetime"
+                  ? "Lifetime Plan"
+                  : "Pro Plan"}
             {currentUser.plan === "free" && <span className="text-xs text-primary/70 ml-1">Upgrade →</span>}
           </button>
         </motion.div>
@@ -326,7 +341,7 @@ export default function SettingsPage() {
                 {plan.maxDailyTasks === null ? "Unlimited" : `Max ${plan.maxDailyTasks}/day`}
               </span>
             </div>
-            {currentUser.plan !== "pro" && (
+            {currentUser.plan !== "pro" && currentUser.plan !== "lifetime" && (
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.97 }}

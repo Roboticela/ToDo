@@ -29,8 +29,11 @@ export declare const config: {
   paddle: {
     apiKey: string;
     webhookSecret: string;
-    priceIdBasic: string;
-    priceIdPro: string;
+    priceIdBasicMonthly: string;
+    priceIdBasicYearly: string;
+    priceIdProMonthly: string;
+    priceIdProYearly: string;
+    priceIdLifetime: string;
   };
   r2: {
     accountId: string;

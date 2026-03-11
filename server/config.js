@@ -38,8 +38,11 @@ export const config = {
   paddle: {
     apiKey: process.env.PADDLE_API_KEY || "",
     webhookSecret: process.env.PADDLE_WEBHOOK_SECRET || "",
-    priceIdBasic: process.env.PADDLE_PRICE_ID_BASIC || "",
-    priceIdPro: process.env.PADDLE_PRICE_ID_PRO || "",
+    priceIdBasicMonthly: process.env.PADDLE_PRICE_ID_BASIC_MONTHLY || "",
+    priceIdBasicYearly: process.env.PADDLE_PRICE_ID_BASIC_YEARLY || "",
+    priceIdProMonthly: process.env.PADDLE_PRICE_ID_PRO_MONTHLY || "",
+    priceIdProYearly: process.env.PADDLE_PRICE_ID_PRO_YEARLY || "",
+    priceIdLifetime: process.env.PADDLE_PRICE_ID_LIFETIME || "",
   },
 
   r2: {

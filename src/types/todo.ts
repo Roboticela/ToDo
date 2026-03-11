@@ -6,7 +6,7 @@ export type TaskPriority = "low" | "medium" | "high";
 export type TaskStatus = "pending" | "completed" | "missed" | "skipped";
 export type RepeatDay = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun, 1=Mon, ..., 6=Sat
 export type SyncStatus = "synced" | "pending" | "failed";
-export type SubscriptionPlan = "free" | "basic" | "pro";
+export type SubscriptionPlan = "free" | "basic" | "pro" | "lifetime";
 
 export interface Task {
   id: string;
@@ -104,13 +104,19 @@ export const PLAN_FEATURES: Record<SubscriptionPlan, PlanFeatures> = {
     historyDays: 14,
     maxRepeatTasks: 10,
     maxDailyTasks: 15,
-    price: 2,
+    price: 5, // monthly; yearly is 3/mo
   },
   pro: {
     historyDays: null,
     maxRepeatTasks: null,
     maxDailyTasks: null,
-    price: 5,
+    price: 8, // monthly; yearly is 6/mo
+  },
+  lifetime: {
+    historyDays: null,
+    maxRepeatTasks: null,
+    maxDailyTasks: null,
+    price: 79, // one-time
   },
 };
 

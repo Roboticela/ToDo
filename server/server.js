@@ -6,7 +6,7 @@ import { config } from "./config.js";
 import authRoutes from "./routes/auth.js";
 import userRoutes from "./routes/users.js";
 import taskRoutes from "./routes/tasks.js";
-import paddleRoutes from "./routes/paddle.js";
+import paddleRoutes, { handlePaddleWebhook } from "./routes/paddle.js";
 import emailRoutes from "./routes/email.js";
 import { startSubscriptionReminderJob } from "./jobs/subscriptionReminderJob.js";
 
@@ -44,6 +44,8 @@ app.use(
   })
 );
 app.use(cookieParser());
+// Paddle webhook must receive raw body for signature verification; mount before json parser
+app.post("/api/paddle/webhook", express.raw({ type: "application/json" }), handlePaddleWebhook);
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
