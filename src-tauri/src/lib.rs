@@ -4,7 +4,7 @@ use tauri::{Emitter, Manager};
 
 /// Set to `true` to open the WebView inspector (devtools) on app startup.
 /// Only has effect in debug builds; release builds have inspector disabled by default unless the `devtools` Cargo feature is enabled.
-const ENABLE_INSPECTOR: bool = true;
+const ENABLE_INSPECTOR: bool = false;
 
 #[tauri::command]
 fn run_db_exec(
@@ -113,6 +113,7 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            #[cfg(feature = "devtools")]
             if ENABLE_INSPECTOR {
                 if let Some(window) = app.get_webview_window("main") {
                     window.open_devtools();
