@@ -1,9 +1,10 @@
 mod db;
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 /// Set to `true` to open the WebView inspector (devtools) on app startup.
-/// Only has effect in debug builds; release builds have inspector disabled by default unless the `devtools` Cargo feature is enabled.
+/// Only has effect in debug builds when the `devtools` Cargo feature is enabled.
+#[allow(dead_code)]
 const ENABLE_INSPECTOR: bool = false;
 
 #[tauri::command]
@@ -63,14 +64,14 @@ fn write_file(path: String, data: String) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_deep_link::init());
 
     #[cfg(desktop)]
-    {
-        builder = builder
+    let builder = {
+        builder
             .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
                 if cfg!(debug_assertions) {
                     log::info!("single-instance: args count = {}", args.len());
@@ -95,8 +96,8 @@ pub fn run() {
                     }
                 }
             }))
-            .plugin(tauri_plugin_window_state::Builder::default().build());
-    }
+            .plugin(tauri_plugin_window_state::Builder::default().build())
+    };
 
     builder
         .setup(|app| {

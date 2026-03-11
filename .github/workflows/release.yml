@@ -427,16 +427,14 @@ jobs:
           if "signingConfigs.getByName" in content:
               print("Signing config already present")
               exit(0)
-          # Add imports at top if missing
-          if "import java.util.Properties" not in content:
-              content = "import java.util.Properties\nimport java.io.FileInputStream\n\n" + content
+          # Use fully qualified class names so Gradle Kotlin DSL resolves them without extra imports
           signing_block = '''
             signingConfigs {
               create("release") {
                 val keystorePropertiesFile = rootProject.file("keystore.properties")
-                val keystoreProperties = Properties()
+                val keystoreProperties = java.util.Properties()
                 if (keystorePropertiesFile.exists()) {
-                  keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+                  keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
                 }
                 keyAlias = keystoreProperties["keyAlias"] as String
                 keyPassword = keystoreProperties["password"] as String
