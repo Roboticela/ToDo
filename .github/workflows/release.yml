@@ -20,6 +20,10 @@ permissions:
   contents: write
   id-token: write
 
+# Opt into Node.js 24 for JavaScript actions (Node 20 is deprecated on GitHub-hosted runners)
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: Build for ${{ matrix.platform }}

@@ -93,7 +93,7 @@ pub fn run() {
                         if cfg!(debug_assertions) {
                             log::info!("single-instance: emitting deep-link-url to frontend");
                         }
-                        let _ = Emitter::emit(&app, "deep-link-url", arg.as_str());
+                        let _ = Emitter::emit(app, "deep-link-url", arg.as_str());
                         break;
                     }
                 }
