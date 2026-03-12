@@ -309,7 +309,7 @@ jobs:
             keytool -genkey -v -keystore "$KEYSTORE_DIR/release-key.jks" \
               -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" -keypass "$STORE_PASSWORD" \
               -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Roboticela ToDo,O=Roboticela,C=US"
+              -dname "CN=ToDo,O=Roboticela,C=US"
             KEY_PASSWORD="$STORE_PASSWORD"
             echo "✅ Release keystore generated (APK will be signed and installable)"
           fi
@@ -387,26 +387,6 @@ jobs:
           if [ ! -d "src-tauri/gen/android" ]; then
             echo "Initializing Android project before build..."
             CI=true npm run tauri android init
-          fi
-
-      - name: Apply Android app icon and display name (for Android builds)
-        if: contains(matrix.platform, 'android')
-        run: |
-          # Generate and place app icons into gen/android (replaces default Tauri icon)
-          ICON_SRC="src-tauri/icons/icon.png"
-          if [ -f "$ICON_SRC" ]; then
-            echo "Applying app icon from $ICON_SRC..."
-            npm run tauri icon "$ICON_SRC" || true
-          else
-            echo "Warning: $ICON_SRC not found; using 512x512 or icon.ico if available"
-            [ -f "src-tauri/icons/512x512.png" ] && npm run tauri icon src-tauri/icons/512x512.png || true
-          fi
-          # Ensure app display name is correct (template may show "Tauri")
-          STRINGS_XML="src-tauri/gen/android/app/src/main/res/values/strings.xml"
-          if [ -f "$STRINGS_XML" ]; then
-            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">Roboticela ToDo<\/string>/' "$STRINGS_XML" || true
-            rm -f "$STRINGS_XML.bak"
-            echo "Patched app_name in $STRINGS_XML"
           fi
 
       - name: Configure Android release signing (for Android builds)
