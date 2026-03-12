@@ -5,7 +5,7 @@ use tauri::Emitter;
 use tauri::Manager;
 
 /// Set to `true` to open the WebView inspector (devtools) on app startup.
-/// Only has effect in debug builds when the `devtools` Cargo feature is enabled.
+/// Run with the devtools feature: `npm run tauri:dev` or `cargo tauri dev -- --features devtools`.
 #[allow(dead_code)]
 const ENABLE_INSPECTOR: bool = false;
 
@@ -39,8 +39,9 @@ fn open_url(url: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("explorer")
-            .arg(&url)
+        // Use URL protocol handler so the default browser opens; "explorer" can open File Explorer instead.
+        std::process::Command::new("rundll32")
+            .args(["url.dll,FileProtocolHandler", &url])
             .spawn()
             .map_err(|e| format!("Failed to open browser: {}", e))?;
         return Ok(());
@@ -118,9 +119,12 @@ pub fn run() {
             }
             #[cfg(feature = "devtools")]
             if ENABLE_INSPECTOR {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.open_devtools();
-                }
+                let handle = app.handle().clone();
+                app.run_on_main_thread(move || {
+                    if let Some(window) = handle.get_webview_window("main") {
+                        window.open_devtools();
+                    }
+                }).ok();
             }
             Ok(())
         })
