@@ -427,17 +427,17 @@ jobs:
           if "signingConfigs.getByName" in content:
               print("Signing config already present")
               exit(0)
-          # Add imports at top: Gradle script has a "java" extension that shadows java.util/java.io
-          imports = "import java.util.Properties\nimport java.io.FileInputStream\n\n"
+          # Add import at top so Properties resolves (Gradle "java" extension shadows java.util)
           if "import java.util.Properties" not in content:
-              content = imports + content
+              content = "import java.util.Properties\n\n" + content
+          # Use File.inputStream() (Kotlin stdlib) so we don't need FileInputStream in scope
           signing_block = '''
             signingConfigs {
               create("release") {
                 val keystorePropertiesFile = rootProject.file("keystore.properties")
                 val keystoreProperties = Properties()
                 if (keystorePropertiesFile.exists()) {
-                  keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+                  keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
                 }
                 keyAlias = keystoreProperties.getProperty("keyAlias")!!
                 keyPassword = keystoreProperties.getProperty("password")!!
