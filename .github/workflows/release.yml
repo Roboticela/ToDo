@@ -398,7 +398,8 @@ jobs:
           # Ensure app display name is correct (template may show "Tauri")
           STRINGS_XML="src-tauri/gen/android/app/src/main/res/values/strings.xml"
           if [ -f "$STRINGS_XML" ]; then
-            sed -i.bak 's/<string name="app_name">.*<\/string>/<string name="app_name">Roboticela ToDo<\/string>/' "$STRINGS_XML" || true
+            sed -i 's/<string name="app_name">.*<\/string>/<string name="app_name">Roboticela ToDo<\/string>/' "$STRINGS_XML" || true
+            rm -f "$STRINGS_XML.bak"
             echo "Patched app_name in $STRINGS_XML"
           fi
 

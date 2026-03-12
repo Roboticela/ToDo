@@ -1,6 +1,8 @@
 mod db;
 
-use tauri::{Emitter, Manager};
+#[cfg(desktop)]
+use tauri::Emitter;
+use tauri::Manager;
 
 /// Set to `true` to open the WebView inspector (devtools) on app startup.
 /// Only has effect in debug builds when the `devtools` Cargo feature is enabled.
@@ -91,7 +93,7 @@ pub fn run() {
                         if cfg!(debug_assertions) {
                             log::info!("single-instance: emitting deep-link-url to frontend");
                         }
-                        let _ = app.emit("deep-link-url", arg.as_str());
+                        let _ = Emitter::emit(&app, "deep-link-url", arg.as_str());
                         break;
                     }
                 }
