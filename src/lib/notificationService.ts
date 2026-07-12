@@ -9,20 +9,22 @@ import {
 } from "./db";
 import { v4 as uuidv4 } from "./uuid";
 import { format, addDays } from "date-fns";
-import { playNotificationSound } from "./notificationSound";
+import {
+  ensureNotificationChannels,
+  isNativePermissionGranted,
+  requestNativeNotificationPermission,
+  showTaskNotification,
+} from "./nativeNotification";
 
 let notificationTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-const ICON = "/favicon.svg";
 /** How many weeks ahead to schedule repeating timed reminders */
 const REPEAT_WEEKS_AHEAD = 8;
 
 export async function requestNotificationPermission(): Promise<boolean> {
-  if (!("Notification" in window)) return false;
-  if (Notification.permission === "granted") return true;
-  if (Notification.permission === "denied") return false;
-  const result = await Notification.requestPermission();
-  return result === "granted";
+  const granted = await requestNativeNotificationPermission();
+  if (granted) await ensureNotificationChannels();
+  return granted;
 }
 
 export function isNotificationSupported(): boolean {
@@ -164,7 +166,11 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
     return;
   }
 
-  if (Notification.permission !== "granted") return;
+  const permitted = await isNativePermissionGranted().catch(() => false);
+  if (!permitted) {
+    // Still try web path if Notification.permission was granted outside plugin
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+  }
 
   let title = task.title;
   let body = "";
@@ -180,29 +186,16 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
     body = task.endTime ? `Ending at ${task.endTime}` : "Ending now";
   }
 
-  const useCustomAudio =
-    user?.notificationSoundMode === "ringtone" || user?.notificationSoundMode === "custom";
-
   try {
-    new Notification(title, {
+    await showTaskNotification({
+      title,
       body,
-      icon: ICON,
-      badge: ICON,
       tag: notif.id,
-      requireInteraction: false,
-      silent: useCustomAudio,
-    });
-  } catch {
-    // Notification may fail in some environments
-  }
-
-  try {
-    await playNotificationSound({
       mode: user?.notificationSoundMode ?? "normal",
       customSoundUrl: user?.customSoundUrl,
     });
   } catch {
-    // Sound is best-effort
+    // Notification / sound may fail in some environments
   }
 
   await markNotificationFired(notif.id);

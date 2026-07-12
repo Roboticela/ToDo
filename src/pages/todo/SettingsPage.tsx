@@ -46,6 +46,8 @@ import {
   prefetchCustomSound,
   clearCustomSoundCache,
 } from "../../lib/notificationSound";
+import { previewNotificationSound } from "../../lib/nativeNotification";
+import { getOsKind } from "../../lib/platform";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
@@ -230,13 +232,10 @@ export default function SettingsPage() {
   async function handlePreviewSound() {
     setSoundError(null);
     try {
-      await playNotificationSound({
-        mode: soundMode === "normal" ? "ringtone" : soundMode,
+      await previewNotificationSound({
+        mode: soundMode,
         customSoundUrl: currentUser.customSoundUrl,
       });
-      if (soundMode === "normal") {
-        // Preview uses ringtone since "normal" has no app-owned tone
-      }
     } catch {
       setSoundError("Could not play preview.");
     }
@@ -430,7 +429,7 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium text-foreground">Task reminders</p>
                 <p className="text-xs text-foreground/50 mt-0.5">
                   {taskNotifsOn
-                    ? "Notify you when timed tasks start or end."
+                    ? "Uses your device’s default notification sound (Windows, macOS, Linux, Android, iOS)."
                     : "Task reminders are off."}
                 </p>
               </div>
@@ -487,8 +486,16 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
-                      { id: "normal" as const, label: "Normal", hint: "System" },
-                      { id: "ringtone" as const, label: "Ringtone", hint: "Built-in" },
+                      {
+                        id: "normal" as const,
+                        label: "Normal",
+                        hint: osSoundHint(),
+                      },
+                      {
+                        id: "ringtone" as const,
+                        label: "Ringtone",
+                        hint: osRingtoneHint(),
+                      },
                       { id: "custom" as const, label: "Custom", hint: "Your file" },
                     ] as const
                   ).map((opt) => (
@@ -553,7 +560,7 @@ export default function SettingsPage() {
                   className="h-9 px-3 rounded-xl border border-border text-xs font-medium text-foreground/80 hover:bg-accent/30 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
                 >
                   <Play className="w-3.5 h-3.5" />
-                  {soundMode === "normal" ? "Preview ringtone" : "Preview sound"}
+                  Preview sound
                 </button>
               </div>
             </>

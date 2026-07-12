@@ -179,4 +179,6 @@ export interface TaskFormData {
   endTime?: string;
   isRepeating: boolean;
   repeatDays: RepeatDay[];
+  /** If set, repeating task only shows on dates <= endDate (YYYY-MM-DD). */
+  endDate?: string;
 }

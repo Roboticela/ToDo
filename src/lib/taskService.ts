@@ -34,6 +34,7 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
     endTime: data.endTime,
     isRepeating,
     repeatDays: isRepeating ? data.repeatDays : [],
+    endDate: data.endDate,
     status: "pending",
     syncStatus: "pending",
     createdAt: now,
