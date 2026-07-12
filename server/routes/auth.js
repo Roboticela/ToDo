@@ -12,7 +12,7 @@ import {
   sendVerificationEmail,
   sendEmailChangeEmail,
 } from "../services/emailService.js";
-import { uploadAvatarFromUrl } from "../services/r2Service.js";
+import { uploadAvatarFromUrl, isR2ApiEndpointUrl } from "../services/r2Service.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
 
@@ -520,12 +520,18 @@ router.get("/google/callback", async (req, res) => {
     }
   }
 
-  if (googlePictureUrl && !user.avatarUrl) {
+  // Upload Google photo to R2 when public access is configured; otherwise store Google URL.
+  // Also refresh if a previous run saved a non-public R2 API endpoint URL (InvalidArgument in browser).
+  const needsAvatar =
+    googlePictureUrl &&
+    (!user.avatarUrl || isR2ApiEndpointUrl(user.avatarUrl));
+  if (needsAvatar) {
     const r2AvatarUrl = await uploadAvatarFromUrl(googlePictureUrl, user.id);
-    if (r2AvatarUrl) {
+    const avatarUrl = r2AvatarUrl || googlePictureUrl;
+    if (avatarUrl !== user.avatarUrl) {
       user = await prisma.user.update({
         where: { id: user.id },
-        data: { avatarUrl: r2AvatarUrl },
+        data: { avatarUrl },
       });
     }
   }
