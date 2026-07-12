@@ -19,6 +19,7 @@ import { scheduleTaskNotifications } from "./notificationService";
 
 export async function createTask(userId: string, data: TaskFormData): Promise<Task> {
   const now = new Date().toISOString();
+  const isRepeating = data.isRepeating && data.repeatDays.length > 0;
   const task: Task = {
     id: uuidv4(),
     userId,
@@ -31,8 +32,8 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
     time: data.time,
     startTime: data.startTime,
     endTime: data.endTime,
-    isRepeating: data.isRepeating,
-    repeatDays: data.repeatDays,
+    isRepeating,
+    repeatDays: isRepeating ? data.repeatDays : [],
     status: "pending",
     syncStatus: "pending",
     createdAt: now,
@@ -47,9 +48,22 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
 // ─── Update Task ───────────────────────────────────────────────────────────────
 
 export async function updateTask(task: Task, data: Partial<TaskFormData>): Promise<Task> {
+  const isRepeating =
+    data.isRepeating !== undefined
+      ? Boolean(data.isRepeating && (data.repeatDays ?? task.repeatDays).length > 0)
+      : task.isRepeating;
+  const repeatDays =
+    data.isRepeating === false
+      ? []
+      : data.repeatDays !== undefined
+        ? data.repeatDays
+        : task.repeatDays;
+
   const updated: Task = {
     ...task,
     ...data,
+    isRepeating,
+    repeatDays: isRepeating ? repeatDays : [],
     updatedAt: new Date().toISOString(),
     syncStatus: "pending",
   };
@@ -72,23 +86,48 @@ export async function deleteTask(taskId: string): Promise<void> {
 
 // ─── Complete Task ─────────────────────────────────────────────────────────────
 
+/** One completion row per (taskId, date) — upsert to avoid duplicates. */
+async function upsertCompletionForDate(
+  task: Task,
+  date: string,
+  status: "completed" | "skipped"
+): Promise<void> {
+  const now = new Date().toISOString();
+  const completions = await getCompletionsByTask(task.id);
+  const existing = completions.find((c) => c.date === date);
+  if (existing) {
+    await saveCompletion({
+      ...existing,
+      status,
+      completedAt: now,
+      syncStatus: "pending",
+    });
+    // Clean up any duplicate rows for the same date
+    for (const c of completions) {
+      if (c.date === date && c.id !== existing.id) {
+        const { deleteCompletion } = await import("./db");
+        await deleteCompletion(c.id);
+      }
+    }
+    return;
+  }
+  await saveCompletion({
+    id: uuidv4(),
+    taskId: task.id,
+    userId: task.userId,
+    date,
+    status,
+    completedAt: now,
+    syncStatus: "pending",
+  });
+}
+
 export async function completeTask(task: Task, date: string): Promise<void> {
   const now = new Date().toISOString();
 
   if (task.isRepeating) {
-    // For repeating tasks, create a completion record for this specific date
-    const completion: TaskCompletion = {
-      id: uuidv4(),
-      taskId: task.id,
-      userId: task.userId,
-      date,
-      status: "completed",
-      completedAt: now,
-      syncStatus: "pending",
-    };
-    await saveCompletion(completion);
+    await upsertCompletionForDate(task, date, "completed");
   } else {
-    // For one-time tasks, update the task itself
     const updated: Task = {
       ...task,
       status: "completed",
@@ -104,23 +143,7 @@ export async function completeTask(task: Task, date: string): Promise<void> {
 
 export async function skipTaskForDate(task: Task, date: string): Promise<void> {
   if (!task.isRepeating) return;
-  const now = new Date().toISOString();
-  const completions = await getCompletionsByTask(task.id);
-  const existing = completions.find((c) => c.date === date);
-  if (existing) {
-    await saveCompletion({ ...existing, status: "skipped", completedAt: now, syncStatus: "pending" });
-  } else {
-    const completion: TaskCompletion = {
-      id: uuidv4(),
-      taskId: task.id,
-      userId: task.userId,
-      date,
-      status: "skipped",
-      completedAt: now,
-      syncStatus: "pending",
-    };
-    await saveCompletion(completion);
-  }
+  await upsertCompletionForDate(task, date, "skipped");
 }
 
 // ─── Set end date for repeating task (stops showing after this date) ────────────
@@ -136,15 +159,24 @@ export async function setTaskEndDate(task: Task, endDate: string): Promise<Task>
   return updated;
 }
 
+/**
+ * Stop a repeating series starting at `fromDate` (inclusive).
+ * Sets endDate to the day before so fromDate and later no longer appear.
+ */
+export async function endRepeatingSeriesFromDate(task: Task, fromDate: string): Promise<Task> {
+  const d = new Date(fromDate + "T12:00:00");
+  d.setDate(d.getDate() - 1);
+  return setTaskEndDate(task, format(d, "yyyy-MM-dd"));
+}
+
 // ─── Uncomplete Task ───────────────────────────────────────────────────────────
 
 export async function uncompleteTask(task: Task, date: string): Promise<void> {
   if (task.isRepeating) {
-    // Find and remove completion for this date
     const completions = await getCompletionsByTask(task.id);
-    const comp = completions.find((c) => c.date === date);
-    if (comp) {
-      const { deleteCompletion } = await import("./db");
+    const comps = completions.filter((c) => c.date === date);
+    const { deleteCompletion } = await import("./db");
+    for (const comp of comps) {
       await deleteCompletion(comp.id);
     }
   } else {
@@ -164,27 +196,25 @@ export async function uncompleteTask(task: Task, date: string): Promise<void> {
 export async function getTasksForDate(userId: string, date: string): Promise<Task[]> {
   const dayOfWeek = new Date(date + "T12:00:00").getDay() as RepeatDay;
 
-  // Get tasks directly assigned to this date
-  const directTasks = await getTasksByUserAndDate(userId, date);
+  // One-time tasks assigned to this date only (repeating tasks use weekday matching below)
+  const directTasks = (await getTasksByUserAndDate(userId, date)).filter((t) => !t.isRepeating);
 
-  // Get repeating tasks that match this weekday, on or after start date, and before endDate (if set)
+  // Repeating tasks that match this weekday, on or after start date, and before/on endDate (if set)
   const repeatTasks = await getRepeatTasksByUser(userId);
-  const [dateCompletions] = await Promise.all([
-    getCompletionsByUserAndDate(userId, date),
-  ]);
+  const dateCompletions = await getCompletionsByUserAndDate(userId, date);
   const skippedTaskIds = new Set(
     dateCompletions.filter((c) => c.status === "skipped").map((c) => c.taskId)
   );
 
   const matchingRepeat = repeatTasks.filter(
     (t) =>
+      Array.isArray(t.repeatDays) &&
       t.repeatDays.includes(dayOfWeek) &&
       date >= t.date &&
       (!t.endDate || date <= t.endDate) &&
       !skippedTaskIds.has(t.id)
   );
 
-  // Merge, avoiding duplicates
   const seen = new Set(directTasks.map((t) => t.id));
   const all = [...directTasks];
   for (const t of matchingRepeat) {
@@ -228,6 +258,10 @@ export async function getAnalyticsForDateRange(
   missedTasks: number;
   inProgressTasks: number;
   completionRate: number;
+  doCompleted: number;
+  doMissed: number;
+  dontCompleted: number;
+  dontMissed: number;
   dailyStats: Array<{
     date: string;
     completed: number;
@@ -253,6 +287,10 @@ export async function getAnalyticsForDateRange(
   let completedTasks = 0;
   let missedTasks = 0;
   let inProgressTasks = 0;
+  let doCompleted = 0;
+  let doMissed = 0;
+  let dontCompleted = 0;
+  let dontMissed = 0;
   const dailyStats: Array<{
     date: string;
     completed: number;
@@ -278,8 +316,12 @@ export async function getAnalyticsForDateRange(
         : task.status === "completed";
       if (isCompleted) {
         dayCompleted++;
+        if (task.category === "dont") dontCompleted++;
+        else doCompleted++;
       } else if (day < todayStr) {
         dayMissed++;
+        if (task.category === "dont") dontMissed++;
+        else doMissed++;
       } else {
         dayInProgress++;
       }
@@ -306,6 +348,10 @@ export async function getAnalyticsForDateRange(
     missedTasks,
     inProgressTasks,
     completionRate,
+    doCompleted,
+    doMissed,
+    dontCompleted,
+    dontMissed,
     dailyStats,
   };
 }

@@ -1,8 +1,18 @@
 import type { Task, ScheduledNotification } from "../types/todo";
-import { saveNotification, getPendingNotifications, markNotificationFired } from "./db";
+import {
+  saveNotification,
+  getPendingNotifications,
+  markNotificationFired,
+  getTask,
+} from "./db";
 import { v4 as uuidv4 } from "./uuid";
+import { format, addDays } from "date-fns";
 
 let notificationTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
+const ICON = "/favicon.svg";
+/** How many weeks ahead to schedule repeating timed reminders */
+const REPEAT_WEEKS_AHEAD = 8;
 
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!("Notification" in window)) return false;
@@ -16,51 +26,83 @@ export function isNotificationSupported(): boolean {
   return "Notification" in window;
 }
 
+/** Occurrence dates to schedule for a task (one-time = [date]; repeating = matching weekdays). */
+function getOccurrenceDates(task: Task): string[] {
+  if (!task.isRepeating || !task.repeatDays?.length) {
+    return [task.date];
+  }
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const start = task.date > today ? task.date : today;
+  const horizon = format(addDays(new Date(), REPEAT_WEEKS_AHEAD * 7), "yyyy-MM-dd");
+  const end = task.endDate && task.endDate < horizon ? task.endDate : horizon;
+
+  const dates: string[] = [];
+  let cur = new Date(start + "T12:00:00");
+  const endDate = new Date(end + "T12:00:00");
+  while (cur <= endDate) {
+    const ymd = format(cur, "yyyy-MM-dd");
+    const dow = cur.getDay();
+    if (task.repeatDays.includes(dow as 0 | 1 | 2 | 3 | 4 | 5 | 6) && ymd >= task.date) {
+      dates.push(ymd);
+    }
+    cur = addDays(cur, 1);
+  }
+  return dates;
+}
+
 export async function scheduleTaskNotifications(task: Task): Promise<void> {
   if (task.type === "daily") return;
 
   const now = new Date();
+  const occurrenceDates = getOccurrenceDates(task);
   const notifs: ScheduledNotification[] = [];
 
-  if (task.type === "time-based" && task.time) {
-    const scheduledAt = new Date(`${task.date}T${task.time}:00`);
-    if (scheduledAt > now) {
-      notifs.push({
-        id: uuidv4(),
-        taskId: task.id,
-        userId: task.userId,
-        scheduledAt: scheduledAt.toISOString(),
-        type: "reminder",
-        fired: false,
-      });
-    }
-  }
-
-  if (task.type === "duration") {
-    if (task.startTime) {
-      const startAt = new Date(`${task.date}T${task.startTime}:00`);
-      if (startAt > now) {
+  for (const date of occurrenceDates) {
+    if (task.type === "time-based" && task.time) {
+      const scheduledAt = new Date(`${date}T${task.time}:00`);
+      if (scheduledAt > now) {
         notifs.push({
           id: uuidv4(),
           taskId: task.id,
           userId: task.userId,
-          scheduledAt: startAt.toISOString(),
-          type: "start",
+          scheduledAt: scheduledAt.toISOString(),
+          type: "reminder",
           fired: false,
         });
       }
     }
-    if (task.endTime) {
-      const endAt = new Date(`${task.date}T${task.endTime}:00`);
-      if (endAt > now) {
-        notifs.push({
-          id: uuidv4(),
-          taskId: task.id,
-          userId: task.userId,
-          scheduledAt: endAt.toISOString(),
-          type: "end",
-          fired: false,
-        });
+
+    if (task.type === "duration") {
+      if (task.startTime) {
+        const startAt = new Date(`${date}T${task.startTime}:00`);
+        if (startAt > now) {
+          notifs.push({
+            id: uuidv4(),
+            taskId: task.id,
+            userId: task.userId,
+            scheduledAt: startAt.toISOString(),
+            type: "start",
+            fired: false,
+          });
+        }
+      }
+      if (task.endTime) {
+        let endAt = new Date(`${date}T${task.endTime}:00`);
+        // Overnight duration: end time is next calendar day
+        if (task.startTime && task.endTime <= task.startTime) {
+          endAt = addDays(endAt, 1);
+        }
+        if (endAt > now) {
+          notifs.push({
+            id: uuidv4(),
+            taskId: task.id,
+            userId: task.userId,
+            scheduledAt: endAt.toISOString(),
+            type: "end",
+            fired: false,
+          });
+        }
       }
     }
   }
@@ -103,8 +145,8 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
   try {
     new Notification(title, {
       body,
-      icon: "/Favicon.svg",
-      badge: "/Favicon.svg",
+      icon: ICON,
+      badge: ICON,
       tag: notif.id,
       requireInteraction: false,
     });
@@ -122,22 +164,28 @@ export async function initNotificationScheduler(): Promise<void> {
   for (const notif of pending) {
     const scheduledAt = new Date(notif.scheduledAt);
     if (scheduledAt > now) {
-      // Re-schedule timer (we need task info, so just save minimal info)
       const delay = scheduledAt.getTime() - now.getTime();
       if (delay < 7 * 24 * 60 * 60 * 1000) {
         const timerId = setTimeout(async () => {
           if (Notification.permission === "granted") {
+            const task = await getTask(notif.taskId);
             try {
-              new Notification("Roboticela ToDo", {
-                body: `You have a scheduled task reminder`,
-                icon: "/Favicon.svg",
-                tag: notif.id,
-              });
+              if (task) {
+                await fireNotification(notif, task);
+              } else {
+                new Notification("Roboticela ToDo", {
+                  body: "You have a scheduled task reminder",
+                  icon: ICON,
+                  tag: notif.id,
+                });
+                await markNotificationFired(notif.id);
+              }
             } catch {
               // ignore
             }
+          } else {
+            await markNotificationFired(notif.id);
           }
-          await markNotificationFired(notif.id);
           notificationTimers.delete(notif.id);
         }, delay);
         notificationTimers.set(notif.id, timerId);
