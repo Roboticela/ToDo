@@ -131,7 +131,11 @@ export default function CalendarPage() {
     if (!selectedDay) return;
     const reload = () => loadDayTasks(selectedDay);
     window.addEventListener("tasks-synced", reload);
-    return () => window.removeEventListener("tasks-synced", reload);
+    window.addEventListener("tasks-changed", reload);
+    return () => {
+      window.removeEventListener("tasks-synced", reload);
+      window.removeEventListener("tasks-changed", reload);
+    };
   }, [selectedDay, loadDayTasks]);
 
   // Also reload after local mutations by wrapping completion callback

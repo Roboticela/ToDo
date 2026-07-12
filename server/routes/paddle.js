@@ -164,33 +164,44 @@ export async function handlePaddleWebhook(req, res) {
       }
     } else if (eventType === "subscription.updated") {
       const sub = data;
+      const customData = sub.custom_data || {};
+      const userId = customData.user_id;
       const existing = await prisma.subscription.findFirst({
         where: { id: sub.id },
       });
-      if (existing) {
-        const customData = sub.custom_data || {};
-        const planFromCustom =
-          customData.plan === "pro" || customData.plan === "basic" ? customData.plan : null;
-        const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
-        const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
-        const plan =
-          planFromCustom ||
-          (priceId.includes("pro") || productId.includes("pro")
-            ? "pro"
-            : priceId.includes("basic") || productId.includes("basic")
-              ? "basic"
-              : existing.plan);
-        const periodEnd = sub.current_billing_period?.ends_at;
-        await prisma.subscription.update({
-          where: { id: existing.id },
-          data: {
+      const planFromCustom =
+        customData.plan === "pro" || customData.plan === "basic" ? customData.plan : null;
+      const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
+      const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
+      const plan =
+        planFromCustom ||
+        (priceId.includes("pro") || productId.includes("pro")
+          ? "pro"
+          : priceId.includes("basic") || productId.includes("basic")
+            ? "basic"
+            : existing?.plan || "basic");
+      const periodEnd = sub.current_billing_period?.ends_at;
+      const ownerId = existing?.userId || userId;
+      if (ownerId && sub.id) {
+        await prisma.subscription.upsert({
+          where: { id: sub.id },
+          create: {
+            id: sub.id,
+            userId: ownerId,
+            paddleSubscriptionId: sub.id,
+            paddleCustomerId: sub.customer_id,
+            plan,
+            status: sub.status || "active",
+            currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+          },
+          update: {
             plan,
             status: sub.status || "active",
             currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
           },
         });
         await prisma.user.update({
-          where: { id: existing.userId },
+          where: { id: ownerId },
           data: {
             plan,
             planExpiresAt: periodEnd ? new Date(periodEnd) : null,

@@ -71,17 +71,17 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   const setSelectedDate = useCallback(
     (date: string) => {
-      const { date: next, clamped } = clampDateToHistory(date, user?.plan);
+      const { date: next, clamped } = clampDateToHistory(date, user?.plan, user?.planExpiresAt);
       setHistoryClamped(clamped);
       setSelectedDateState(next);
     },
-    [user?.plan]
+    [user?.plan, user?.planExpiresAt]
   );
 
   const createTask = useCallback(
     async (data: TaskFormData): Promise<Task> => {
       if (!user) throw new Error("Not authenticated");
-      await assertCanCreateTask(user.id, user.plan, data);
+      await assertCanCreateTask(user.id, user.plan, data, user.planExpiresAt);
       const task = await svcCreate(user.id, data);
       await refreshTasks();
       scheduleSync();
@@ -98,7 +98,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         data.isRepeating !== undefined
           ? Boolean(data.isRepeating && (data.repeatDays ?? task.repeatDays).length > 0)
           : task.isRepeating;
-      await assertCanEnableRepeating(user.id, user.plan, task.isRepeating, willRepeat);
+      await assertCanEnableRepeating(user.id, user.plan, task.isRepeating, willRepeat, user.planExpiresAt);
       if (data.date && data.date !== task.date) {
         await assertCanMoveTaskToDate(
           user.id,
@@ -106,7 +106,8 @@ export function TaskProvider({ children }: { children: ReactNode }) {
           task.id,
           task.date,
           data.date,
-          willRepeat
+          willRepeat,
+          user.planExpiresAt
         );
       }
       const updated = await svcUpdate(task, data);

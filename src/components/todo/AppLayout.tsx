@@ -73,6 +73,17 @@ export default function AppLayout() {
     return () => clearAllTimers();
   }, [isAuthenticated]);
 
+  // Rebuild reminder schedule after sync (completions/times may have changed on another device)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const rebuild = () => {
+      clearAllTimers();
+      void initNotificationScheduler();
+    };
+    window.addEventListener("tasks-synced", rebuild);
+    return () => window.removeEventListener("tasks-synced", rebuild);
+  }, [isAuthenticated]);
+
   if (isLoading) {
     return (
       <motion.div

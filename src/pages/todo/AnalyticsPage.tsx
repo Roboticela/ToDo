@@ -181,7 +181,7 @@ export default function AnalyticsPage() {
     setEffectiveTo(endDate);
 
     // Clamp to plan history window (e.g. Basic = 14 days)
-    const cutoff = getHistoryCutoff(user.plan);
+    const cutoff = getHistoryCutoff(user.plan, user.planExpiresAt);
     if (cutoff && startDate < cutoff) {
       startDate = cutoff;
       setEffectiveFrom(startDate);

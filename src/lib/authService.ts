@@ -61,18 +61,7 @@ export async function login(
     throw new Error(errBody.error || "Invalid email or password");
   } catch (err: unknown) {
     if (err instanceof Error && (err.name === "AbortError" || err.name === "TypeError")) {
-      // Offline: resume only an existing server-issued session for this email.
-      // Never skip password verification or create phantom local accounts.
-      const existingSession = await getAnySession();
-      if (existingSession && !existingSession.accessToken.startsWith("local_")) {
-        const existingUser = await getUser(existingSession.userId);
-        if (
-          existingUser &&
-          existingUser.email.toLowerCase() === email.trim().toLowerCase()
-        ) {
-          return { user: existingUser, session: existingSession };
-        }
-      }
+      // Never resume a session without verifying the password.
       throw new Error(
         "You're offline. Connect to the internet to sign in with this account."
       );

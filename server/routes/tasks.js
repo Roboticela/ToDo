@@ -407,33 +407,74 @@ router.post("/sync", requireAuth, async (req, res) => {
   for (const c of completions) {
     if (!c.id || !c.taskId || !c.date || !c.status) continue;
 
-    const existingComp = await prisma.taskCompletion.findUnique({ where: { id: c.id } });
-    if (existingComp && existingComp.userId !== userId) continue;
-
     // Ensure completion belongs to a task owned by this user
     const task = await prisma.task.findFirst({ where: { id: c.taskId, userId } });
     if (!task) continue;
 
-    clientCompletionIds.push(c.id);
-    await prisma.taskCompletion.upsert({
-      where: { id: c.id },
-      create: {
-        id: c.id,
-        taskId: c.taskId,
-        userId,
-        date: c.date,
-        status: c.status,
-        completedAt: c.completedAt ? new Date(c.completedAt) : new Date(),
-      },
-      update: {
-        date: c.date,
-        status: c.status,
-        completedAt: c.completedAt ? new Date(c.completedAt) : undefined,
-      },
+    const clientAt = c.completedAt ? new Date(c.completedAt) : new Date();
+    const existingByPair = await prisma.taskCompletion.findUnique({
+      where: { taskId_date: { taskId: c.taskId, date: c.date } },
     });
+
+    if (existingByPair) {
+      if (existingByPair.userId !== userId) continue;
+      // Last-write-wins on completedAt
+      if (clientAt.getTime() < existingByPair.completedAt.getTime()) {
+        clientCompletionIds.push(existingByPair.id);
+        continue;
+      }
+      await prisma.taskCompletion.update({
+        where: { id: existingByPair.id },
+        data: {
+          status: c.status,
+          completedAt: clientAt,
+        },
+      });
+      clientCompletionIds.push(existingByPair.id);
+      // Drop orphan row if client used a different id for the same (taskId, date)
+      if (c.id !== existingByPair.id) {
+        await prisma.taskCompletion.deleteMany({
+          where: { id: c.id, userId },
+        });
+      }
+      continue;
+    }
+
+    const existingById = await prisma.taskCompletion.findUnique({ where: { id: c.id } });
+    if (existingById && existingById.userId !== userId) continue;
+
+    if (existingById) {
+      // Same id, different date — treat as move; unique on new pair is free
+      if (clientAt.getTime() < existingById.completedAt.getTime() && existingById.date === c.date) {
+        clientCompletionIds.push(existingById.id);
+        continue;
+      }
+      await prisma.taskCompletion.update({
+        where: { id: c.id },
+        data: {
+          taskId: c.taskId,
+          date: c.date,
+          status: c.status,
+          completedAt: clientAt,
+        },
+      });
+      clientCompletionIds.push(c.id);
+    } else {
+      await prisma.taskCompletion.create({
+        data: {
+          id: c.id,
+          taskId: c.taskId,
+          userId,
+          date: c.date,
+          status: c.status,
+          completedAt: clientAt,
+        },
+      });
+      clientCompletionIds.push(c.id);
+    }
   }
 
-  // Prune completions only for tasks the client actually sent.
+  // Prune completions only for tasks the client actually applied.
   // Empty local DB (fresh device) sends no tasks → skip delete → server data is returned intact.
   if (clientTaskIds.length > 0) {
     await prisma.taskCompletion.deleteMany({

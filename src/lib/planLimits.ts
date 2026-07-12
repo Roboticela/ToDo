@@ -19,13 +19,24 @@ export class PlanLimitError extends Error {
   }
 }
 
-function normalizePlan(plan: string | undefined): SubscriptionPlan {
-  if (plan === "basic" || plan === "pro" || plan === "lifetime") return plan;
-  return "free";
+/** Effective plan on the client, mirroring server getEffectivePlan (honours planExpiresAt). */
+export function getEffectiveClientPlan(
+  plan: string | undefined,
+  planExpiresAt?: string | null
+): SubscriptionPlan {
+  let p: SubscriptionPlan = "free";
+  if (plan === "basic" || plan === "pro" || plan === "lifetime") p = plan;
+  if (p !== "free" && p !== "lifetime" && planExpiresAt && new Date(planExpiresAt) < new Date()) {
+    return "free";
+  }
+  return p;
 }
 
-export function getHistoryCutoff(plan: string | undefined): string | null {
-  const features = PLAN_FEATURES[normalizePlan(plan)];
+export function getHistoryCutoff(
+  plan: string | undefined,
+  planExpiresAt?: string | null
+): string | null {
+  const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.historyDays == null) return null;
   return format(subDays(new Date(), features.historyDays - 1), "yyyy-MM-dd");
 }
@@ -33,12 +44,12 @@ export function getHistoryCutoff(plan: string | undefined): string | null {
 /** Clamp a browsable date to the plan's history window (past only). */
 export function clampDateToHistory(
   date: string,
-  plan: string | undefined
+  plan: string | undefined,
+  planExpiresAt?: string | null
 ): { date: string; clamped: boolean } {
-  const cutoff = getHistoryCutoff(plan);
+  const cutoff = getHistoryCutoff(plan, planExpiresAt);
   const today = getTodayString();
   if (!cutoff) return { date, clamped: false };
-  // Allow today and future; only restrict how far back
   if (date < cutoff) return { date: cutoff, clamped: true };
   if (date > today) return { date, clamped: false };
   return { date, clamped: false };
@@ -47,9 +58,10 @@ export function clampDateToHistory(
 export async function assertCanCreateTask(
   userId: string,
   plan: string | undefined,
-  data: TaskFormData
+  data: TaskFormData,
+  planExpiresAt?: string | null
 ): Promise<void> {
-  const features = PLAN_FEATURES[normalizePlan(plan)];
+  const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
 
   if (data.isRepeating && data.repeatDays.length > 0 && features.maxRepeatTasks != null) {
     const repeats = await getRepeatTasksByUser(userId);
@@ -64,7 +76,6 @@ export async function assertCanCreateTask(
 
   if (features.maxDailyTasks != null) {
     const existing = await getTasksForDate(userId, data.date);
-    // Creating a repeating task also adds an occurrence on matching days; count against start date
     if (existing.length >= features.maxDailyTasks) {
       throw new PlanLimitError(
         "MAX_DAILY_TASKS",
@@ -80,10 +91,11 @@ export async function assertCanEnableRepeating(
   userId: string,
   plan: string | undefined,
   currentlyRepeating: boolean,
-  willBeRepeating: boolean
+  willBeRepeating: boolean,
+  planExpiresAt?: string | null
 ): Promise<void> {
   if (currentlyRepeating || !willBeRepeating) return;
-  const features = PLAN_FEATURES[normalizePlan(plan)];
+  const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.maxRepeatTasks == null) return;
   const repeats = await getRepeatTasksByUser(userId);
   if (repeats.length >= features.maxRepeatTasks) {
@@ -102,10 +114,11 @@ export async function assertCanMoveTaskToDate(
   taskId: string,
   fromDate: string,
   toDate: string,
-  isRepeating: boolean
+  isRepeating: boolean,
+  planExpiresAt?: string | null
 ): Promise<void> {
   if (isRepeating || fromDate === toDate) return;
-  const features = PLAN_FEATURES[normalizePlan(plan)];
+  const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.maxDailyTasks == null) return;
   const existing = await getTasksForDate(userId, toDate);
   const others = existing.filter((t) => t.id !== taskId);
@@ -122,7 +135,6 @@ export async function countVisibleTasksOnDate(userId: string, date: string): Pro
   return (await getTasksForDate(userId, date)).length;
 }
 
-/** Used by server-side logic docs; client uses getTasksForDate. */
 export async function countAllUserTasks(userId: string): Promise<number> {
   return (await getAllTasksByUser(userId)).length;
 }

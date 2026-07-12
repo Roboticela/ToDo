@@ -98,6 +98,8 @@ model TaskCompletion {
 
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, date])
 }
 
 model Subscription {

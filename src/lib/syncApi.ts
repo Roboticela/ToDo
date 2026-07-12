@@ -10,11 +10,14 @@ import {
 } from "./db";
 import { getApiBase } from "./apiBase";
 
-export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]; completions: TaskCompletion[] } | null> {
-  // Refresh access token before sync if needed
+export type SyncResult =
+  | { ok: true; tasks: Task[]; completions: TaskCompletion[] }
+  | { ok: false; reason: "no_session" | "busy" | "error"; message?: string };
+
+async function doSync(userId: string): Promise<SyncResult> {
   const { refreshSession } = await import("./authService");
   let session = await getSession(userId);
-  if (!session) return null;
+  if (!session) return { ok: false, reason: "no_session" };
   if (!session.accessToken.startsWith("local_")) {
     const expiresSoon = new Date(session.expiresAt).getTime() - Date.now() < 60_000;
     if (expiresSoon) {
@@ -23,8 +26,9 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
     }
   }
   session = (await getSession(userId)) || session;
-  if (!session) return null;
+  if (!session) return { ok: false, reason: "no_session" };
 
+  const syncStartedAt = new Date().toISOString();
   const [tasks, completions] = await Promise.all([
     getAllTasksByUserForSync(userId),
     getAllCompletionsByUser(userId),
@@ -81,7 +85,6 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
   const serverTasks: Task[] = data.tasks || [];
   const serverCompletions: TaskCompletion[] = data.completions || [];
 
-  // Capture local state after the round-trip (includes in-flight edits)
   const [liveTasks, liveComps] = await Promise.all([
     getAllTasksByUserForSync(userId),
     getAllCompletionsByUser(userId),
@@ -90,27 +93,69 @@ export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]
 
   await replaceTasksAndCompletionsFromServer(userId, serverTasks, serverCompletions);
 
-  // Re-apply in-flight local edits that are newer than the server snapshot
+  // Re-apply only true in-flight edits (newer than server, or created during this round-trip).
+  // Do not resurrect over-limit orphans the server rejected.
   for (const t of liveTasks) {
     if (t.syncStatus !== "pending") continue;
     const s = serverTasks.find((x) => x.id === t.id);
-    if (!s || (t.updatedAt && s.updatedAt && t.updatedAt > s.updatedAt)) {
+    if (s && t.updatedAt && s.updatedAt && t.updatedAt > s.updatedAt) {
+      await saveTask({ ...t, syncStatus: "pending" });
+    } else if (!s && t.updatedAt && t.updatedAt > syncStartedAt) {
       await saveTask({ ...t, syncStatus: "pending" });
     }
   }
   for (const c of liveComps) {
     if (c.syncStatus !== "pending") continue;
-    const s = serverCompletions.find((x) => x.id === c.id);
-    if (!s || (c.completedAt && s.completedAt && c.completedAt > s.completedAt)) {
+    const s =
+      serverCompletions.find((x) => x.id === c.id) ||
+      serverCompletions.find((x) => x.taskId === c.taskId && x.date === c.date);
+    if (s && c.completedAt && s.completedAt && c.completedAt > s.completedAt) {
+      await saveCompletion({ ...c, syncStatus: "pending" });
+    } else if (!s && c.completedAt && c.completedAt > syncStartedAt) {
       await saveCompletion({ ...c, syncStatus: "pending" });
     }
   }
-  // Re-delete completions removed locally after the outbound snapshot was taken
   for (const id of snapshotCompIds) {
     if (!liveCompIds.has(id) && serverCompletions.some((c) => c.id === id)) {
       await deleteCompletion(id);
     }
   }
 
-  return { tasks: serverTasks, completions: serverCompletions };
+  return { ok: true, tasks: serverTasks, completions: serverCompletions };
+}
+
+/** Sync under a cross-tab lock so overlapping replaces cannot clobber local DB. */
+export async function syncTasksToServer(userId: string): Promise<SyncResult> {
+  const lockName = `todo-sync-${userId}`;
+  if (typeof navigator !== "undefined" && navigator.locks?.request) {
+    return navigator.locks.request(lockName, { ifAvailable: true }, async (lock) => {
+      if (!lock) return { ok: false as const, reason: "busy" as const };
+      return doSync(userId);
+    });
+  }
+
+  // Fallback: localStorage lock with TTL
+  const key = `todo-sync-lock:${userId}`;
+  const now = Date.now();
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw) as { at: number };
+      if (now - parsed.at < 30_000) {
+        return { ok: false, reason: "busy" };
+      }
+    }
+    localStorage.setItem(key, JSON.stringify({ at: now }));
+  } catch {
+    // ignore storage errors
+  }
+  try {
+    return await doSync(userId);
+  } finally {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
 }

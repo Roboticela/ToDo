@@ -37,17 +37,21 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     try {
       if (user) {
         const result = await syncTasksToServer(user.id);
-        if (result) {
+        if (result.ok) {
           setLastSyncAt(new Date().toISOString());
           setSyncError(null);
           window.dispatchEvent(new CustomEvent("tasks-synced"));
+        } else if (result.reason === "busy") {
+          // Another tab is syncing — not an error
+          setSyncError(null);
+        } else if (result.reason === "no_session") {
+          setSyncError("Sign in again to sync");
         } else {
-          setSyncError("Sync failed");
+          setSyncError(result.message || "Sync failed");
         }
       }
       const { getSyncQueue } = await import("../lib/db");
       const queue = await getSyncQueue();
-      // Queue is informational; primary sync path is syncTasksToServer above.
       setPendingCount(queue.length);
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : "Sync failed");

@@ -47,13 +47,18 @@ router.patch("/:userId", requireAuth, async (req, res) => {
     }
   }
   if (avatarUrl !== undefined) {
-    if (req.user.avatarUrl) {
-      await deleteAvatarByUrl(req.user.avatarUrl);
-    }
     if (typeof avatarUrl === "string" && avatarUrl.trim()) {
       if (avatarUrl.startsWith("data:")) {
         const r2Url = await uploadAvatarFromDataUrl(avatarUrl, req.user.id);
-        updates.avatarUrl = r2Url || req.user.avatarUrl;
+        if (!r2Url) {
+          return res.status(502).json({ error: "Avatar upload failed. Please try again." });
+        }
+        const previous = req.user.avatarUrl;
+        updates.avatarUrl = r2Url;
+        // Delete old object only after the new upload succeeds
+        if (previous && previous !== r2Url) {
+          await deleteAvatarByUrl(previous);
+        }
       } else {
         // Only allow our R2 public host (or clearing); reject arbitrary third-party URLs
         const publicBase = (config.r2?.publicUrl || "").replace(/\/$/, "");
@@ -65,6 +70,9 @@ router.patch("/:userId", requireAuth, async (req, res) => {
         }
       }
     } else {
+      if (req.user.avatarUrl) {
+        await deleteAvatarByUrl(req.user.avatarUrl);
+      }
       updates.avatarUrl = null;
     }
   }

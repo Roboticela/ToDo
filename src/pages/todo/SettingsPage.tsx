@@ -157,7 +157,12 @@ export default function SettingsPage() {
       if (!window.confirm(`Import ${count} task${count === 1 ? "" : "s"}? They will be added to your account.`)) {
         return;
       }
-      const result = await importTasksFromData(currentUser.id, data, currentUser.plan);
+      const result = await importTasksFromData(
+        currentUser.id,
+        data,
+        currentUser.plan,
+        currentUser.planExpiresAt
+      );
       await refreshTasks();
       scheduleSync();
       if (result.errors.length > 0) {

@@ -162,6 +162,10 @@ export async function skipTaskForDate(task: Task, date: string): Promise<void> {
     updatedAt: new Date().toISOString(),
     syncStatus: "pending",
   });
+  await cancelTimersForTask(task.id);
+  await deleteNotificationsByTask(task.id);
+  const fresh = await getTask(task.id);
+  if (fresh) await scheduleTaskNotifications(fresh);
 }
 
 // ─── Set end date for repeating task (stops showing after this date) ────────────
@@ -174,6 +178,9 @@ export async function setTaskEndDate(task: Task, endDate: string): Promise<Task>
     syncStatus: "pending",
   };
   await saveTask(updated);
+  await cancelTimersForTask(task.id);
+  await deleteNotificationsByTask(task.id);
+  await scheduleTaskNotifications(updated);
   return updated;
 }
 
@@ -202,6 +209,10 @@ export async function uncompleteTask(task: Task, date: string): Promise<void> {
       updatedAt: new Date().toISOString(),
       syncStatus: "pending",
     });
+    await cancelTimersForTask(task.id);
+    await deleteNotificationsByTask(task.id);
+    const fresh = await getTask(task.id);
+    if (fresh) await scheduleTaskNotifications(fresh);
   } else {
     const updated: Task = {
       ...task,
@@ -211,6 +222,8 @@ export async function uncompleteTask(task: Task, date: string): Promise<void> {
       syncStatus: "pending",
     };
     await saveTask(updated);
+    await cancelTimersForTask(task.id);
+    await deleteNotificationsByTask(task.id);
     await scheduleTaskNotifications(updated);
   }
 }
@@ -226,9 +239,18 @@ export async function getTasksForDate(userId: string, date: string): Promise<Tas
   // Repeating tasks that match this weekday, on or after start date, and before/on endDate (if set)
   const repeatTasks = await getRepeatTasksByUser(userId);
   const dateCompletions = await getCompletionsByUserAndDate(userId, date);
-  const skippedTaskIds = new Set(
-    dateCompletions.filter((c) => c.status === "skipped").map((c) => c.taskId)
-  );
+  // Prefer completed over skipped when duplicate rows exist for the same task/day
+  const skippedTaskIds = new Set<string>();
+  const byTask = new Map<string, string[]>();
+  for (const c of dateCompletions) {
+    const list = byTask.get(c.taskId) || [];
+    list.push(c.status);
+    byTask.set(c.taskId, list);
+  }
+  for (const [taskId, statuses] of byTask) {
+    if (statuses.includes("completed")) continue;
+    if (statuses.includes("skipped")) skippedTaskIds.add(taskId);
+  }
 
   const matchingRepeat = repeatTasks.filter(
     (t) =>
@@ -263,8 +285,11 @@ export async function getTaskCompletionForDate(
 ): Promise<{ isCompleted: boolean; completionId?: string }> {
   if (task.isRepeating) {
     const completions = await getCompletionsByUserAndDate(task.userId, date);
-    const comp = completions.find((c) => c.taskId === task.id);
-    return { isCompleted: !!comp && comp.status === "completed", completionId: comp?.id };
+    const rows = completions.filter((c) => c.taskId === task.id);
+    const completed = rows.find((c) => c.status === "completed");
+    if (completed) return { isCompleted: true, completionId: completed.id };
+    const any = rows[0];
+    return { isCompleted: false, completionId: any?.id };
   } else {
     return { isCompleted: task.status === "completed" };
   }
@@ -443,7 +468,8 @@ export async function getExportData(userId: string): Promise<ExportData> {
 export async function importTasksFromData(
   userId: string,
   data: unknown,
-  plan?: string
+  plan?: string,
+  planExpiresAt?: string | null
 ): Promise<{ imported: number; errors: string[] }> {
   const errors: string[] = [];
   const parsed = data as ExportData;
@@ -476,11 +502,12 @@ export async function importTasksFromData(
       repeatDays: Array.isArray(t.repeatDays) ? (t.repeatDays as RepeatDay[]) : [],
     };
     try {
-      await assertCanCreateTask(userId, plan, formData);
+      await assertCanCreateTask(userId, plan, formData, planExpiresAt);
       const created = await createTask(userId, formData);
       if (t.id) idMap.set(t.id, created.id);
+      let finalTask = created;
       if (t.endDate || t.status === "completed" || t.completedAt) {
-        const patched: Task = {
+        finalTask = {
           ...created,
           endDate: t.endDate,
           status: t.status === "completed" ? "completed" : created.status,
@@ -488,7 +515,12 @@ export async function importTasksFromData(
           updatedAt: new Date().toISOString(),
           syncStatus: "pending",
         };
-        await saveTask(patched);
+        await saveTask(finalTask);
+        await cancelTimersForTask(created.id);
+        await deleteNotificationsByTask(created.id);
+        if (finalTask.status !== "completed") {
+          await scheduleTaskNotifications(finalTask);
+        }
       }
       imported++;
     } catch (err) {
@@ -514,6 +546,17 @@ export async function importTasksFromData(
       } catch {
         // skip bad completion rows
       }
+    }
+  }
+
+  // Rebuild reminders for imported repeating/timed tasks after completions are applied
+  for (const newId of idMap.values()) {
+    const task = await getTask(newId);
+    if (!task || task.type === "daily") continue;
+    await cancelTimersForTask(task.id);
+    await deleteNotificationsByTask(task.id);
+    if (task.status !== "completed") {
+      await scheduleTaskNotifications(task);
     }
   }
 

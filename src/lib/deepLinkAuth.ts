@@ -53,6 +53,7 @@ export async function completeDesktopAuthWithCode(
     planExpiresAt: userData.planExpiresAt,
     emailVerifiedAt: userData.emailVerifiedAt,
     subscribedToReminders: userData.subscribedToReminders ?? true,
+    hasPassword: userData.hasPassword,
     createdAt: userData.createdAt,
   };
   const session: AuthSession = {
