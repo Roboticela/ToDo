@@ -8,9 +8,21 @@ import type { User, AuthSession } from "../../types/todo";
 /** Prevent StrictMode double-mount from consuming a one-time code twice */
 const exchangedCodes = new Set<string>();
 
+function readOAuthCode(searchParams: URLSearchParams): string | null {
+  // Prefer hash (not sent in Referer); fall back to query for older redirects
+  const hash = window.location.hash.startsWith("#")
+    ? window.location.hash.slice(1)
+    : window.location.hash;
+  if (hash) {
+    const fromHash = new URLSearchParams(hash).get("code");
+    if (fromHash) return fromHash;
+  }
+  return searchParams.get("code");
+}
+
 /**
  * Handles OAuth callback from backend redirect.
- * Web uses a one-time `code` query param (exchanged via API — tokens never appear in the URL).
+ * Web uses a one-time `code` in the URL hash (exchanged via API — tokens never appear).
  */
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -20,7 +32,7 @@ export default function AuthCallbackPage() {
   const startedRef = useRef(false);
 
   useEffect(() => {
-    const code = searchParams.get("code");
+    const code = readOAuthCode(searchParams);
     if (code) {
       if (exchangedCodes.has(code) || startedRef.current) return;
       startedRef.current = true;

@@ -218,11 +218,13 @@ export async function saveNotification(notif: ScheduledNotification): Promise<vo
   await db.put("notifications", notif);
 }
 
-export async function getPendingNotifications(): Promise<ScheduledNotification[]> {
-  if (isTauri()) return (await import("./dbTauri")).getPendingNotifications();
+export async function getPendingNotifications(userId?: string): Promise<ScheduledNotification[]> {
+  if (isTauri()) return (await import("./dbTauri")).getPendingNotifications(userId);
   const db = await getDB();
   const all = await db.getAll("notifications");
-  return all.filter((n: ScheduledNotification) => !n.fired);
+  return all.filter(
+    (n: ScheduledNotification) => !n.fired && (!userId || n.userId === userId)
+  );
 }
 
 export async function markNotificationFired(id: string): Promise<void> {

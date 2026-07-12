@@ -34,6 +34,7 @@ async function doSync(userId: string): Promise<SyncResult> {
     getAllCompletionsByUser(userId),
   ]);
   const snapshotCompIds = new Set(completions.map((c) => c.id));
+  const snapshotTaskIds = new Set(tasks.map((t) => t.id));
 
   const body = {
     tasks: tasks.map((t) => ({
@@ -94,13 +95,13 @@ async function doSync(userId: string): Promise<SyncResult> {
   await replaceTasksAndCompletionsFromServer(userId, serverTasks, serverCompletions);
 
   // Re-apply only true in-flight edits (newer than server, or created during this round-trip).
-  // Do not resurrect over-limit orphans the server rejected.
+  // Do not resurrect tasks the server rejected (were in snapshot but missing from response).
   for (const t of liveTasks) {
     if (t.syncStatus !== "pending") continue;
     const s = serverTasks.find((x) => x.id === t.id);
     if (s && t.updatedAt && s.updatedAt && t.updatedAt > s.updatedAt) {
       await saveTask({ ...t, syncStatus: "pending" });
-    } else if (!s && t.updatedAt && t.updatedAt > syncStartedAt) {
+    } else if (!s && t.updatedAt && t.updatedAt > syncStartedAt && !snapshotTaskIds.has(t.id)) {
       await saveTask({ ...t, syncStatus: "pending" });
     }
   }
@@ -111,7 +112,12 @@ async function doSync(userId: string): Promise<SyncResult> {
       serverCompletions.find((x) => x.taskId === c.taskId && x.date === c.date);
     if (s && c.completedAt && s.completedAt && c.completedAt > s.completedAt) {
       await saveCompletion({ ...c, syncStatus: "pending" });
-    } else if (!s && c.completedAt && c.completedAt > syncStartedAt) {
+    } else if (
+      !s &&
+      c.completedAt &&
+      c.completedAt > syncStartedAt &&
+      !snapshotCompIds.has(c.id)
+    ) {
       await saveCompletion({ ...c, syncStatus: "pending" });
     }
   }

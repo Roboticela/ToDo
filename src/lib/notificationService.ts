@@ -184,8 +184,8 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
   await markNotificationFired(notif.id);
 }
 
-export async function initNotificationScheduler(): Promise<void> {
-  const pending = await getPendingNotifications();
+export async function initNotificationScheduler(userId?: string): Promise<void> {
+  const pending = await getPendingNotifications(userId);
   const now = new Date();
 
   for (const notif of pending) {

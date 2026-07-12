@@ -110,9 +110,10 @@ export async function saveNotification(notif: ScheduledNotification): Promise<vo
   await dbExec({ method: "saveNotification", notification: notif });
 }
 
-export async function getPendingNotifications(): Promise<ScheduledNotification[]> {
+export async function getPendingNotifications(userId?: string): Promise<ScheduledNotification[]> {
   const v = await dbExec<ScheduledNotification[]>({ method: "getPendingNotifications" });
-  return Array.isArray(v) ? v : [];
+  const list = Array.isArray(v) ? v : [];
+  return userId ? list.filter((n) => n.userId === userId) : list;
 }
 
 export async function markNotificationFired(id: string): Promise<void> {

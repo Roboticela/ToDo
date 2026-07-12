@@ -64,14 +64,14 @@ export default function AppLayout() {
   }, [isAuthenticated, isLoading, navigate]);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && user) {
       clearAllTimers();
       requestNotificationPermission().then(() => {
-        initNotificationScheduler();
+        initNotificationScheduler(user.id);
       });
     }
     return () => clearAllTimers();
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   // Rebuild reminder schedule after sync (completions/times may have changed on another device)
   useEffect(() => {

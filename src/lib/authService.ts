@@ -218,6 +218,7 @@ export async function refreshSession(): Promise<{ user: User; session: AuthSessi
 // ─── Logout ───────────────────────────────────────────────────────────────────
 
 export async function logout(userId: string): Promise<void> {
+  void userId;
   try {
     const session = await getAnySession();
     if (session) {
@@ -230,7 +231,12 @@ export async function logout(userId: string): Promise<void> {
   } catch {
     // ignore network errors
   }
-  await deleteSession(userId);
+  const { clearAllTimers } = await import("./notificationService");
+  clearAllTimers();
+  // Wipe local tasks/completions/notifications so another account on this device
+  // cannot see prior data or receive prior reminders
+  const { clearAll } = await import("./db");
+  await clearAll();
 }
 
 // ─── Update Profile ───────────────────────────────────────────────────────────
@@ -239,30 +245,30 @@ export async function updateProfile(userId: string, updates: Partial<User>): Pro
   const existingUser = await getUser(userId);
   if (!existingUser) throw new Error("User not found");
 
-  const updated: User = { ...existingUser, ...updates };
-
-  try {
-    const session = await getAnySession();
-    const res = await fetch(`${API_BASE}/api/users/${userId}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session?.accessToken}`,
-      },
-      body: JSON.stringify(updates),
-      signal: AbortSignal.timeout(5000),
-    });
-    if (res.ok) {
-      const serverUser = await res.json();
-      await saveUser(serverUser);
-      return serverUser;
-    }
-  } catch {
-    // Fall through to local update
+  const session = await getAnySession();
+  // Offline / local-only sessions may update locally
+  if (!session || session.accessToken.startsWith("local_")) {
+    const updated: User = { ...existingUser, ...updates };
+    await saveUser(updated);
+    return updated;
   }
 
-  await saveUser(updated);
-  return updated;
+  const res = await fetch(`${API_BASE}/api/users/${userId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+    body: JSON.stringify(updates),
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || "Could not update profile");
+  }
+  const serverUser = await res.json();
+  await saveUser(serverUser);
+  return serverUser;
 }
 
 // ─── Request email change (sends verification link to new email) ───────────────

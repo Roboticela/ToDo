@@ -21,9 +21,20 @@ const router = Router();
 // One-time codes for desktop OAuth: app gets code by polling (no tokens in browser URL)
 const DESKTOP_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const desktopAuthCodes = new Map(); // code -> { accessToken, refreshToken, userId, expiresAt }
-const desktopPendingAuth = new Map(); // requestId -> { code?, pollSecret }
+const desktopPendingAuth = new Map(); // requestId -> { code?, pollSecret, expiresAt }
+
+function sweepDesktopAuthMaps() {
+  const now = Date.now();
+  for (const [code, entry] of desktopAuthCodes) {
+    if (!entry?.expiresAt || now > entry.expiresAt) desktopAuthCodes.delete(code);
+  }
+  for (const [requestId, entry] of desktopPendingAuth) {
+    if (!entry?.expiresAt || now > entry.expiresAt) desktopPendingAuth.delete(requestId);
+  }
+}
 
 function createDesktopAuthCode(accessToken, refreshToken, userId) {
+  sweepDesktopAuthMaps();
   const code = crypto.randomBytes(24).toString("hex");
   desktopAuthCodes.set(code, {
     accessToken,
@@ -35,6 +46,7 @@ function createDesktopAuthCode(accessToken, refreshToken, userId) {
 }
 
 function consumeDesktopAuthCode(code) {
+  sweepDesktopAuthMaps();
   if (!code || typeof code !== "string") return null;
   const entry = desktopAuthCodes.get(code);
   desktopAuthCodes.delete(code);
@@ -466,7 +478,11 @@ router.post("/desktop-login-start", (req, res) => {
   }
   const requestId = uuidv4();
   const pollSecret = uuidv4();
-  desktopPendingAuth.set(requestId, { pollSecret });
+  sweepDesktopAuthMaps();
+  desktopPendingAuth.set(requestId, {
+    pollSecret,
+    expiresAt: Date.now() + DESKTOP_CODE_TTL_MS,
+  });
   const state = Buffer.from(JSON.stringify({ client: "desktop", requestId })).toString("base64url");
   const scope = "openid email profile";
   const authUrl = googleClient.generateAuthUrl({
@@ -480,6 +496,7 @@ router.post("/desktop-login-start", (req, res) => {
 });
 
 router.get("/desktop-pending", (req, res) => {
+  sweepDesktopAuthMaps();
   const requestId = req.query.requestId;
   const pollSecret = req.query.pollSecret || req.headers["x-poll-secret"];
   if (!requestId || !pollSecret) {
@@ -603,14 +620,17 @@ router.get("/google/callback", async (req, res) => {
     if (client === "desktop") {
       if (requestId) {
         const prev = desktopPendingAuth.get(requestId) || {};
-        desktopPendingAuth.set(requestId, { ...prev, code: authCode });
+        desktopPendingAuth.set(requestId, {
+          ...prev,
+          code: authCode,
+          expiresAt: Date.now() + DESKTOP_CODE_TTL_MS,
+        });
       }
       return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
     }
 
-    const callbackUrl = new URL(`${config.frontendUrl}/auth/callback`);
-    callbackUrl.searchParams.set("code", authCode);
-    return res.redirect(callbackUrl.toString());
+    // Put code in the URL hash (not query) so Referer headers don't leak it
+    return res.redirect(`${config.frontendUrl}/auth/callback#code=${encodeURIComponent(authCode)}`);
   } catch (e) {
     console.error("[auth] google/callback", e);
     return res.redirect(`${config.frontendUrl}/auth/login?error=google_failed`);

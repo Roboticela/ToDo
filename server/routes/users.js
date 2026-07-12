@@ -92,8 +92,13 @@ router.delete("/:userId", requireAuth, async (req, res) => {
   if (req.params.userId !== req.user.id) {
     return res.status(403).json({ error: "Forbidden" });
   }
-  // Stop billing before wiping the account
-  await cancelActiveSubscriptionsForUser(req.user.id);
+  // Stop billing before wiping the account — abort if cancel fails
+  const cancelResult = await cancelActiveSubscriptionsForUser(req.user.id);
+  if (!cancelResult.ok && cancelResult.attempted > 0) {
+    return res.status(502).json({
+      error: "Could not cancel your subscription. Open Manage Subscription to cancel, then try deleting again.",
+    });
+  }
   if (req.user.avatarUrl) {
     await deleteAvatarByUrl(req.user.avatarUrl);
   }

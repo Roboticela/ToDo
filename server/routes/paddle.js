@@ -57,15 +57,16 @@ router.post("/create-checkout", requireAuth, async (req, res) => {
   }
 
   // Avoid accidental double subscriptions — manage upgrades via the portal
-  if (plan !== "lifetime") {
-    const active = await prisma.subscription.findFirst({
-      where: { userId: req.user.id, status: "active" },
+  const blockingSub = await prisma.subscription.findFirst({
+    where: {
+      userId: req.user.id,
+      status: { in: ["active", "past_due"] },
+    },
+  });
+  if (blockingSub) {
+    return res.status(409).json({
+      error: "You already have a subscription. Use Manage Subscription to change or cancel it first.",
     });
-    if (active) {
-      return res.status(409).json({
-        error: "You already have an active subscription. Use Manage Subscription to change plans.",
-      });
-    }
   }
 
   try {
@@ -278,13 +279,21 @@ router.post("/portal", requireAuth, async (req, res) => {
   if (!config.paddle.apiKey) {
     return res.status(503).json({ error: "Subscriptions are not configured" });
   }
+  const now = new Date();
   const sub = await prisma.subscription.findFirst({
-    where: { userId: req.user.id, status: "active" },
+    where: {
+      userId: req.user.id,
+      OR: [
+        { status: "active" },
+        { status: "past_due" },
+        { status: "cancelled", currentPeriodEnd: { gt: now } },
+      ],
+    },
     orderBy: { currentPeriodEnd: "desc" },
   });
   const customerId = sub?.paddleCustomerId;
   if (!customerId) {
-    return res.status(404).json({ error: "No active subscription to manage" });
+    return res.status(404).json({ error: "No subscription to manage" });
   }
   try {
     const session = await paddleRequest("POST", `/customers/${customerId}/portal-sessions`, {
@@ -301,12 +310,15 @@ router.post("/portal", requireAuth, async (req, res) => {
   }
 });
 
-/** Cancel all active/past_due Paddle subscriptions for a user (e.g. on account delete). */
+/** Cancel all active/past_due Paddle subscriptions for a user (e.g. on account delete).
+ *  Returns { ok, failed } — callers should abort account wipe if ok is false and subs existed.
+ */
 export async function cancelActiveSubscriptionsForUser(userId) {
-  if (!config.paddle.apiKey) return;
+  if (!config.paddle.apiKey) return { ok: true, failed: 0, attempted: 0 };
   const subs = await prisma.subscription.findMany({
     where: { userId, status: { in: ["active", "past_due"] } },
   });
+  let failed = 0;
   for (const sub of subs) {
     const paddleId = sub.paddleSubscriptionId || sub.id;
     try {
@@ -318,9 +330,11 @@ export async function cancelActiveSubscriptionsForUser(userId) {
         data: { status: "cancelled" },
       });
     } catch (e) {
+      failed += 1;
       console.error("[paddle] cancel on account delete", paddleId, e?.message || e);
     }
   }
+  return { ok: failed === 0, failed, attempted: subs.length };
 }
 
 export default router;

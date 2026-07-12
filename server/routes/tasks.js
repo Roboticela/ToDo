@@ -235,14 +235,16 @@ router.patch("/:id", requireAuth, async (req, res) => {
   res.json(taskToJson(task));
 });
 
-// Delete task (hard or soft)
+// Delete task (soft-delete to match client sync model)
 router.delete("/:id", requireAuth, async (req, res) => {
   const existing = await prisma.task.findFirst({
     where: { id: req.params.id, userId: req.user.id },
   });
   if (!existing) return res.status(404).json({ error: "Task not found" });
-  await prisma.taskCompletion.deleteMany({ where: { taskId: req.params.id } });
-  await prisma.task.delete({ where: { id: req.params.id } });
+  await prisma.task.update({
+    where: { id: req.params.id },
+    data: { deletedAt: new Date() },
+  });
   res.status(204).end();
 });
 
