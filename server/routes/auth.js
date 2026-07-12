@@ -182,6 +182,14 @@ router.post("/refresh", async (req, res) => {
     }
 
     const payload = verifyRefreshToken(token);
+    // Must match a stored session so logout/revoke invalidates refresh
+    const stored = await prisma.session.findFirst({
+      where: { userId: payload.userId, refreshToken: token },
+    });
+    if (!stored || new Date() > stored.expiresAt) {
+      return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
+
     const user = await prisma.user.findUnique({ where: { id: payload.userId } });
     if (!user) {
       return res.status(401).json({ error: "User not found" });
@@ -189,8 +197,8 @@ router.post("/refresh", async (req, res) => {
 
     const accessToken = signAccessToken({ userId: user.id });
     const newRefreshToken = signRefreshToken({ userId: user.id });
-    await prisma.session.updateMany({
-      where: { userId: user.id },
+    await prisma.session.update({
+      where: { id: stored.id },
       data: {
         accessToken,
         refreshToken: newRefreshToken,
@@ -235,20 +243,19 @@ router.post("/forgot-password", async (req, res) => {
       where: { email: normalizedEmail },
     });
 
-    if (!user) {
-      return res.status(404).json({ error: "No account found with this email address." });
+    // Always return the same message to avoid email enumeration
+    if (user) {
+      const token = uuidv4();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      await prisma.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          token,
+          expiresAt,
+        },
+      });
+      await sendPasswordResetEmail(user.email, token, user.name, user.id);
     }
-
-    const token = uuidv4();
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-    await prisma.passwordResetToken.create({
-      data: {
-        userId: user.id,
-        token,
-        expiresAt,
-      },
-    });
-    await sendPasswordResetEmail(user.email, token, user.name, user.id);
 
     res.json({ message: "If an account exists, you will receive reset instructions." });
   } catch (e) {
@@ -300,15 +307,34 @@ router.post("/reset-password", async (req, res) => {
 
 router.post("/change-password", requireAuth, async (req, res) => {
   try {
-    const { newPassword } = req.body;
+    const { newPassword, currentPassword } = req.body;
     if (!newPassword || newPassword.length < 6) {
       return res.status(400).json({ error: "New password must be at least 6 characters" });
+    }
+    if (!currentPassword || typeof currentPassword !== "string") {
+      return res.status(400).json({ error: "Current password is required" });
+    }
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user?.passwordHash) {
+      return res.status(400).json({ error: "Password login is not set for this account. Use Google sign-in or reset via email." });
+    }
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      return res.status(401).json({ error: "Current password is incorrect" });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: req.user.id },
       data: { passwordHash },
+    });
+    // Invalidate other sessions after password change
+    await prisma.session.deleteMany({
+      where: {
+        userId: req.user.id,
+        NOT: { accessToken: req.headers.authorization?.replace(/^Bearer\s+/i, "") || "" },
+      },
     });
     res.json({ message: "Password updated" });
   } catch (e) {
@@ -465,109 +491,112 @@ router.get("/desktop-pending", (req, res) => {
 // ─── Google OAuth: callback (exchange code, create session, redirect) ───────────
 
 router.get("/google/callback", async (req, res) => {
-  if (!googleClient) {
-    return res.redirect(`${config.frontendUrl}/auth/login?error=google_not_configured`);
-  }
-  const { code, state } = req.query;
-  if (!code) {
-    return res.redirect(`${config.frontendUrl}/auth/login?error=missing_code`);
-  }
-
-  let client = "web";
-  let requestId = null;
-  if (state) {
-    try {
-      const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
-      client = decoded.client || "web";
-      requestId = decoded.requestId || null;
-    } catch {
-      // ignore
+  try {
+    if (!googleClient) {
+      return res.redirect(`${config.frontendUrl}/auth/login?error=google_not_configured`);
     }
-  }
+    const { code, state } = req.query;
+    if (!code) {
+      return res.redirect(`${config.frontendUrl}/auth/login?error=missing_code`);
+    }
 
-  const redirectUri = `${config.backendUrl}/api/auth/google/callback`;
-  const { tokens } = await googleClient.getToken({ code, redirect_uri: redirectUri });
-  googleClient.setCredentials({ access_token: tokens.id_token });
-  const ticket = await googleClient.verifyIdToken({ idToken: tokens.id_token, audience: config.google.clientId });
-  const payload = ticket.getPayload();
-  const googleId = payload.sub;
-  const email = payload.email;
-  const name = payload.name || payload.email?.split("@")[0] || "User";
-  const googlePictureUrl = payload.picture || null;
+    let client = "web";
+    let requestId = null;
+    if (state) {
+      try {
+        const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
+        client = decoded.client || "web";
+        requestId = decoded.requestId || null;
+      } catch {
+        // ignore
+      }
+    }
 
-  let user = await prisma.user.findFirst({
-    where: { OR: [{ googleId }, { email }] },
-  });
-  if (!user) {
-    user = await prisma.user.create({
+    const redirectUri = `${config.backendUrl}/api/auth/google/callback`;
+    const { tokens } = await googleClient.getToken({ code, redirect_uri: redirectUri });
+    googleClient.setCredentials({ access_token: tokens.id_token });
+    const ticket = await googleClient.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: config.google.clientId,
+    });
+    const payload = ticket.getPayload();
+    const googleId = payload.sub;
+    const email = payload.email;
+    const name = payload.name || payload.email?.split("@")[0] || "User";
+    const googlePictureUrl = payload.picture || null;
+
+    let user = await prisma.user.findFirst({
+      where: { OR: [{ googleId }, { email }] },
+    });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          name,
+          email,
+          googleId,
+          plan: "free",
+          emailVerifiedAt: new Date(),
+        },
+      });
+    } else {
+      const updateData = {};
+      if (!user.googleId) updateData.googleId = googleId;
+      if (!user.emailVerifiedAt) updateData.emailVerifiedAt = new Date();
+      if (Object.keys(updateData).length > 0) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: updateData,
+        });
+      }
+    }
+
+    // Upload Google photo to R2 when public access is configured; otherwise store Google URL.
+    const needsAvatar =
+      googlePictureUrl &&
+      (!user.avatarUrl || isR2ApiEndpointUrl(user.avatarUrl));
+    if (needsAvatar) {
+      const r2AvatarUrl = await uploadAvatarFromUrl(googlePictureUrl, user.id);
+      const avatarUrl = r2AvatarUrl || googlePictureUrl;
+      if (avatarUrl !== user.avatarUrl) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { avatarUrl },
+        });
+      }
+    }
+
+    const accessToken = signAccessToken({ userId: user.id });
+    const refreshToken = signRefreshToken({ userId: user.id });
+    await prisma.session.create({
       data: {
-        name,
-        email,
-        googleId,
-        plan: "free",
-        emailVerifiedAt: new Date(),
+        id: uuidv4(),
+        userId: user.id,
+        accessToken,
+        refreshToken,
+        expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.refreshExpiry) * 1000),
       },
     });
-  } else {
-    const updateData = {};
-    if (!user.googleId) updateData.googleId = googleId;
-    if (!user.emailVerifiedAt) updateData.emailVerifiedAt = new Date();
-    if (Object.keys(updateData).length > 0) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: updateData,
-      });
-    }
-  }
 
-  // Upload Google photo to R2 when public access is configured; otherwise store Google URL.
-  // Also refresh if a previous run saved a non-public R2 API endpoint URL (InvalidArgument in browser).
-  const needsAvatar =
-    googlePictureUrl &&
-    (!user.avatarUrl || isR2ApiEndpointUrl(user.avatarUrl));
-  if (needsAvatar) {
-    const r2AvatarUrl = await uploadAvatarFromUrl(googlePictureUrl, user.id);
-    const avatarUrl = r2AvatarUrl || googlePictureUrl;
-    if (avatarUrl !== user.avatarUrl) {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { avatarUrl },
-      });
-    }
-  }
-
-  const accessToken = signAccessToken({ userId: user.id });
-  const refreshToken = signRefreshToken({ userId: user.id });
-  await prisma.session.create({
-    data: {
-      id: uuidv4(),
-      userId: user.id,
-      accessToken,
-      refreshToken,
-      expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.refreshExpiry) * 1000),
-    },
-  });
-
-  if (client === "desktop") {
-    // Native app: store code on backend keyed by requestId; app polls GET desktop-pending and exchanges code via API
+    // One-time code for both web and desktop — never put tokens in the browser URL
     const authCode = createDesktopAuthCode(accessToken, refreshToken, user.id);
-    if (requestId) {
-      desktopPendingAuth.set(requestId, { code: authCode });
-    }
-    return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
-  }
 
-  // Web: redirect to SPA with tokens in query params (hash is often stripped by proxies)
-  const expiresAt = new Date(Date.now() + getExpirySeconds(config.jwt.accessExpiry) * 1000).toISOString();
-  const callbackUrl = new URL(`${config.frontendUrl}/auth/callback`);
-  callbackUrl.searchParams.set("token", accessToken);
-  callbackUrl.searchParams.set("refresh", refreshToken);
-  callbackUrl.searchParams.set("userId", user.id);
-  callbackUrl.searchParams.set("expiresAt", expiresAt);
-  return res.redirect(callbackUrl.toString());
+    if (client === "desktop") {
+      if (requestId) {
+        desktopPendingAuth.set(requestId, { code: authCode });
+      }
+      return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
+    }
+
+    const callbackUrl = new URL(`${config.frontendUrl}/auth/callback`);
+    callbackUrl.searchParams.set("code", authCode);
+    return res.redirect(callbackUrl.toString());
+  } catch (e) {
+    console.error("[auth] google/callback", e);
+    return res.redirect(`${config.frontendUrl}/auth/login?error=google_failed`);
+  }
 });
 
-// ─── Desktop: exchange one-time code for tokens (no tokens in URL / deep link) ───
+// ─── Exchange one-time code for tokens (web + desktop; no tokens in URL) ───
 
 router.post("/desktop-exchange", async (req, res) => {
   const { code } = req.body || {};
@@ -575,11 +604,11 @@ router.post("/desktop-exchange", async (req, res) => {
   if (!entry) {
     return res.status(401).json({ error: "Invalid or expired code. Please sign in with Google again." });
   }
-  res.json({
-    accessToken: entry.accessToken,
-    refreshToken: entry.refreshToken,
-    userId: entry.userId,
-  });
+  const user = await prisma.user.findUnique({ where: { id: entry.userId } });
+  if (!user) {
+    return res.status(401).json({ error: "User not found" });
+  }
+  res.json(toSessionResponse(user, entry.accessToken, entry.refreshToken));
 });
 
 export default router;

@@ -12,7 +12,7 @@ import type { Task } from "../../types/todo";
 
 export default function TodayPage() {
   const { user } = useAuth();
-  const { tasks, selectedDate, setSelectedDate, isLoading } = useTasks();
+  const { tasks, selectedDate, setSelectedDate, isLoading, historyClamped } = useTasks();
   const [showForm, setShowForm] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "do" | "dont">("all");
@@ -93,6 +93,11 @@ export default function TodayPage() {
       <div className="flex-1 flex flex-col min-h-0 w-full lg:max-w-5xl xl:max-w-6xl lg:mx-auto">
       {/* Date Navigator */}
       <div className="sticky top-0 z-20 bg-background/90 backdrop-blur-sm border-b border-border/30 px-4 md:px-6 lg:px-8 py-3">
+        {historyClamped && (
+          <p className="mb-2 text-xs text-amber-400/90 text-center">
+            Free plan history is limited. Upgrade for more past days.
+          </p>
+        )}
         <div className="flex items-center justify-between mb-3">
           <motion.button
             type="button"

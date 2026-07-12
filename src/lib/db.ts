@@ -311,5 +311,6 @@ export async function clearAll(): Promise<void> {
   await db.clear("completions");
   await db.clear("notifications");
   await db.clear("users");
+  await db.clear("sessions");
   await db.clear("syncQueue");
 }

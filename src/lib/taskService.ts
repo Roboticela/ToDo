@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "./uuid";
 import { format } from "date-fns";
-import type { Task, TaskCompletion, TaskFormData, TaskPriority, RepeatDay } from "../types/todo";
+import type { Task, TaskFormData, TaskPriority, RepeatDay } from "../types/todo";
 import {
   saveTask,
   getTask,

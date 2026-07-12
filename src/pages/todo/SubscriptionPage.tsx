@@ -451,7 +451,7 @@ export default function SubscriptionPage() {
                 whileTap={{ scale: 0.97 }}
                 disabled={isCurrentPlan || isLoading || isSelectingFree}
                 onClick={() => {
-                  if (isPendingSelectFree) handleSelectFree();
+                  if (plan.id === "free") handleSelectFree();
                   else if (isUpgrade) handleUpgrade(plan.id);
                 }}
                 className={cn(

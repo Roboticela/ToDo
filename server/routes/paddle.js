@@ -184,14 +184,36 @@ export async function handlePaddleWebhook(req, res) {
         where: { id: sub.id },
       });
       if (existing) {
+        const periodEnd =
+          sub.current_billing_period?.ends_at ||
+          existing.currentPeriodEnd ||
+          null;
+        const periodEndDate = periodEnd ? new Date(periodEnd) : null;
+        const stillInPaidPeriod = periodEndDate && periodEndDate > new Date();
+
         await prisma.subscription.update({
           where: { id: existing.id },
-          data: { status: "cancelled" },
+          data: {
+            status: eventType === "subscription.past_due" ? "past_due" : "cancelled",
+            currentPeriodEnd: periodEndDate,
+          },
         });
-        await prisma.user.update({
-          where: { id: existing.userId },
-          data: { plan: "free", planExpiresAt: null },
-        });
+
+        if (stillInPaidPeriod) {
+          // Keep paid plan until the period they already paid for ends
+          await prisma.user.update({
+            where: { id: existing.userId },
+            data: {
+              plan: existing.plan,
+              planExpiresAt: periodEndDate,
+            },
+          });
+        } else {
+          await prisma.user.update({
+            where: { id: existing.userId },
+            data: { plan: "free", planExpiresAt: null },
+          });
+        }
       }
     }
   } catch (e) {

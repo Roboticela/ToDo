@@ -25,7 +25,18 @@ export async function completeDesktopAuthWithCode(
     console.warn("[deepLink] desktop-exchange failed", exchangeRes.status, err);
     return false;
   }
-  const { accessToken, refreshToken, userId } = await exchangeRes.json();
+  const data = await exchangeRes.json();
+  // Prefer full session payload from server; fall back to flat token fields
+  const user = (data.user || null) as User | null;
+  const sessionFromServer = data.session as AuthSession | undefined;
+  if (user && sessionFromServer?.accessToken) {
+    await saveUser(user);
+    await saveSession(sessionFromServer);
+    setAuthData(user, sessionFromServer);
+    return true;
+  }
+
+  const { accessToken, refreshToken, userId } = data;
   if (!accessToken || !userId) return false;
 
   const meRes = await fetch(`${apiBase}/api/users/me`, {
@@ -33,7 +44,7 @@ export async function completeDesktopAuthWithCode(
   });
   if (!meRes.ok) return false;
   const userData = await meRes.json();
-  const user: User = {
+  const me: User = {
     id: userData.id,
     name: userData.name,
     email: userData.email,
@@ -50,8 +61,8 @@ export async function completeDesktopAuthWithCode(
     expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     userId,
   };
-  await saveUser(user);
+  await saveUser(me);
   await saveSession(session);
-  setAuthData(user, session);
+  setAuthData(me, session);
   return true;
 }

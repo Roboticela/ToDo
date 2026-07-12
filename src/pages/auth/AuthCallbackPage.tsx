@@ -7,8 +7,8 @@ import type { User, AuthSession } from "../../types/todo";
 
 /**
  * Handles OAuth callback from backend redirect.
- * - Web: URL hash contains base64url-encoded session (accessToken, refreshToken, expiresAt, userId).
- * - We decode, fetch user if needed, save to IDB and set auth context, then redirect to /todo.
+ * Web uses a one-time `code` query param (exchanged via API — tokens never appear in the URL).
+ * Legacy token query/hash is still accepted briefly for older redirects.
  */
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -17,6 +17,12 @@ export default function AuthCallbackPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const code = searchParams.get("code");
+    if (code) {
+      exchangeCode(code);
+      return;
+    }
+
     const hash = window.location.hash.slice(1);
     const tokenFromQuery = searchParams.get("token");
     const refreshFromQuery = searchParams.get("refresh");
@@ -24,7 +30,6 @@ export default function AuthCallbackPage() {
     const expiresAtFromQuery = searchParams.get("expiresAt");
 
     if (hash) {
-      // Web redirect: session in hash (base64 JSON) when proxies don't strip it
       try {
         const decoded = JSON.parse(atob(hash));
         const { accessToken, refreshToken, expiresAt, userId } = decoded;
@@ -41,7 +46,6 @@ export default function AuthCallbackPage() {
     }
 
     if (tokenFromQuery && userIdFromQuery) {
-      // Web (query params) or desktop: token in query
       finishLogin(
         tokenFromQuery,
         refreshFromQuery || "",
@@ -59,6 +63,30 @@ export default function AuthCallbackPage() {
 
     setError("No session data received.");
   }, [searchParams]);
+
+  async function exchangeCode(code: string) {
+    try {
+      const res = await fetch(`${getApiBase()}/api/auth/desktop-exchange`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+      if (!res.ok) {
+        setError("Sign-in expired. Please try again.");
+        return;
+      }
+      const data = await res.json();
+      const user = data.user as User;
+      const session = data.session as AuthSession;
+      await saveUser(user);
+      await saveSession(session);
+      setAuthData(user, session);
+      window.history.replaceState({}, "", "/auth/callback");
+      window.location.replace("/todo");
+    } catch {
+      setError("Something went wrong");
+    }
+  }
 
   async function finishLogin(
     accessToken: string,
@@ -95,6 +123,7 @@ export default function AuthCallbackPage() {
       await saveUser(user);
       await saveSession(session);
       setAuthData(user, session);
+      window.history.replaceState({}, "", "/auth/callback");
       window.location.replace("/todo");
     } catch {
       setError("Something went wrong");

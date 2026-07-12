@@ -24,6 +24,7 @@ import { cn } from "../../lib/utils";
 import { useIsDesktop } from "../../hooks/useIsDesktop";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
+import { useSync } from "../../contexts/SyncContext";
 import { updateProfile, changePassword, deleteAccount, requestEmailChange } from "../../lib/authService";
 import { saveUser } from "../../lib/db";
 import { getApiBase } from "../../lib/apiBase";
@@ -39,6 +40,7 @@ export default function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, updateUser, logout, session } = useAuth();
   const { refreshTasks } = useTasks();
+  const { scheduleSync } = useSync();
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [exportLoading, setExportLoading] = useState(false);
@@ -156,6 +158,7 @@ export default function SettingsPage() {
       }
       const result = await importTasksFromData(currentUser.id, data);
       await refreshTasks();
+      scheduleSync();
       if (result.errors.length > 0) {
         setImportMessage(`Imported ${result.imported} task(s). ${result.errors.length} error(s): ${result.errors.slice(0, 3).join("; ")}${result.errors.length > 3 ? "…" : ""}`);
       } else {
@@ -761,6 +764,7 @@ function ChangeAvatarModal({
 }
 
 function ChangePasswordModal({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showNext, setShowNext] = useState(false);
@@ -769,17 +773,17 @@ function ChangePasswordModal({ userId, onClose }: { userId: string; onClose: () 
   const [success, setSuccess] = useState(false);
 
   async function handleSave() {
-    if (!next || !confirm) { setError("Fill in all fields"); return; }
+    if (!current || !next || !confirm) { setError("Fill in all fields"); return; }
     if (next !== confirm) { setError("Passwords don't match"); return; }
     if (next.length < 6) { setError("Password must be at least 6 characters"); return; }
     setIsLoading(true);
     setError("");
     try {
-      await changePassword(userId, next);
+      await changePassword(userId, next, current);
       setSuccess(true);
       setTimeout(onClose, 1500);
-    } catch {
-      setError("Failed to change password.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to change password.");
     } finally {
       setIsLoading(false);
     }
@@ -797,6 +801,7 @@ function ChangePasswordModal({ userId, onClose }: { userId: string; onClose: () 
       ) : (
         <div className="space-y-4">
           {error && <div className="p-3 rounded-xl bg-red-500/10 text-red-400 text-xs border border-red-500/20">{error}</div>}
+          <PasswordInput label="Current Password" value={current} onChange={setCurrent} show={showNext} onToggle={() => setShowNext(!showNext)} />
           <PasswordInput label="New Password" value={next} onChange={setNext} show={showNext} onToggle={() => setShowNext(!showNext)} />
           <PasswordInput label="Confirm New Password" value={confirm} onChange={setConfirm} show={showNext} onToggle={() => {}} />
           <div className="flex gap-3">

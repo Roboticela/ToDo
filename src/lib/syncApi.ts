@@ -9,7 +9,18 @@ import { getApiBase } from "./apiBase";
 
 
 export async function syncTasksToServer(userId: string): Promise<{ tasks: Task[]; completions: TaskCompletion[] } | null> {
-  const session = await getSession(userId);
+  // Refresh access token before sync if needed
+  const { refreshSession } = await import("./authService");
+  let session = await getSession(userId);
+  if (!session) return null;
+  if (!session.accessToken.startsWith("local_")) {
+    const expiresSoon = new Date(session.expiresAt).getTime() - Date.now() < 60_000;
+    if (expiresSoon) {
+      const refreshed = await refreshSession();
+      if (refreshed) session = refreshed.session;
+    }
+  }
+  session = (await getSession(userId)) || session;
   if (!session) return null;
 
   const [tasks, completions] = await Promise.all([

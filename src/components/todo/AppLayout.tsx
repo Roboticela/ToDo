@@ -7,7 +7,7 @@ import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
 import TodoHeader from "./TodoHeader";
 import VerificationBanner from "./VerificationBanner";
-import { initNotificationScheduler, requestNotificationPermission } from "../../lib/notificationService";
+import { initNotificationScheduler, requestNotificationPermission, clearAllTimers } from "../../lib/notificationService";
 
 // Opacity-only transition to avoid layout/scroll jump when changing pages quickly
 const pageVariants = {
@@ -65,10 +65,12 @@ export default function AppLayout() {
 
   useEffect(() => {
     if (isAuthenticated) {
+      clearAllTimers();
       requestNotificationPermission().then(() => {
         initNotificationScheduler();
       });
     }
+    return () => clearAllTimers();
   }, [isAuthenticated]);
 
   if (isLoading) {

@@ -45,17 +45,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           setSyncError("Sync failed");
         }
       }
-      const { getSyncQueue, removeSyncQueueItem } = await import("../lib/db");
+      const { getSyncQueue } = await import("../lib/db");
       const queue = await getSyncQueue();
-      for (const item of queue) {
-        try {
-          await new Promise((r) => setTimeout(r, 50));
-          await removeSyncQueueItem(item.id);
-        } catch {
-          // keep failed items
-        }
-      }
-      setPendingCount(0);
+      // Queue is informational; primary sync path is syncTasksToServer above.
+      setPendingCount(queue.length);
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : "Sync failed");
     } finally {

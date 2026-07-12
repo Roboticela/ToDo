@@ -1,7 +1,7 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import type { User, AuthSession } from "../types/todo";
-import { getAnySession, getUser } from "../lib/db";
+import { getAnySession, getUser, saveSession, saveUser } from "../lib/db";
 import { logout as authLogout, refreshSession } from "../lib/authService";
 
 interface AuthContextType {
@@ -12,14 +12,44 @@ interface AuthContextType {
   setAuthData: (user: User, session: AuthSession) => void;
   updateUser: (user: User) => void;
   logout: () => Promise<void>;
+  /** Refresh tokens if access token is expired or about to expire. Returns latest session or null. */
+  ensureFreshSession: () => Promise<AuthSession | null>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const REFRESH_SKEW_MS = 60 * 1000; // refresh 1 min before expiry
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const sessionRef = useRef<AuthSession | null>(null);
+  sessionRef.current = session;
+
+  const applySession = useCallback((u: User, s: AuthSession) => {
+    setUser(u);
+    setSession(s);
+    sessionRef.current = s;
+  }, []);
+
+  const ensureFreshSession = useCallback(async (): Promise<AuthSession | null> => {
+    const current = sessionRef.current || (await getAnySession());
+    if (!current) return null;
+    if (current.accessToken.startsWith("local_")) return current;
+
+    const expiresAt = new Date(current.expiresAt).getTime();
+    if (expiresAt - Date.now() > REFRESH_SKEW_MS) {
+      return current;
+    }
+
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      applySession(refreshed.user, refreshed.session);
+      return refreshed.session;
+    }
+    return current;
+  }, [applySession]);
 
   useEffect(() => {
     async function restoreSession() {
@@ -30,20 +60,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         const expiresAt = new Date(savedSession.expiresAt);
-        if (expiresAt > new Date()) {
+        if (expiresAt.getTime() - Date.now() > REFRESH_SKEW_MS) {
           const savedUser = await getUser(savedSession.userId);
           if (savedUser) {
-            setUser(savedUser);
-            setSession(savedSession);
+            applySession(savedUser, savedSession);
           }
           setIsLoading(false);
           return;
         }
-        // Access token expired: try to refresh using refresh token (valid 7 days)
         const refreshed = await refreshSession();
         if (refreshed) {
-          setUser(refreshed.user);
-          setSession(refreshed.session);
+          applySession(refreshed.user, refreshed.session);
+        } else if (expiresAt > new Date()) {
+          const savedUser = await getUser(savedSession.userId);
+          if (savedUser) applySession(savedUser, savedSession);
         } else {
           await authLogout(savedSession.userId);
         }
@@ -54,12 +84,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     restoreSession();
-  }, []);
+  }, [applySession]);
 
-  const setAuthData = useCallback((newUser: User, newSession: AuthSession) => {
-    setUser(newUser);
-    setSession(newSession);
-  }, []);
+  // Proactive refresh while the app is open
+  useEffect(() => {
+    if (!session || session.accessToken.startsWith("local_")) return;
+    const id = window.setInterval(() => {
+      ensureFreshSession().catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [session, ensureFreshSession]);
+
+  const setAuthData = useCallback(
+    (newUser: User, newSession: AuthSession) => {
+      applySession(newUser, newSession);
+      void saveUser(newUser);
+      void saveSession(newSession);
+    },
+    [applySession]
+  );
 
   const updateUser = useCallback((updatedUser: User) => {
     setUser(updatedUser);
@@ -71,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setSession(null);
+    sessionRef.current = null;
   }, [user]);
 
   return (
@@ -83,6 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthData,
         updateUser,
         logout,
+        ensureFreshSession,
       }}
     >
       {children}

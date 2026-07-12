@@ -123,9 +123,9 @@ export default function DeleteConfirmDialog({
                           <Calendar className="w-4 h-4 text-amber-500" />
                         </div>
                         <div>
-                          <span className="font-medium block">Delete all future</span>
+                          <span className="font-medium block">Delete this and future</span>
                           <span className="text-xs text-foreground/50">
-                            Keep past · no more after {dateLabel}
+                            Keep past · hide from {dateLabel} onward
                           </span>
                         </div>
                       </button>

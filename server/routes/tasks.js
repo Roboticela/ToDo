@@ -52,8 +52,12 @@ router.get("/", requireAuth, async (req, res) => {
   const limits = getPlanLimits(effective.plan);
   if (limits.historyDays != null) {
     const minDate = new Date();
-    minDate.setDate(minDate.getDate() - limits.historyDays);
-    const minDateStr = minDate.toISOString().slice(0, 10);
+    minDate.setHours(0, 0, 0, 0);
+    minDate.setDate(minDate.getDate() - (limits.historyDays - 1));
+    const y = minDate.getFullYear();
+    const m = String(minDate.getMonth() + 1).padStart(2, "0");
+    const d = String(minDate.getDate()).padStart(2, "0");
+    const minDateStr = `${y}-${m}-${d}`;
     if (where.date) {
       if (where.date < minDateStr) return res.json([]);
     } else {
@@ -99,10 +103,21 @@ router.post("/", requireAuth, async (req, res) => {
     }
   }
   if (limits.maxDailyTasks != null) {
-    const dailyCount = await prisma.task.count({
-      where: { userId, deletedAt: null, date: body.date },
+    const dayOfWeek = new Date(body.date + "T12:00:00").getDay();
+    const oneTimeCount = await prisma.task.count({
+      where: { userId, deletedAt: null, date: body.date, isRepeating: false },
     });
-    if (dailyCount >= limits.maxDailyTasks) {
+    const repeatingOnDay = await prisma.task.count({
+      where: {
+        userId,
+        deletedAt: null,
+        isRepeating: true,
+        date: { lte: body.date },
+        OR: [{ endDate: null }, { endDate: { gte: body.date } }],
+        repeatDays: { has: dayOfWeek },
+      },
+    });
+    if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
       return res.status(403).json({
         error: "Plan limit reached",
         code: "MAX_DAILY_TASKS",
@@ -211,13 +226,20 @@ router.post("/:taskId/completions", requireAuth, async (req, res) => {
   res.status(201).json(completionToJson(comp));
 });
 
-// Sync: bulk upsert tasks and completions
+// Sync: bulk upsert tasks and completions (scoped to the authenticated user)
 router.post("/sync", requireAuth, async (req, res) => {
   const { tasks = [], completions = [] } = req.body;
   const userId = req.user.id;
 
   for (const t of tasks) {
     if (!t.id || !t.title || !t.type || !t.category || !t.date) continue;
+
+    const existing = await prisma.task.findUnique({ where: { id: t.id } });
+    if (existing && existing.userId !== userId) {
+      // IDOR guard: never let one user overwrite another's task
+      continue;
+    }
+
     await prisma.task.upsert({
       where: { id: t.id },
       create: {
@@ -259,8 +281,18 @@ router.post("/sync", requireAuth, async (req, res) => {
     });
   }
 
+  const clientCompletionIds = [];
   for (const c of completions) {
     if (!c.id || !c.taskId || !c.date || !c.status) continue;
+
+    const existingComp = await prisma.taskCompletion.findUnique({ where: { id: c.id } });
+    if (existingComp && existingComp.userId !== userId) continue;
+
+    // Ensure completion belongs to a task owned by this user
+    const task = await prisma.task.findFirst({ where: { id: c.taskId, userId } });
+    if (!task) continue;
+
+    clientCompletionIds.push(c.id);
     await prisma.taskCompletion.upsert({
       where: { id: c.id },
       create: {
@@ -275,6 +307,18 @@ router.post("/sync", requireAuth, async (req, res) => {
         date: c.date,
         status: c.status,
         completedAt: c.completedAt ? new Date(c.completedAt) : undefined,
+      },
+    });
+  }
+
+  // Drop completions removed locally (e.g. uncomplete) so they don't resurrect
+  if (Array.isArray(completions)) {
+    await prisma.taskCompletion.deleteMany({
+      where: {
+        userId,
+        ...(clientCompletionIds.length > 0
+          ? { id: { notIn: clientCompletionIds } }
+          : {}),
       },
     });
   }

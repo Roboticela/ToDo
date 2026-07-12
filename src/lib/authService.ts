@@ -1,31 +1,9 @@
 import type { User, AuthSession } from "../types/todo";
 import { saveUser, getUser, saveSession, getAnySession, deleteSession } from "./db";
-import { v4 as uuidv4 } from "./uuid";
 import { isTauri } from "./tauri";
 import { getApiBase } from "./apiBase";
 
 const API_BASE = getApiBase();
-
-// ─── Local Demo Auth (offline fallback) ───────────────────────────────────────
-
-function createLocalUser(name: string, email: string): User {
-  return {
-    id: uuidv4(),
-    name,
-    email,
-    plan: "free",
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function createLocalSession(userId: string): AuthSession {
-  return {
-    accessToken: `local_${userId}_${Date.now()}`,
-    refreshToken: `local_refresh_${userId}`,
-    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    userId,
-  };
-}
 
 // ─── Register ─────────────────────────────────────────────────────────────────
 
@@ -39,7 +17,7 @@ export async function register(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email, password }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(15000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -48,14 +26,13 @@ export async function register(
       return data;
     }
     const errBody = await res.json().catch(() => ({}));
-    throw new Error(errBody.error || (await res.text()) || "Registration failed");
+    throw new Error(errBody.error || "Registration failed");
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
-      const user = createLocalUser(name, email);
-      const session = createLocalSession(user.id);
-      await saveUser(user);
-      await saveSession(session);
-      return { user, session };
+      throw new Error("Registration timed out. Check your connection and try again.");
+    }
+    if (err instanceof TypeError) {
+      throw new Error("Cannot reach the server. Check your connection and try again.");
     }
     throw err;
   }
@@ -72,7 +49,7 @@ export async function login(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(15000),
     });
     if (res.ok) {
       const data = await res.json();
@@ -84,20 +61,21 @@ export async function login(
     throw new Error(errBody.error || "Invalid email or password");
   } catch (err: unknown) {
     if (err instanceof Error && (err.name === "AbortError" || err.name === "TypeError")) {
-      // Offline - check if we have local user data
+      // Offline: resume only an existing server-issued session for this email.
+      // Never skip password verification or create phantom local accounts.
       const existingSession = await getAnySession();
-      if (existingSession) {
+      if (existingSession && !existingSession.accessToken.startsWith("local_")) {
         const existingUser = await getUser(existingSession.userId);
-        if (existingUser && existingUser.email === email) {
+        if (
+          existingUser &&
+          existingUser.email.toLowerCase() === email.trim().toLowerCase()
+        ) {
           return { user: existingUser, session: existingSession };
         }
       }
-      // Create offline account
-      const user = createLocalUser(email.split("@")[0], email);
-      const session = createLocalSession(user.id);
-      await saveUser(user);
-      await saveSession(session);
-      return { user, session };
+      throw new Error(
+        "You're offline. Connect to the internet to sign in with this account."
+      );
     }
     throw err;
   }
@@ -191,7 +169,11 @@ export async function resendVerification(): Promise<void> {
   }
 }
 
-export async function changePassword(_userId: string, newPassword: string): Promise<void> {
+export async function changePassword(
+  _userId: string,
+  newPassword: string,
+  currentPassword?: string
+): Promise<void> {
   const session = await getAnySession();
   const res = await fetch(`${API_BASE}/api/auth/change-password`, {
     method: "POST",
@@ -199,9 +181,12 @@ export async function changePassword(_userId: string, newPassword: string): Prom
       "Content-Type": "application/json",
       Authorization: `Bearer ${session?.accessToken}`,
     },
-    body: JSON.stringify({ newPassword }),
+    body: JSON.stringify({ newPassword, currentPassword }),
   });
-  if (!res.ok) throw new Error("Failed to change password");
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || "Failed to change password");
+  }
 }
 
 // ─── Refresh session (get new access token using refresh token) ─────────────────
@@ -301,18 +286,17 @@ export async function requestEmailChange(newEmail: string): Promise<void> {
 // ─── Delete Account ───────────────────────────────────────────────────────────
 
 export async function deleteAccount(userId: string): Promise<void> {
-  try {
-    const session = await getAnySession();
-    await fetch(`${API_BASE}/api/users/${userId}`, {
-      method: "DELETE",
-      headers: { Authorization: `Bearer ${session?.accessToken}` },
-      signal: AbortSignal.timeout(5000),
-    });
-  } catch {
-    // ignore
+  const session = await getAnySession();
+  const res = await fetch(`${API_BASE}/api/users/${userId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${session?.accessToken}` },
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok && res.status !== 404) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.error || "Failed to delete account on server. Try again.");
   }
   await deleteSession(userId);
-  // Clear all local data (IndexedDB or native SQLite in Tauri)
   const { clearAll } = await import("./db");
   await clearAll();
 }

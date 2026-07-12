@@ -31,7 +31,7 @@ interface TaskCardProps {
 }
 
 export default function TaskCard({ task, date, onEdit, onCompletionChange, staggerDelay = 0 }: TaskCardProps) {
-  const { completeTask, uncompleteTask, deleteTask, skipTaskForDate, setTaskEndDate } = useTasks();
+  const { completeTask, uncompleteTask, deleteTask, skipTaskForDate, endRepeatingSeriesFromDate } = useTasks();
   const [isCompleted, setIsCompleted] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -65,7 +65,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
       if (choice === "this_date") {
         await skipTaskForDate(task, date);
       } else if (choice === "future") {
-        await setTaskEndDate(task, date);
+        await endRepeatingSeriesFromDate(task, date);
       } else {
         await deleteTask(task.id);
       }
@@ -113,8 +113,23 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
             whileTap={{ scale: 0.85 }}
             className={cn(
               "mt-0.5 flex-shrink-0 transition-colors",
-              isCompleted ? "text-green-400" : isDoCategory ? "text-foreground/30 hover:text-primary/70" : "text-foreground/30 hover:text-orange-400/70"
+              isCompleted
+                ? isDoCategory
+                  ? "text-green-400"
+                  : "text-orange-400"
+                : isDoCategory
+                  ? "text-foreground/30 hover:text-primary/70"
+                  : "text-foreground/30 hover:text-orange-400/70"
             )}
+            aria-label={
+              isCompleted
+                ? isDoCategory
+                  ? "Mark as not done"
+                  : "Mark as not avoided"
+                : isDoCategory
+                  ? "Mark as done"
+                  : "Mark as avoided"
+            }
           >
             {isCompleted ? (
               <CheckCircle2 className="w-5 h-5" />
@@ -158,6 +173,11 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                       <TrendingDown className="w-3 h-3" />
                     )}
                     {task.category === "do" ? "Do" : "Don't"}
+                    {isCompleted && (
+                      <span className="opacity-80">
+                        · {task.category === "do" ? "Done" : "Avoided"}
+                      </span>
+                    )}
                   </span>
 
                   {/* Priority badge */}

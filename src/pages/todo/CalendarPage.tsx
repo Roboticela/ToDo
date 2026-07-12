@@ -116,6 +116,19 @@ export default function CalendarPage() {
     [user]
   );
 
+  // Reload selected day when tasks change (complete/skip/delete/sync)
+  useEffect(() => {
+    if (!selectedDay) return;
+    const reload = () => loadDayTasks(selectedDay);
+    window.addEventListener("tasks-synced", reload);
+    return () => window.removeEventListener("tasks-synced", reload);
+  }, [selectedDay, loadDayTasks]);
+
+  // Also reload after local mutations by wrapping completion callback
+  useEffect(() => {
+    if (selectedDay) loadDayTasks(selectedDay);
+  }, [selectedDay, loadDayTasks]);
+
   function handleDayClick(date: Date) {
     const dateStr = format(date, "yyyy-MM-dd");
     setSelectedDay(dateStr);
@@ -128,8 +141,8 @@ export default function CalendarPage() {
     setShowForm(true);
   }
 
-  function handleCompletionChange(completed: boolean) {
-    setCompletedCount((prev) => (completed ? prev + 1 : Math.max(0, prev - 1)));
+  function handleCompletionChange(_completed: boolean) {
+    if (selectedDay) loadDayTasks(selectedDay);
   }
 
   const filteredTasks = selectedDay

@@ -124,6 +124,10 @@ export default function AnalyticsPage() {
     missedTasks: number;
     inProgressTasks: number;
     completionRate: number;
+    doCompleted?: number;
+    doMissed?: number;
+    dontCompleted?: number;
+    dontMissed?: number;
     dailyStats: Array<{
       date: string;
       completed: number;
@@ -137,15 +141,21 @@ export default function AnalyticsPage() {
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [effectiveTo, setEffectiveTo] = useState("");
 
+  // Free plan: analytics is a paid feature — show upgrade prompt instead of full charts
+  const isFreePlan = !user?.plan || user.plan === "free" || user.plan === "pending";
+
   // Load earliest date once
   useEffect(() => {
-    if (!user) return;
+    if (!user || isFreePlan) return;
     getEarliestTaskDate(user.id).then(setEarliestDate);
-  }, [user]);
+  }, [user, isFreePlan]);
 
   // Calculate date range and load stats
   useEffect(() => {
-    if (!user) return;
+    if (!user || isFreePlan) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
 
     const today = format(new Date(), "yyyy-MM-dd");
@@ -172,7 +182,7 @@ export default function AnalyticsPage() {
     getAnalyticsForDateRange(user.id, startDate, endDate)
       .then(setStats)
       .finally(() => setIsLoading(false));
-  }, [user, range, customFrom, customTo, earliestDate]);
+  }, [user, range, customFrom, customTo, earliestDate, isFreePlan]);
 
   // Build X-axis date format based on range span
   const daySpan = effectiveFrom && effectiveTo
@@ -205,7 +215,6 @@ export default function AnalyticsPage() {
 
   const hasTasks = stats && stats.totalTasks > 0;
 
-  // Range label for header
   const rangeLabel =
     range === "custom"
       ? `${format(new Date(customFrom + "T12:00:00"), "MMM d")} – ${format(new Date(customTo + "T12:00:00"), "MMM d, yyyy")}`
@@ -232,6 +241,26 @@ export default function AnalyticsPage() {
   }
 
   const barSize = daySpan <= 7 ? 20 : daySpan <= 31 ? 8 : 4;
+
+  if (isFreePlan) {
+    return (
+      <div className="flex flex-col min-h-full items-center justify-center px-6 py-16 text-center gap-4">
+        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+          <BarChart3 className="w-8 h-8 text-primary" />
+        </div>
+        <h2 className="text-xl font-bold text-foreground">Analytics is a paid feature</h2>
+        <p className="text-sm text-foreground/50 max-w-sm">
+          Upgrade to Basic or Pro to see completion trends, Do/Don&apos;t breakdowns, and history charts.
+        </p>
+        <a
+          href="/todo/subscription"
+          className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          View plans
+        </a>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-full">
@@ -435,6 +464,27 @@ export default function AnalyticsPage() {
                 delay={0.2}
               />
             </div>
+
+            {(stats!.doCompleted != null || stats!.dontCompleted != null) && (
+              <div className="grid grid-cols-2 gap-3">
+                <StatCard
+                  label="Do's done"
+                  value={stats!.doCompleted ?? 0}
+                  icon={<TrendingUp className="w-4 h-4 text-green-400" />}
+                  color="bg-green-500/10"
+                  sub={`${stats!.doMissed ?? 0} missed`}
+                  delay={0.22}
+                />
+                <StatCard
+                  label="Don'ts avoided"
+                  value={stats!.dontCompleted ?? 0}
+                  icon={<TrendingUp className="w-4 h-4 text-orange-400" />}
+                  color="bg-orange-500/10"
+                  sub={`${stats!.dontMissed ?? 0} slipped`}
+                  delay={0.25}
+                />
+              </div>
+            )}
 
             {/* Bar chart — always show for the selected range */}
             <motion.div

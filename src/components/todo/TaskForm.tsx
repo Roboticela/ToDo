@@ -80,11 +80,17 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
     if (type === "duration") {
       if (!startTime) newErrors.startTime = "Start time is required";
       if (!endTime) newErrors.endTime = "End time is required";
-      if (startTime && endTime && startTime >= endTime)
-        newErrors.endTime = "End time must be after start time";
+      // Overnight allowed (end before start) — e.g. 22:00–06:00
     }
     if (isRepeating && repeatDays.length === 0)
       newErrors.repeatDays = "Select at least one day";
+    // Ensure start date's weekday is included when repeating
+    if (isRepeating && repeatDays.length > 0) {
+      const dow = new Date(date + "T12:00:00").getDay() as RepeatDay;
+      if (!repeatDays.includes(dow)) {
+        // Auto-add rather than block — handled on submit
+      }
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -106,7 +112,12 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
         startTime: type === "duration" ? startTime : undefined,
         endTime: type === "duration" ? endTime : undefined,
         isRepeating,
-        repeatDays,
+        repeatDays: isRepeating
+          ? (() => {
+              const dow = new Date(date + "T12:00:00").getDay() as RepeatDay;
+              return repeatDays.includes(dow) ? repeatDays : [...repeatDays, dow];
+            })()
+          : [],
       };
 
       if (editTask) {
@@ -245,6 +256,11 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
                     </button>
                   ))}
                 </div>
+                <p className="text-xs text-foreground/40">
+                  {category === "do"
+                    ? "Things you want to accomplish — check off when done."
+                    : "Habits to avoid — check off when you successfully avoided them."}
+                </p>
               </div>
 
               {/* Priority */}
@@ -364,7 +380,10 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
                   </div>
                   <button
                     type="button"
-                    onClick={() => setIsRepeating(!isRepeating)}
+                    onClick={() => {
+                      setIsRepeating(!isRepeating);
+                      if (isRepeating) setRepeatDays([]);
+                    }}
                     className={cn(
                       "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0",
                       isRepeating ? "bg-primary/20" : "bg-foreground/10"

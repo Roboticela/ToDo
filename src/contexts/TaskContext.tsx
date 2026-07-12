@@ -9,9 +9,11 @@ import {
   uncompleteTask as svcUncomplete,
   skipTaskForDate as svcSkipTaskForDate,
   setTaskEndDate as svcSetTaskEndDate,
+  endRepeatingSeriesFromDate as svcEndSeries,
   getTasksForDate,
   getTodayString,
 } from "../lib/taskService";
+import { assertCanCreateTask, clampDateToHistory } from "../lib/planLimits";
 import { useAuth } from "./AuthContext";
 import { useSync } from "./SyncContext";
 
@@ -19,6 +21,7 @@ interface TaskContextType {
   tasks: Task[];
   selectedDate: string;
   isLoading: boolean;
+  historyClamped: boolean;
   setSelectedDate: (date: string) => void;
   refreshTasks: (options?: { silent?: boolean }) => Promise<void>;
   createTask: (data: TaskFormData) => Promise<Task>;
@@ -26,6 +29,7 @@ interface TaskContextType {
   deleteTask: (taskId: string) => Promise<void>;
   skipTaskForDate: (task: Task, date: string) => Promise<void>;
   setTaskEndDate: (task: Task, endDate: string) => Promise<Task>;
+  endRepeatingSeriesFromDate: (task: Task, fromDate: string) => Promise<Task>;
   completeTask: (task: Task) => Promise<void>;
   uncompleteTask: (task: Task) => Promise<void>;
 }
@@ -37,6 +41,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const { scheduleSync } = useSync();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDateState] = useState(getTodayString());
+  const [historyClamped, setHistoryClamped] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const refreshTasks = useCallback(async (options?: { silent?: boolean }) => {
@@ -64,13 +69,19 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("tasks-synced", handler);
   }, [refreshTasks]);
 
-  const setSelectedDate = useCallback((date: string) => {
-    setSelectedDateState(date);
-  }, []);
+  const setSelectedDate = useCallback(
+    (date: string) => {
+      const { date: next, clamped } = clampDateToHistory(date, user?.plan);
+      setHistoryClamped(clamped);
+      setSelectedDateState(next);
+    },
+    [user?.plan]
+  );
 
   const createTask = useCallback(
     async (data: TaskFormData): Promise<Task> => {
       if (!user) throw new Error("Not authenticated");
+      await assertCanCreateTask(user.id, user.plan, data);
       const task = await svcCreate(user.id, data);
       await refreshTasks();
       scheduleSync();
@@ -117,6 +128,16 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     [refreshTasks, scheduleSync]
   );
 
+  const endRepeatingSeriesFromDate = useCallback(
+    async (task: Task, fromDate: string): Promise<Task> => {
+      const updated = await svcEndSeries(task, fromDate);
+      await refreshTasks();
+      scheduleSync();
+      return updated;
+    },
+    [refreshTasks, scheduleSync]
+  );
+
   const completeTask = useCallback(
     async (task: Task): Promise<void> => {
       await svcComplete(task, selectedDate);
@@ -141,6 +162,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         tasks,
         selectedDate,
         isLoading,
+        historyClamped,
         setSelectedDate,
         refreshTasks,
         createTask,
@@ -148,6 +170,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         deleteTask,
         skipTaskForDate,
         setTaskEndDate,
+        endRepeatingSeriesFromDate,
         completeTask,
         uncompleteTask,
       }}
