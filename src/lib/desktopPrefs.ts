@@ -6,11 +6,14 @@ export interface DesktopPrefs {
   minimizeToTray: boolean;
   /** Show the system tray / notification-area icon. */
   showTrayIcon: boolean;
+  /** Launch the app when the OS starts / user signs in. */
+  launchAtStartup: boolean;
 }
 
 const DEFAULT_PREFS: DesktopPrefs = {
   minimizeToTray: true,
   showTrayIcon: true,
+  launchAtStartup: false,
 };
 
 export function isDesktopShell(): boolean {
@@ -25,6 +28,7 @@ export async function getDesktopPrefs(): Promise<DesktopPrefs> {
     return {
       minimizeToTray: prefs.minimizeToTray !== false,
       showTrayIcon: prefs.showTrayIcon !== false,
+      launchAtStartup: prefs.launchAtStartup === true,
     };
   } catch {
     return { ...DEFAULT_PREFS };

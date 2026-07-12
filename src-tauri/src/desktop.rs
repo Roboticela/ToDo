@@ -1,4 +1,4 @@
-//! Desktop system tray + local prefs (minimize to tray, show/hide tray icon).
+//! Desktop system tray + local prefs (minimize to tray, show/hide tray icon, launch at startup).
 
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -7,6 +7,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, Runtime, State,
 };
+use tauri_plugin_autostart::ManagerExt;
 
 const PREFS_FILE: &str = "desktop_prefs.json";
 const TRAY_ID: &str = "main-tray";
@@ -18,6 +19,9 @@ pub struct DesktopPrefs {
     pub minimize_to_tray: bool,
     /// Show the system tray icon. When false, close quits the app.
     pub show_tray_icon: bool,
+    /// Launch the app when the user signs in to the OS.
+    #[serde(default)]
+    pub launch_at_startup: bool,
 }
 
 impl Default for DesktopPrefs {
@@ -25,6 +29,7 @@ impl Default for DesktopPrefs {
         Self {
             minimize_to_tray: true,
             show_tray_icon: true,
+            launch_at_startup: false,
         }
     }
 }
@@ -79,6 +84,25 @@ fn save_prefs(app: &AppHandle, prefs: &DesktopPrefs) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn apply_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
+    let launcher = app.autolaunch();
+    let currently = launcher.is_enabled().unwrap_or(false);
+    if enabled == currently {
+        return Ok(());
+    }
+    if enabled {
+        launcher.enable().map_err(|e| e.to_string())
+    } else {
+        launcher.disable().map_err(|e| e.to_string())
+    }
+}
+
+/// Sync OS login-item state with saved prefs (call after plugin init).
+pub fn sync_autostart_from_prefs(app: &AppHandle) {
+    let prefs = load_prefs(app);
+    let _ = apply_autostart(app, prefs.launch_at_startup);
 }
 
 fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
@@ -143,10 +167,17 @@ fn apply_tray_visibility(app: &AppHandle, show: bool) {
 
 #[tauri::command]
 pub fn get_desktop_prefs(app: AppHandle, state: State<'_, DesktopState>) -> DesktopPrefs {
-    if let Ok(g) = state.prefs.lock() {
-        return g.clone();
+    let mut prefs = if let Ok(g) = state.prefs.lock() {
+        g.clone()
+    } else {
+        load_prefs(&app)
+    };
+
+    // Reflect OS login-item state when readable (user may have changed it outside the app)
+    if let Ok(enabled) = app.autolaunch().is_enabled() {
+        prefs.launch_at_startup = enabled;
     }
-    load_prefs(&app)
+    prefs
 }
 
 #[tauri::command]
@@ -155,6 +186,7 @@ pub fn set_desktop_prefs(
     state: State<'_, DesktopState>,
     prefs: DesktopPrefs,
 ) -> Result<DesktopPrefs, String> {
+    apply_autostart(&app, prefs.launch_at_startup)?;
     save_prefs(&app, &prefs)?;
     if let Ok(mut g) = state.prefs.lock() {
         *g = prefs.clone();

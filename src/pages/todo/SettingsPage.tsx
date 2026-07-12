@@ -748,6 +748,34 @@ export default function SettingsPage() {
           <Section label="Desktop">
             <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
               <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Launch at startup</p>
+                <p className="text-xs text-foreground/50 mt-0.5">
+                  Open Roboticela ToDo automatically when you sign in to your computer.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={desktopPrefs.launchAtStartup}
+                disabled={desktopUpdating}
+                onClick={() => handleDesktopPrefToggle("launchAtStartup")}
+                className={cn(
+                  "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  desktopPrefs.launchAtStartup ? "bg-primary/20" : "bg-foreground/10"
+                )}
+              >
+                <motion.div
+                  animate={{ x: desktopPrefs.launchAtStartup ? 20 : 2 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className={cn(
+                    "absolute top-1 w-4 h-4 rounded-full shadow-sm",
+                    desktopPrefs.launchAtStartup ? "bg-primary" : "bg-foreground"
+                  )}
+                />
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">Show in system tray</p>
                 <p className="text-xs text-foreground/50 mt-0.5">
                   Keep an icon in the notification area for background reminders.

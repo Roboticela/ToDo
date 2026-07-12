@@ -150,6 +150,10 @@ pub fn run() {
                     }
                 }
             }))
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                None,
+            ))
             .plugin(tauri_plugin_window_state::Builder::default().build())
             .manage(desktop::DesktopState::default())
             .on_window_event(|window, event| {
@@ -199,6 +203,7 @@ pub fn run() {
             #[cfg(desktop)]
             {
                 desktop::setup_tray(app.handle())?;
+                desktop::sync_autostart_from_prefs(app.handle());
                 // Show main window after tray is ready (config starts visible:false)
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.show();
