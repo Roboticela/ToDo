@@ -60,6 +60,11 @@ const googleClient = config.google.clientId && config.google.clientSecret
 function toUserResponse(user) {
   const effective = getEffectivePlan(user);
   const soundMode = user.notificationSoundMode;
+  let notificationSoundMode = "preset";
+  if (soundMode === "custom") notificationSoundMode = "custom";
+  else if (soundMode === "normal") notificationSoundMode = "normal";
+  else if (soundMode === "ringtone" || soundMode === "preset") notificationSoundMode = "preset";
+
   return {
     id: user.id,
     name: user.name,
@@ -70,13 +75,11 @@ function toUserResponse(user) {
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
     taskNotificationsEnabled: user.taskNotificationsEnabled ?? true,
-    notificationSoundMode:
-      soundMode === "custom"
-        ? "custom"
-        : soundMode === "ringtone" || soundMode === "preset"
-          ? "preset"
-          : "normal",
-    notificationSoundId: user.notificationSoundId ?? undefined,
+    notificationSoundMode,
+    notificationSoundId:
+      notificationSoundMode === "preset"
+        ? user.notificationSoundId || "notify-correct"
+        : user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),
@@ -124,6 +127,9 @@ router.post("/register", async (req, res) => {
         plan: "free",
         emailVerificationToken: verificationToken,
         emailVerificationTokenExpiresAt: verificationExpiresAt,
+        taskNotificationsEnabled: true,
+        notificationSoundMode: "preset",
+        notificationSoundId: "notify-correct",
       },
     });
 
@@ -635,6 +641,9 @@ router.get("/google/callback", async (req, res) => {
           googleId,
           plan: "free",
           emailVerifiedAt: new Date(),
+          taskNotificationsEnabled: true,
+          notificationSoundMode: "preset",
+          notificationSoundId: "notify-correct",
         },
       });
     } else if (user.googleId && user.googleId !== googleId) {

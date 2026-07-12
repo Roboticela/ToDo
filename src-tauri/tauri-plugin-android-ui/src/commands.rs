@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
+#[cfg(target_os = "android")]
+use tauri::Manager;
 
 use crate::error::Result;
 use crate::models::SystemUiMosaic;

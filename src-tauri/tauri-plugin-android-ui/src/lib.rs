@@ -3,7 +3,9 @@
 //! On other platforms the plugin loads but commands return [crate::Error::Unavailable].
 
 use tauri::plugin::{Builder, TauriPlugin};
-use tauri::{Manager, Runtime};
+use tauri::Runtime;
+#[cfg(target_os = "android")]
+use tauri::Manager;
 
 pub use crate::error::{Error, Result};
 pub use crate::models::{AndroidUiConfig, SystemUiMosaic};
@@ -41,7 +43,7 @@ pub fn init<R: Runtime>(config: AndroidUiConfig) -> TauriPlugin<R> {
       }
       #[cfg(not(target_os = "android"))]
       {
-        let _ = (app, api);
+        let _ = (app, api, config);
       }
       Ok(())
     })

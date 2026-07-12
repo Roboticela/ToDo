@@ -1,4 +1,4 @@
 <resources>
-    <string name="app_name">Roboticela DevKit</string>
-    <string name="main_activity_title">Roboticela DevKit</string>
+    <string name="app_name">ToDo</string>
+    <string name="main_activity_title">Roboticela ToDo</string>
 </resources>

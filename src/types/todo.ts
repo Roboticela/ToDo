@@ -76,11 +76,11 @@ export interface User {
   planExpiresAt?: string;
   emailVerifiedAt?: string;
   subscribedToReminders?: boolean;
-  /** Master toggle for local task reminders */
+  /** Master toggle for local task reminders (default: on) */
   taskNotificationsEnabled?: boolean;
-  /** How task reminders sound: OS default, curated library preset, or custom upload */
+  /** How task reminders sound: OS default, curated library preset, or custom upload (default: library preset) */
   notificationSoundMode?: NotificationSoundMode;
-  /** Selected curated sound id when mode is preset (or legacy ringtone) */
+  /** Selected curated sound id when mode is preset (default: notify-correct) */
   notificationSoundId?: string;
   /** Public R2 URL for a custom notification sound (when mode is custom) */
   customSoundUrl?: string;

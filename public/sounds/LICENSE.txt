@@ -1,0 +1,7 @@
+Notification library audio files in this folder are sourced from Mixkit
+(https://mixkit.co) under the Mixkit License.
+
+You may use these sounds free for commercial and non-commercial projects.
+Attribution is not required by Mixkit, but appreciated.
+
+Full license: https://mixkit.co/license/#sfxFree

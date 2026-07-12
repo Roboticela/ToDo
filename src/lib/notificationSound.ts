@@ -1,20 +1,48 @@
 /**
- * Notification sound playback: OS media files, custom R2 cache, and Web Audio synths.
+ * Notification sound playback: bundled library MP3s, custom R2 cache, OS defaults.
  */
 
 import { isTauri } from "./tauri";
 import { getOsKind } from "./platform";
 import {
+  DEFAULT_RINGTONE_SOUND_ID,
   getCatalogSound,
   macSystemSoundPath,
   windowsMediaPath,
-  type CatalogSound,
-  type SynthKind,
 } from "./soundCatalog";
 
 const CACHE_NAME = "roboticela-notification-sounds-v1";
 let cachedObjectUrl: { key: string; url: string } | null = null;
 let audioCtx: AudioContext | null = null;
+let currentAudio: HTMLAudioElement | null = null;
+let activeOscillators: OscillatorNode[] = [];
+
+type SynthKind = "chime" | "ping" | "soft" | "bright" | "alarm" | "pulse" | "sparkle" | "warm";
+
+/** Stop any in-app preview / notification sound currently playing. */
+export function stopCurrentSound(): void {
+  if (currentAudio) {
+    try {
+      currentAudio.pause();
+      currentAudio.currentTime = 0;
+      currentAudio.src = "";
+    } catch {
+      // ignore
+    }
+    currentAudio = null;
+  }
+  if (activeOscillators.length) {
+    for (const osc of activeOscillators) {
+      try {
+        osc.stop();
+        osc.disconnect();
+      } catch {
+        // already stopped
+      }
+    }
+    activeOscillators = [];
+  }
+}
 
 function revokeCachedObjectUrl() {
   if (cachedObjectUrl) {
@@ -79,7 +107,7 @@ async function getAudioContext(): Promise<AudioContext | null> {
   return audioCtx;
 }
 
-/** Play a local OS sound file via Tauri (Windows Media / macOS / Linux). */
+/** Play a local OS sound file via Tauri (Windows Media / macOS). */
 export async function playOsSoundFile(path: string): Promise<boolean> {
   if (!isTauri() || !path) return false;
   try {
@@ -106,7 +134,9 @@ export async function playWindowsDefaultNotify(): Promise<boolean> {
   return false;
 }
 
-export async function playSynth(kind: SynthKind): Promise<void> {
+/** Last-resort beep when OS default media is unavailable (Normal mode only). */
+export async function playSynth(kind: SynthKind = "chime"): Promise<void> {
+  stopCurrentSound();
   const ctx = await getAudioContext();
   if (!ctx) return;
   const now = ctx.currentTime;
@@ -152,6 +182,7 @@ export async function playSynth(kind: SynthKind): Promise<void> {
   const notes = patterns[kind] ?? patterns.chime;
   const peak = kind === "alarm" ? 0.12 : 0.2;
 
+  const started: OscillatorNode[] = [];
   for (const note of notes) {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -162,53 +193,51 @@ export async function playSynth(kind: SynthKind): Promise<void> {
     gain.gain.exponentialRampToValueAtTime(0.0001, now + note.t + note.d);
     osc.connect(gain);
     gain.connect(ctx.destination);
+    osc.onended = () => {
+      activeOscillators = activeOscillators.filter((o) => o !== osc);
+    };
     osc.start(now + note.t);
     osc.stop(now + note.t + note.d + 0.02);
+    started.push(osc);
   }
+  activeOscillators = started;
 }
 
 export async function playRingtone(): Promise<void> {
-  await playSynth("chime");
+  await playCatalogSound(DEFAULT_RINGTONE_SOUND_ID);
+}
+
+async function playAudioUrl(url: string): Promise<boolean> {
+  stopCurrentSound();
+  const audio = new Audio(url);
+  audio.volume = 0.9;
+  currentAudio = audio;
+  audio.onended = () => {
+    if (currentAudio === audio) currentAudio = null;
+  };
+  try {
+    await audio.play();
+    return true;
+  } catch {
+    if (currentAudio === audio) currentAudio = null;
+    return false;
+  }
 }
 
 export async function playCustomSound(remoteUrl: string): Promise<void> {
   const localUrl = (await getCachedBlobUrl(remoteUrl)) ?? remoteUrl;
-  const audio = new Audio(localUrl);
-  audio.volume = 0.9;
-  try {
-    await audio.play();
-  } catch {
-    // ignore
-  }
+  await playAudioUrl(localUrl);
 }
 
-function candidatePaths(sound: CatalogSound): string[] {
-  const os = getOsKind();
-  if (os === "windows" && sound.windowsFiles?.length) {
-    return sound.windowsFiles.map(windowsMediaPath);
-  }
-  if (os === "macos" && sound.macSound) {
-    return [macSystemSoundPath(sound.macSound)];
-  }
-  // Linux theme names aren't file paths — handled via notification plugin; synth fallback here
-  return [];
-}
-
-/** Play a curated library sound (OS file when possible, else synth). */
+/** Play a curated library sound from the bundled Mixkit MP3. */
 export async function playCatalogSound(soundId: string): Promise<void> {
   const sound = getCatalogSound(soundId);
-  if (!sound) {
+  if (!sound?.src) {
     await playSynth("chime");
     return;
   }
-
-  if (isTauri()) {
-    for (const path of candidatePaths(sound)) {
-      if (await playOsSoundFile(path)) return;
-    }
-  }
-
-  await playSynth(sound.synth);
+  if (await playAudioUrl(sound.src)) return;
+  await playSynth("chime");
 }
 
 /** Best-effort OS default notification sound for the current platform. */
@@ -230,13 +259,13 @@ export async function playNotificationSound(opts: {
   customSoundUrl?: string;
   soundId?: string;
 }): Promise<void> {
-  const mode = opts.mode ?? "normal";
+  const mode = opts.mode ?? "preset";
   if (mode === "normal") {
     await playOsDefaultNotify();
     return;
   }
   if (mode === "preset" || mode === "ringtone") {
-    await playCatalogSound(opts.soundId || "ring-classic");
+    await playCatalogSound(opts.soundId || DEFAULT_RINGTONE_SOUND_ID);
     return;
   }
   if (mode === "custom" && opts.customSoundUrl) {

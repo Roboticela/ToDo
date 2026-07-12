@@ -1,0 +1,454 @@
+{
+  "source": "Mixkit (https://mixkit.co) — Mixkit License",
+  "downloadedAt": "2026-07-12T19:36:29.726Z",
+  "sounds": [
+    {
+      "id": "notify-correct",
+      "mixkitId": 2870,
+      "name": "Correct Tone",
+      "category": "notifications",
+      "blurb": "Short correct-answer chime",
+      "src": "/sounds/notify-correct.mp3"
+    },
+    {
+      "id": "notify-long-pop",
+      "mixkitId": 2358,
+      "name": "Long Pop",
+      "category": "notifications",
+      "blurb": "Playful long pop",
+      "src": "/sounds/notify-long-pop.mp3"
+    },
+    {
+      "id": "notify-bell",
+      "mixkitId": 933,
+      "name": "Bell",
+      "category": "notifications",
+      "blurb": "Classic bell notification",
+      "src": "/sounds/notify-bell.mp3"
+    },
+    {
+      "id": "notify-sci-click",
+      "mixkitId": 900,
+      "name": "Sci-Fi Click",
+      "category": "notifications",
+      "blurb": "Futuristic click",
+      "src": "/sounds/notify-sci-click.mp3"
+    },
+    {
+      "id": "notify-message-pop",
+      "mixkitId": 2354,
+      "name": "Message Pop",
+      "category": "notifications",
+      "blurb": "Message pop alert",
+      "src": "/sounds/notify-message-pop.mp3"
+    },
+    {
+      "id": "notify-ui-start",
+      "mixkitId": 2574,
+      "name": "UI Start",
+      "category": "notifications",
+      "blurb": "Interface start cue",
+      "src": "/sounds/notify-ui-start.mp3"
+    },
+    {
+      "id": "notify-ui-back",
+      "mixkitId": 2575,
+      "name": "UI Back",
+      "category": "notifications",
+      "blurb": "Interface back cue",
+      "src": "/sounds/notify-ui-back.mp3"
+    },
+    {
+      "id": "notify-happy-bells",
+      "mixkitId": 937,
+      "name": "Happy Bells",
+      "category": "notifications",
+      "blurb": "Bright happy bells",
+      "src": "/sounds/notify-happy-bells.mp3"
+    },
+    {
+      "id": "notify-sci-confirm",
+      "mixkitId": 914,
+      "name": "Sci Confirm",
+      "category": "notifications",
+      "blurb": "Sci-fi confirmation",
+      "src": "/sounds/notify-sci-confirm.mp3"
+    },
+    {
+      "id": "notify-positive",
+      "mixkitId": 951,
+      "name": "Positive",
+      "category": "notifications",
+      "blurb": "Upbeat positive ping",
+      "src": "/sounds/notify-positive.mp3"
+    },
+    {
+      "id": "notify-gaming-lock",
+      "mixkitId": 2580,
+      "name": "Lock",
+      "category": "notifications",
+      "blurb": "Gaming lock click",
+      "src": "/sounds/notify-gaming-lock.mp3"
+    },
+    {
+      "id": "notify-confirm",
+      "mixkitId": 2867,
+      "name": "Confirm",
+      "category": "notifications",
+      "blurb": "Clean confirmation tone",
+      "src": "/sounds/notify-confirm.mp3"
+    },
+    {
+      "id": "notify-bubble",
+      "mixkitId": 2356,
+      "name": "Bubble Pop",
+      "category": "notifications",
+      "blurb": "Bubble pop-up alert",
+      "src": "/sounds/notify-bubble.mp3"
+    },
+    {
+      "id": "notify-option",
+      "mixkitId": 2573,
+      "name": "Option Select",
+      "category": "notifications",
+      "blurb": "Option select tap",
+      "src": "/sounds/notify-option.mp3"
+    },
+    {
+      "id": "notify-clear",
+      "mixkitId": 2861,
+      "name": "Clear Announce",
+      "category": "notifications",
+      "blurb": "Clear announce tones",
+      "src": "/sounds/notify-clear.mp3"
+    },
+    {
+      "id": "notify-dry-pop",
+      "mixkitId": 2357,
+      "name": "Dry Pop",
+      "category": "notifications",
+      "blurb": "Dry pop-up alert",
+      "src": "/sounds/notify-dry-pop.mp3"
+    },
+    {
+      "id": "notify-elevator",
+      "mixkitId": 2863,
+      "name": "Elevator",
+      "category": "notifications",
+      "blurb": "Elevator tone",
+      "src": "/sounds/notify-elevator.mp3"
+    },
+    {
+      "id": "notify-light-btn",
+      "mixkitId": 2864,
+      "name": "Light Button",
+      "category": "notifications",
+      "blurb": "Light button press",
+      "src": "/sounds/notify-light-btn.mp3"
+    },
+    {
+      "id": "notify-digital",
+      "mixkitId": 2866,
+      "name": "Digital Quick",
+      "category": "notifications",
+      "blurb": "Quick digital tone",
+      "src": "/sounds/notify-digital.mp3"
+    },
+    {
+      "id": "notify-tile",
+      "mixkitId": 960,
+      "name": "Tile Reveal",
+      "category": "notifications",
+      "blurb": "Tile game reveal",
+      "src": "/sounds/notify-tile.mp3"
+    },
+    {
+      "id": "notify-doorbell",
+      "mixkitId": 333,
+      "name": "Doorbell",
+      "category": "notifications",
+      "blurb": "Single doorbell press",
+      "src": "/sounds/notify-doorbell.mp3"
+    },
+    {
+      "id": "notify-hint",
+      "mixkitId": 911,
+      "name": "Hint",
+      "category": "notifications",
+      "blurb": "Interface hint cue",
+      "src": "/sounds/notify-hint.mp3"
+    },
+    {
+      "id": "notify-atm",
+      "mixkitId": 2869,
+      "name": "Key Press",
+      "category": "notifications",
+      "blurb": "Key press click",
+      "src": "/sounds/notify-atm.mp3"
+    },
+    {
+      "id": "notify-reward",
+      "mixkitId": 952,
+      "name": "Reward",
+      "category": "notifications",
+      "blurb": "Correct reward chime",
+      "src": "/sounds/notify-reward.mp3"
+    },
+    {
+      "id": "ring-urgent-loop",
+      "mixkitId": 987,
+      "name": "Urgent Loop",
+      "category": "ringtone",
+      "blurb": "Urgent simple tone loop",
+      "src": "/sounds/ring-urgent-loop.mp3"
+    },
+    {
+      "id": "ring-magic",
+      "mixkitId": 2344,
+      "name": "Magic Ring",
+      "category": "ringtone",
+      "blurb": "Magic notification ring",
+      "src": "/sounds/ring-magic.mp3"
+    },
+    {
+      "id": "ring-wave-alarm",
+      "mixkitId": 2489,
+      "name": "Wave Alarm",
+      "category": "ringtone",
+      "blurb": "Game wave alarm",
+      "src": "/sounds/ring-wave-alarm.mp3"
+    },
+    {
+      "id": "ring-classic-alarm",
+      "mixkitId": 995,
+      "name": "Classic Alarm",
+      "category": "ringtone",
+      "blurb": "Classic alarm tone",
+      "src": "/sounds/ring-classic-alarm.mp3"
+    },
+    {
+      "id": "ring-facility",
+      "mixkitId": 999,
+      "name": "Facility Alarm",
+      "category": "ringtone",
+      "blurb": "Facility alarm sound",
+      "src": "/sounds/ring-facility.mp3"
+    },
+    {
+      "id": "ring-security",
+      "mixkitId": 996,
+      "name": "Security",
+      "category": "ringtone",
+      "blurb": "Security alarm",
+      "src": "/sounds/ring-security.mp3"
+    },
+    {
+      "id": "ring-buzzer",
+      "mixkitId": 991,
+      "name": "Warning Buzzer",
+      "category": "ringtone",
+      "blurb": "Warning alarm buzzer",
+      "src": "/sounds/ring-buzzer.mp3"
+    },
+    {
+      "id": "ring-ringtone-a",
+      "mixkitId": 1354,
+      "name": "Phone Ring A",
+      "category": "ringtone",
+      "blurb": "Phone ringtone A",
+      "src": "/sounds/ring-ringtone-a.mp3"
+    },
+    {
+      "id": "ring-ringtone-b",
+      "mixkitId": 1356,
+      "name": "Phone Ring B",
+      "category": "ringtone",
+      "blurb": "Phone ringtone B",
+      "src": "/sounds/ring-ringtone-b.mp3"
+    },
+    {
+      "id": "ring-ringtone-c",
+      "mixkitId": 1359,
+      "name": "Phone Ring C",
+      "category": "ringtone",
+      "blurb": "Phone ringtone C",
+      "src": "/sounds/ring-ringtone-c.mp3"
+    },
+    {
+      "id": "ring-ringtone-d",
+      "mixkitId": 1360,
+      "name": "Phone Ring D",
+      "category": "ringtone",
+      "blurb": "Phone ringtone D",
+      "src": "/sounds/ring-ringtone-d.mp3"
+    },
+    {
+      "id": "ring-ringtone-e",
+      "mixkitId": 1361,
+      "name": "Phone Ring E",
+      "category": "ringtone",
+      "blurb": "Phone ringtone E",
+      "src": "/sounds/ring-ringtone-e.mp3"
+    },
+    {
+      "id": "ring-alert-bells",
+      "mixkitId": 1000,
+      "name": "Alert Bells",
+      "category": "ringtone",
+      "blurb": "Alert bells ring",
+      "src": "/sounds/ring-alert-bells.mp3"
+    },
+    {
+      "id": "ring-siren",
+      "mixkitId": 1003,
+      "name": "Siren",
+      "category": "ringtone",
+      "blurb": "Siren-style alarm",
+      "src": "/sounds/ring-siren.mp3"
+    },
+    {
+      "id": "ring-pulse-alarm",
+      "mixkitId": 990,
+      "name": "Pulse Alarm",
+      "category": "ringtone",
+      "blurb": "Pulsing alarm",
+      "src": "/sounds/ring-pulse-alarm.mp3"
+    },
+    {
+      "id": "ring-digital-alarm",
+      "mixkitId": 994,
+      "name": "Digital Alarm",
+      "category": "ringtone",
+      "blurb": "Digital alarm beep",
+      "src": "/sounds/ring-digital-alarm.mp3"
+    },
+    {
+      "id": "enjoy-flute",
+      "mixkitId": 2841,
+      "name": "Flute Melody",
+      "category": "enjoy",
+      "blurb": "Melodical flute notification",
+      "src": "/sounds/enjoy-flute.mp3"
+    },
+    {
+      "id": "enjoy-marimba",
+      "mixkitId": 2820,
+      "name": "Magic Marimba",
+      "category": "enjoy",
+      "blurb": "Playful magic marimba",
+      "src": "/sounds/enjoy-marimba.mp3"
+    },
+    {
+      "id": "enjoy-harp",
+      "mixkitId": 2848,
+      "name": "Mystery Harp",
+      "category": "enjoy",
+      "blurb": "Arabian mystery harp",
+      "src": "/sounds/enjoy-harp.mp3"
+    },
+    {
+      "id": "enjoy-uplift-flute",
+      "mixkitId": 2976,
+      "name": "Uplifting Flute",
+      "category": "enjoy",
+      "blurb": "Uplifting flute tone",
+      "src": "/sounds/enjoy-uplift-flute.mp3"
+    },
+    {
+      "id": "enjoy-guitar",
+      "mixkitId": 2974,
+      "name": "Guitar Alert",
+      "category": "enjoy",
+      "blurb": "Guitar notification",
+      "src": "/sounds/enjoy-guitar.mp3"
+    },
+    {
+      "id": "enjoy-doorbell-tone",
+      "mixkitId": 2310,
+      "name": "Doorbell Tone",
+      "category": "enjoy",
+      "blurb": "Warm doorbell tone",
+      "src": "/sounds/enjoy-doorbell-tone.mp3"
+    },
+    {
+      "id": "enjoy-achievement",
+      "mixkitId": 600,
+      "name": "Achievement Bell",
+      "category": "enjoy",
+      "blurb": "Achievement bell",
+      "src": "/sounds/enjoy-achievement.mp3"
+    },
+    {
+      "id": "enjoy-arcade",
+      "mixkitId": 767,
+      "name": "Arcade Bonus",
+      "category": "enjoy",
+      "blurb": "Arcade bonus alert",
+      "src": "/sounds/enjoy-arcade.mp3"
+    },
+    {
+      "id": "enjoy-unlock",
+      "mixkitId": 254,
+      "name": "Unlock",
+      "category": "enjoy",
+      "blurb": "Game unlock cue",
+      "src": "/sounds/enjoy-unlock.mp3"
+    },
+    {
+      "id": "enjoy-bell-soft",
+      "mixkitId": 586,
+      "name": "Soft Bell",
+      "category": "enjoy",
+      "blurb": "Soft bell chime",
+      "src": "/sounds/enjoy-bell-soft.mp3"
+    },
+    {
+      "id": "enjoy-bell-bright",
+      "mixkitId": 590,
+      "name": "Bright Bell",
+      "category": "enjoy",
+      "blurb": "Bright bell ring",
+      "src": "/sounds/enjoy-bell-bright.mp3"
+    },
+    {
+      "id": "enjoy-chime-a",
+      "mixkitId": 595,
+      "name": "Chime A",
+      "category": "enjoy",
+      "blurb": "Light chime",
+      "src": "/sounds/enjoy-chime-a.mp3"
+    },
+    {
+      "id": "enjoy-chime-b",
+      "mixkitId": 598,
+      "name": "Chime B",
+      "category": "enjoy",
+      "blurb": "Gentle chime",
+      "src": "/sounds/enjoy-chime-b.mp3"
+    },
+    {
+      "id": "enjoy-sparkle-bell",
+      "mixkitId": 601,
+      "name": "Sparkle Bell",
+      "category": "enjoy",
+      "blurb": "Sparkling bell",
+      "src": "/sounds/enjoy-sparkle-bell.mp3"
+    },
+    {
+      "id": "enjoy-bell-deep",
+      "mixkitId": 603,
+      "name": "Deep Bell",
+      "category": "enjoy",
+      "blurb": "Deep bell tone",
+      "src": "/sounds/enjoy-bell-deep.mp3"
+    },
+    {
+      "id": "enjoy-bell-clear",
+      "mixkitId": 619,
+      "name": "Clear Bell",
+      "category": "enjoy",
+      "blurb": "Clear bell ding",
+      "src": "/sounds/enjoy-bell-clear.mp3"
+    }
+  ]
+}

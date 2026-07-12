@@ -13,7 +13,7 @@ import {
   playOsDefaultNotify,
   playWindowsDefaultNotify,
 } from "./notificationSound";
-import { getCatalogSound, windowsMediaPath } from "./soundCatalog";
+import { DEFAULT_RINGTONE_SOUND_ID, windowsMediaPath } from "./soundCatalog";
 
 export const CHANNEL_DEFAULT = "task-reminders";
 export const CHANNEL_SILENT = "task-reminders-silent";
@@ -123,7 +123,7 @@ function shouldPlayAppAudio(mode: NotificationSoundMode, os: OsKind): boolean {
 function buildSoundPayload(
   mode: NotificationSoundMode,
   os: OsKind,
-  soundId: string | undefined,
+  _soundId: string | undefined,
   silentOsToast: boolean
 ): { silent?: boolean; sound?: string; channelId: string } {
   const channelId = silentOsToast ? CHANNEL_SILENT : CHANNEL_DEFAULT;
@@ -135,19 +135,12 @@ function buildSoundPayload(
       sound: windowsMediaPath("Windows Notify System Generic.wav"),
     };
   }
-  if (mode === "preset" || mode === "ringtone") {
-    const sound = getCatalogSound(soundId || "ring-classic");
-    if (os === "macos" && sound?.macSound) return { channelId, sound: sound.macSound };
-    if (os === "linux" && sound?.linuxSound) return { channelId, sound: sound.linuxSound };
-    if (os === "windows" && sound?.windowsFiles?.[0]) {
-      return { channelId, sound: windowsMediaPath(sound.windowsFiles[0]) };
-    }
-  }
+  // Library plays bundled MP3 in-app when foregrounded; scheduled uses OS channel default
   return { channelId };
 }
 
 export async function showTaskNotification(opts: ShowTaskNotificationOpts): Promise<void> {
-  const mode: NotificationSoundMode = opts.mode ?? "normal";
+  const mode: NotificationSoundMode = opts.mode ?? "preset";
   const os = getOsKind();
   const playAudio = shouldPlayAppAudio(mode, os) && !opts.scheduleAt;
   const silentOsToast = playAudio;
@@ -166,7 +159,7 @@ export async function showTaskNotification(opts: ShowTaskNotificationOpts): Prom
     return;
   }
   if (mode === "preset" || mode === "ringtone") {
-    await playCatalogSound(opts.soundId || "ring-classic");
+    await playCatalogSound(opts.soundId || DEFAULT_RINGTONE_SOUND_ID);
     return;
   }
   if (mode === "normal") {
@@ -189,7 +182,7 @@ export async function scheduleNativeNotification(
   if (opts.scheduleAt.getTime() <= Date.now()) return;
 
   await ensureNativeChannels();
-  const mode: NotificationSoundMode = opts.mode ?? "normal";
+  const mode: NotificationSoundMode = opts.mode ?? "preset";
   const os = getOsKind();
   // Prefer audible OS channel for background delivery (app audio won't run when killed)
   const soundBits = buildSoundPayload(mode, os, opts.soundId, false);
@@ -319,7 +312,7 @@ export async function previewNotificationSound(opts: {
   }
 
   if (mode === "preset" || mode === "ringtone") {
-    await playCatalogSound(opts.soundId || "ring-classic");
+    await playCatalogSound(opts.soundId || DEFAULT_RINGTONE_SOUND_ID);
     return;
   }
 

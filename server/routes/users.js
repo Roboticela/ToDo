@@ -17,6 +17,12 @@ const SOUND_MODES = new Set(["normal", "ringtone", "preset", "custom"]);
 
 function toUserResponse(user) {
   const effective = getEffectivePlan(user);
+  const soundMode = user.notificationSoundMode;
+  let notificationSoundMode = "preset";
+  if (soundMode === "custom") notificationSoundMode = "custom";
+  else if (soundMode === "normal") notificationSoundMode = "normal";
+  else if (soundMode === "ringtone" || soundMode === "preset") notificationSoundMode = "preset";
+
   return {
     id: user.id,
     name: user.name,
@@ -27,12 +33,11 @@ function toUserResponse(user) {
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
     taskNotificationsEnabled: user.taskNotificationsEnabled ?? true,
-    notificationSoundMode: SOUND_MODES.has(user.notificationSoundMode)
-      ? user.notificationSoundMode === "ringtone"
-        ? "preset"
-        : user.notificationSoundMode
-      : "normal",
-    notificationSoundId: user.notificationSoundId ?? undefined,
+    notificationSoundMode,
+    notificationSoundId:
+      notificationSoundMode === "preset"
+        ? user.notificationSoundId || "notify-correct"
+        : user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),
@@ -160,7 +165,10 @@ router.patch("/:userId", requireAuth, async (req, res) => {
       }
       updates.customSoundUrl = null;
       if (req.user.notificationSoundMode === "custom" && notificationSoundMode === undefined) {
-        updates.notificationSoundMode = "normal";
+        updates.notificationSoundMode = "preset";
+        if (updates.notificationSoundId === undefined) {
+          updates.notificationSoundId = "notify-correct";
+        }
       }
     }
   }

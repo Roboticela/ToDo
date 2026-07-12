@@ -174,9 +174,9 @@ async function registerNativeBackup(
     title,
     body,
     tag: notif.id,
-    mode: user?.notificationSoundMode ?? "normal",
+    mode: user?.notificationSoundMode ?? "preset",
     customSoundUrl: user?.customSoundUrl,
-    soundId: user?.notificationSoundId,
+    soundId: user?.notificationSoundId || "notify-correct",
     scheduleAt: new Date(notif.scheduledAt),
   });
 }
@@ -236,9 +236,9 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
       title,
       body,
       tag: notif.id,
-      mode: user?.notificationSoundMode ?? "normal",
+      mode: user?.notificationSoundMode ?? "preset",
       customSoundUrl: user?.customSoundUrl,
-      soundId: user?.notificationSoundId,
+      soundId: user?.notificationSoundId || "notify-correct",
     });
   } catch {
     // Notification / sound may fail in some environments

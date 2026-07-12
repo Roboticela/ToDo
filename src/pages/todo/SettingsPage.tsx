@@ -165,12 +165,12 @@ export default function SettingsPage() {
 
   if (!user) return null;
   const currentUser = user;
-  const rawMode = currentUser.notificationSoundMode ?? "normal";
+  const rawMode = currentUser.notificationSoundMode ?? "preset";
   const soundMode: NotificationSoundMode =
     rawMode === "ringtone" ? "preset" : rawMode;
   const selectedSoundId =
     currentUser.notificationSoundId ||
-    (soundMode === "preset" ? "ring-classic" : undefined);
+    (soundMode === "preset" ? "notify-correct" : undefined);
   const selectedCatalog = getCatalogSound(selectedSoundId);
   const taskNotifsOn = currentUser.taskNotificationsEnabled !== false;
 
@@ -225,7 +225,7 @@ export default function SettingsPage() {
     try {
       const patch: Partial<typeof currentUser> = { notificationSoundMode: mode };
       if (mode === "preset" && !currentUser.notificationSoundId) {
-        patch.notificationSoundId = "notify-default";
+        patch.notificationSoundId = "notify-correct";
       }
       const updated = await updateProfile(currentUser.id, patch);
       updateUser(updated);
@@ -300,7 +300,8 @@ export default function SettingsPage() {
       const previousUrl = currentUser.customSoundUrl;
       const updated = await updateProfile(currentUser.id, {
         customSoundUrl: "",
-        notificationSoundMode: soundMode === "custom" ? "normal" : soundMode,
+        notificationSoundMode: soundMode === "custom" ? "preset" : soundMode,
+        ...(soundMode === "custom" ? { notificationSoundId: "notify-correct" } : {}),
       });
       updateUser(updated);
       if (previousUrl) await clearCustomSoundCache(previousUrl);
