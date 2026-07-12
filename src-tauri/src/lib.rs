@@ -1,11 +1,13 @@
 mod db;
 
 #[cfg(desktop)]
+mod desktop;
+
+#[cfg(desktop)]
 use tauri::Emitter;
 use tauri::Manager;
 
 /// Set to `true` to open the WebView inspector (devtools) on app startup.
-/// Run with the devtools feature: `npm run tauri:dev` or `cargo tauri dev -- --features devtools`.
 #[allow(dead_code)]
 const ENABLE_INSPECTOR: bool = false;
 
@@ -17,8 +19,7 @@ fn run_db_exec(
     db::db_exec(state, method)
 }
 
-/// Open a URL in the system default browser. Uses the system binary on each OS
-/// so it works in production (e.g. Linux .deb/AppImage where xdg-open may not be in PATH).
+/// Open a URL in the system default browser.
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
@@ -39,7 +40,6 @@ fn open_url(url: String) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        // Use URL protocol handler so the default browser opens; "explorer" can open File Explorer instead.
         std::process::Command::new("rundll32")
             .args(["url.dll,FileProtocolHandler", &url])
             .spawn()
@@ -65,10 +65,67 @@ fn write_file(path: String, data: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Play a local system sound file (Windows Media, macOS .aiff, Linux wav/ogg).
+#[tauri::command]
+fn play_system_sound(path: String) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err("Empty sound path".into());
+    }
+    if !std::path::Path::new(&path).is_file() {
+        return Err(format!("Sound file not found: {}", path));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        let wide: Vec<u16> = std::ffi::OsStr::new(&path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        const SND_FILENAME: u32 = 0x0002_0000;
+        const SND_ASYNC: u32 = 0x0000_0001;
+        #[link(name = "winmm")]
+        extern "system" {
+            fn PlaySoundW(psz_sound: *const u16, hmod: isize, fdw_sound: u32) -> i32;
+        }
+        let ok = unsafe { PlaySoundW(wide.as_ptr(), 0, SND_FILENAME | SND_ASYNC) };
+        if ok == 0 {
+            return Err(format!("PlaySoundW failed for {}", path));
+        }
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("afplay")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("afplay failed: {}", e))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if std::process::Command::new("paplay").arg(&path).spawn().is_ok() {
+            return Ok(());
+        }
+        std::process::Command::new("aplay")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Could not play sound (paplay/aplay): {}", e))?;
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        let _ = path;
+        Err("System sound playback is not supported on this platform".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        // Android: system bar presentation (Cinematic, Standard, Contoured) — DevKit android-ui plugin.
         .plugin(tauri_plugin_android_ui::init(
             tauri_plugin_android_ui::AndroidUiConfig::DEFAULT,
         ))
@@ -81,35 +138,51 @@ pub fn run() {
     let builder = {
         builder
             .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-                if cfg!(debug_assertions) {
-                    log::info!("single-instance: args count = {}", args.len());
-                    for (i, arg) in args.iter().enumerate() {
-                        log::info!("single-instance: arg[{}] = {}", i, arg);
-                    }
-                }
-                // Focus existing window so user sees the app instead of a second window
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = win.set_focus();
                     let _ = win.unminimize();
                     let _ = win.show();
                 }
-                // If second instance was opened with a deep link (e.g. roboticela-todo://auth?...), pass it to the frontend
                 for arg in args.iter() {
                     if arg.starts_with("roboticela-todo://") {
-                        if cfg!(debug_assertions) {
-                            log::info!("single-instance: emitting deep-link-url to frontend");
-                        }
                         let _ = Emitter::emit(app, "deep-link-url", arg.as_str());
                         break;
                     }
                 }
             }))
             .plugin(tauri_plugin_window_state::Builder::default().build())
+            .manage(desktop::DesktopState::default())
+            .on_window_event(|window, event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    let prefs = desktop::load_prefs(window.app_handle());
+                    if prefs.minimize_to_tray && prefs.show_tray_icon {
+                        let _ = window.hide();
+                        api.prevent_close();
+                    }
+                }
+            })
     };
+
+    #[cfg(desktop)]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        write_file,
+        run_db_exec,
+        open_url,
+        play_system_sound,
+        desktop::get_desktop_prefs,
+        desktop::set_desktop_prefs,
+    ]);
+
+    #[cfg(not(desktop))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        write_file,
+        run_db_exec,
+        open_url,
+        play_system_sound,
+    ]);
 
     builder
         .setup(|app| {
-            // Persistent SQLite DB in app data dir (survives updates, never cleared by OS)
             if let Ok(data_dir) = app.path().app_data_dir() {
                 let _ = std::fs::create_dir_all(&data_dir);
                 let db_path = data_dir.join("todo.db");
@@ -122,6 +195,16 @@ pub fn run() {
                         .build(),
                 )?;
             }
+
+            #[cfg(desktop)]
+            {
+                desktop::setup_tray(app.handle())?;
+                // Show main window after tray is ready (config starts visible:false)
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.show();
+                }
+            }
+
             #[cfg(feature = "devtools")]
             if ENABLE_INSPECTOR {
                 let handle = app.handle().clone();
@@ -134,7 +217,6 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![write_file, run_db_exec, open_url])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

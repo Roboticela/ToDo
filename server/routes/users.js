@@ -13,7 +13,7 @@ import { cancelActiveSubscriptionsForUser } from "./paddle.js";
 
 const router = Router();
 
-const SOUND_MODES = new Set(["normal", "ringtone", "custom"]);
+const SOUND_MODES = new Set(["normal", "ringtone", "preset", "custom"]);
 
 function toUserResponse(user) {
   const effective = getEffectivePlan(user);
@@ -28,8 +28,11 @@ function toUserResponse(user) {
     subscribedToReminders: user.subscribedToReminders ?? true,
     taskNotificationsEnabled: user.taskNotificationsEnabled ?? true,
     notificationSoundMode: SOUND_MODES.has(user.notificationSoundMode)
-      ? user.notificationSoundMode
+      ? user.notificationSoundMode === "ringtone"
+        ? "preset"
+        : user.notificationSoundMode
       : "normal",
+    notificationSoundId: user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),
@@ -51,6 +54,7 @@ router.patch("/:userId", requireAuth, async (req, res) => {
     plan,
     taskNotificationsEnabled,
     notificationSoundMode,
+    notificationSoundId,
     customSoundUrl,
   } = req.body;
   // Email cannot be changed via PATCH; use request-email-change + confirm-email-change flow
@@ -110,7 +114,21 @@ router.patch("/:userId", requireAuth, async (req, res) => {
     if (!SOUND_MODES.has(notificationSoundMode)) {
       return res.status(400).json({ error: "Invalid notification sound mode" });
     }
-    updates.notificationSoundMode = notificationSoundMode;
+    // Normalize legacy ringtone → preset
+    updates.notificationSoundMode =
+      notificationSoundMode === "ringtone" ? "preset" : notificationSoundMode;
+  }
+  if (notificationSoundId !== undefined) {
+    if (notificationSoundId === null || notificationSoundId === "") {
+      updates.notificationSoundId = null;
+    } else if (typeof notificationSoundId === "string" && notificationSoundId.trim()) {
+      updates.notificationSoundId = notificationSoundId.trim().slice(0, 64);
+      if (updates.notificationSoundMode === undefined) {
+        updates.notificationSoundMode = "preset";
+      }
+    } else {
+      return res.status(400).json({ error: "Invalid notification sound id" });
+    }
   }
   if (customSoundUrl !== undefined) {
     if (typeof customSoundUrl === "string" && customSoundUrl.trim()) {

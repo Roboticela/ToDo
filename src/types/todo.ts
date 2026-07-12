@@ -78,8 +78,10 @@ export interface User {
   subscribedToReminders?: boolean;
   /** Master toggle for local task reminders */
   taskNotificationsEnabled?: boolean;
-  /** How task reminders sound: silent OS notice, built-in ringtone, or custom upload */
+  /** How task reminders sound: OS default, curated library preset, or custom upload */
   notificationSoundMode?: NotificationSoundMode;
+  /** Selected curated sound id when mode is preset (or legacy ringtone) */
+  notificationSoundId?: string;
   /** Public R2 URL for a custom notification sound (when mode is custom) */
   customSoundUrl?: string;
   /** False for Google-only accounts with no password set */
@@ -87,7 +89,7 @@ export interface User {
   createdAt: string;
 }
 
-export type NotificationSoundMode = "normal" | "ringtone" | "custom";
+export type NotificationSoundMode = "normal" | "ringtone" | "preset" | "custom";
 
 export interface AuthSession {
   accessToken: string;

@@ -66,11 +66,33 @@ export default function AppLayout() {
   useEffect(() => {
     if (isAuthenticated && user) {
       clearAllTimers();
-      requestNotificationPermission().then(() => {
+      requestNotificationPermission().then((granted) => {
+        if (granted) {
+          void import("../../lib/nativeNotification").then((m) =>
+            m.ensureNotificationChannels()
+          );
+        }
         initNotificationScheduler(user.id);
       });
     }
     return () => clearAllTimers();
+  }, [isAuthenticated, user]);
+
+  // Re-arm timers when returning from background (browser tab / Android resume)
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    const refresh = () => {
+      void initNotificationScheduler(user.id);
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [isAuthenticated, user]);
 
   // Rebuild reminder schedule after sync (completions/times may have changed on another device)

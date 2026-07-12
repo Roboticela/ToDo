@@ -36,7 +36,8 @@ model User {
 
   // Local task notification preferences (synced across devices)
   taskNotificationsEnabled Boolean  @default(true)
-  notificationSoundMode    String   @default("normal") // normal | ringtone | custom
+  notificationSoundMode    String   @default("normal") // normal | ringtone | preset | custom
+  notificationSoundId      String?  // curated library sound id when mode is preset
   customSoundUrl           String?
 
   sessions           Session[]

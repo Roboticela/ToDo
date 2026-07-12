@@ -14,12 +14,18 @@ import {
   isNativePermissionGranted,
   requestNativeNotificationPermission,
   showTaskNotification,
+  scheduleNativeNotification,
+  cancelNativeNotification,
+  cancelAllNativeNotifications,
 } from "./nativeNotification";
+import { isTauri } from "./tauri";
 
 let notificationTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
 /** How many weeks ahead to schedule repeating timed reminders */
 const REPEAT_WEEKS_AHEAD = 8;
+/** Fire overdue reminders if missed by less than this (ms) instead of dropping them */
+const OVERDUE_GRACE_MS = 30 * 60 * 1000;
 
 export async function requestNotificationPermission(): Promise<boolean> {
   const granted = await requestNativeNotificationPermission();
@@ -133,7 +139,46 @@ export async function scheduleTaskNotifications(task: Task): Promise<void> {
   for (const notif of notifs) {
     await saveNotification(notif);
     scheduleLocalTimer(notif, task);
+    await registerNativeBackup(notif, task);
   }
+}
+
+function notificationCopy(
+  notif: ScheduledNotification,
+  task: Task
+): { title: string; body: string } {
+  let title = task.title;
+  let body = "";
+  if (notif.type === "reminder") {
+    body = `Time for: ${task.title}`;
+    if (task.description) body += `\n${task.description}`;
+  } else if (notif.type === "start") {
+    title = `Starting: ${task.title}`;
+    body = task.startTime ? `Starting at ${task.startTime}` : "Starting now";
+  } else if (notif.type === "end") {
+    title = `Ending: ${task.title}`;
+    body = task.endTime ? `Ending at ${task.endTime}` : "Ending now";
+  }
+  return { title, body };
+}
+
+/** OS-level schedule so reminders fire when the WebView is backgrounded/killed. */
+async function registerNativeBackup(
+  notif: ScheduledNotification,
+  task: Task
+): Promise<void> {
+  if (!isTauri()) return;
+  const user = await getUser(task.userId);
+  const { title, body } = notificationCopy(notif, task);
+  await scheduleNativeNotification({
+    title,
+    body,
+    tag: notif.id,
+    mode: user?.notificationSoundMode ?? "normal",
+    customSoundUrl: user?.customSoundUrl,
+    soundId: user?.notificationSoundId,
+    scheduleAt: new Date(notif.scheduledAt),
+  });
 }
 
 function scheduleLocalTimer(notif: ScheduledNotification, task: Task): void {
@@ -193,33 +238,42 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
       tag: notif.id,
       mode: user?.notificationSoundMode ?? "normal",
       customSoundUrl: user?.customSoundUrl,
+      soundId: user?.notificationSoundId,
     });
   } catch {
     // Notification / sound may fail in some environments
   }
 
+  await cancelNativeNotification(notif.id).catch(() => {});
   await markNotificationFired(notif.id);
 }
 
 export async function initNotificationScheduler(userId?: string): Promise<void> {
   const pending = await getPendingNotifications(userId);
-  const now = new Date();
+  const now = Date.now();
 
   for (const notif of pending) {
-    const scheduledAt = new Date(notif.scheduledAt);
-    if (scheduledAt <= now) {
-      // Drop overdue pending rows so they don't accumulate forever
+    const scheduledAt = new Date(notif.scheduledAt).getTime();
+    const task = await getTask(notif.taskId);
+    if (!task) {
+      await cancelNativeNotification(notif.id).catch(() => {});
       await markNotificationFired(notif.id);
       continue;
     }
 
-    const task = await getTask(notif.taskId);
-    if (!task) {
-      // Orphan reminder (task deleted remotely) — drop it
-      await markNotificationFired(notif.id);
+    if (scheduledAt <= now) {
+      // Fire recently missed reminders; drop ancient ones
+      if (now - scheduledAt <= OVERDUE_GRACE_MS) {
+        await fireNotification(notif, task);
+      } else {
+        await cancelNativeNotification(notif.id).catch(() => {});
+        await markNotificationFired(notif.id);
+      }
       continue;
     }
+
     scheduleLocalTimer(notif, task);
+    await registerNativeBackup(notif, task);
   }
 }
 
@@ -229,6 +283,7 @@ export async function initNotificationScheduler(userId?: string): Promise<void> 
  */
 export async function rebuildNotificationsForUser(userId: string): Promise<void> {
   clearAllTimers();
+  await cancelAllNativeNotifications().catch(() => {});
   const pending = await getPendingNotifications();
   const taskIds = new Set(pending.map((n) => n.taskId));
   for (const taskId of taskIds) {

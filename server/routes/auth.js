@@ -71,7 +71,12 @@ function toUserResponse(user) {
     subscribedToReminders: user.subscribedToReminders ?? true,
     taskNotificationsEnabled: user.taskNotificationsEnabled ?? true,
     notificationSoundMode:
-      soundMode === "ringtone" || soundMode === "custom" ? soundMode : "normal",
+      soundMode === "custom"
+        ? "custom"
+        : soundMode === "ringtone" || soundMode === "preset"
+          ? "preset"
+          : "normal",
+    notificationSoundId: user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),

@@ -42,15 +42,47 @@ import {
   rebuildNotificationsForUser,
 } from "../../lib/notificationService";
 import {
-  playNotificationSound,
   prefetchCustomSound,
   clearCustomSoundCache,
 } from "../../lib/notificationSound";
 import { previewNotificationSound } from "../../lib/nativeNotification";
 import { getOsKind } from "../../lib/platform";
+import {
+  SOUND_CATEGORIES,
+  getCatalogSound,
+  soundsByCategory,
+  type SoundCategory,
+} from "../../lib/soundCatalog";
+import {
+  getDesktopPrefs,
+  setDesktopPrefs,
+  isDesktopShell,
+  type DesktopPrefs,
+} from "../../lib/desktopPrefs";
+import { getAppRuntime } from "../../lib/platform";
+import {
+  isNativePermissionGranted,
+  getNotificationPermissionState,
+} from "../../lib/nativeNotification";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
+function osSoundHint(): string {
+  switch (getOsKind()) {
+    case "windows":
+      return "Windows Media";
+    case "macos":
+      return "macOS default";
+    case "linux":
+      return "Linux default";
+    case "android":
+      return "Android default";
+    case "ios":
+      return "iOS default";
+    default:
+      return "OS default";
+  }
+}
 
 export default function SettingsPage() {
   const navigate = useNavigate();
@@ -73,7 +105,12 @@ export default function SettingsPage() {
     if (typeof window === "undefined" || !isNotificationSupported()) return "unsupported";
     return Notification.permission;
   });
+  const [soundCategory, setSoundCategory] = useState<SoundCategory>("notifications");
+  const [desktopPrefs, setDesktopPrefsState] = useState<DesktopPrefs | null>(null);
+  const [desktopUpdating, setDesktopUpdating] = useState(false);
   const soundInputRef = useRef<HTMLInputElement>(null);
+  const showDesktopSection = isDesktopShell();
+  const runtime = getAppRuntime();
 
   // After email change confirmation (redirect from link), refetch user and clear param
   useEffect(() => {
@@ -108,9 +145,33 @@ export default function SettingsPage() {
     }
   }, [user?.customSoundUrl]);
 
+  // Open the category tab that matches the selected library sound
+  useEffect(() => {
+    const id = user?.notificationSoundId;
+    const catalog = id ? getCatalogSound(id) : undefined;
+    if (catalog) setSoundCategory(catalog.category);
+  }, [user?.notificationSoundId]);
+
+  // Load desktop tray prefs + sync permission state
+  useEffect(() => {
+    if (showDesktopSection) {
+      void getDesktopPrefs().then(setDesktopPrefsState);
+    }
+    void isNativePermissionGranted().then((granted) => {
+      if (granted) setPermission("granted");
+      else setPermission(getNotificationPermissionState());
+    });
+  }, [showDesktopSection]);
+
   if (!user) return null;
   const currentUser = user;
-  const soundMode: NotificationSoundMode = currentUser.notificationSoundMode ?? "normal";
+  const rawMode = currentUser.notificationSoundMode ?? "normal";
+  const soundMode: NotificationSoundMode =
+    rawMode === "ringtone" ? "preset" : rawMode;
+  const selectedSoundId =
+    currentUser.notificationSoundId ||
+    (soundMode === "preset" ? "ring-classic" : undefined);
+  const selectedCatalog = getCatalogSound(selectedSoundId);
   const taskNotifsOn = currentUser.taskNotificationsEnabled !== false;
 
   async function handleNewsletterToggle() {
@@ -154,7 +215,7 @@ export default function SettingsPage() {
   }
 
   async function handleSoundModeChange(mode: NotificationSoundMode) {
-    if (mode === soundMode) return;
+    if (mode === soundMode && mode !== "preset") return;
     if (mode === "custom" && !currentUser.customSoundUrl) {
       soundInputRef.current?.click();
       return;
@@ -162,8 +223,29 @@ export default function SettingsPage() {
     setNotifUpdating(true);
     setSoundError(null);
     try {
-      const updated = await updateProfile(currentUser.id, { notificationSoundMode: mode });
+      const patch: Partial<typeof currentUser> = { notificationSoundMode: mode };
+      if (mode === "preset" && !currentUser.notificationSoundId) {
+        patch.notificationSoundId = "notify-default";
+      }
+      const updated = await updateProfile(currentUser.id, patch);
       updateUser(updated);
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : "Could not update sound.");
+    } finally {
+      setNotifUpdating(false);
+    }
+  }
+
+  async function handleSelectCatalogSound(soundId: string) {
+    setNotifUpdating(true);
+    setSoundError(null);
+    try {
+      const updated = await updateProfile(currentUser.id, {
+        notificationSoundMode: "preset",
+        notificationSoundId: soundId,
+      });
+      updateUser(updated);
+      await previewNotificationSound({ mode: "preset", soundId });
     } catch (err) {
       setSoundError(err instanceof Error ? err.message : "Could not update sound.");
     } finally {
@@ -235,9 +317,28 @@ export default function SettingsPage() {
       await previewNotificationSound({
         mode: soundMode,
         customSoundUrl: currentUser.customSoundUrl,
+        soundId: selectedSoundId,
       });
     } catch {
       setSoundError("Could not play preview.");
+    }
+  }
+
+  async function handleDesktopPrefToggle(key: keyof DesktopPrefs) {
+    if (!desktopPrefs) return;
+    setDesktopUpdating(true);
+    try {
+      const next = { ...desktopPrefs, [key]: !desktopPrefs[key] };
+      // Hiding tray while minimize-to-tray is on would trap the user — turn minimize off
+      if (key === "showTrayIcon" && !next.showTrayIcon) {
+        next.minimizeToTray = false;
+      }
+      const saved = await setDesktopPrefs(next);
+      setDesktopPrefsState(saved);
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : "Could not update desktop settings.");
+    } finally {
+      setDesktopUpdating(false);
     }
   }
 
@@ -478,11 +579,12 @@ export default function SettingsPage() {
                 </div>
               )}
 
-              <div className="px-4 py-3 space-y-3">
+              <div className="px-4 py-3 space-y-4">
                 <div className="flex items-center gap-2">
                   <Volume2 className="w-4 h-4 text-primary/70 shrink-0" />
                   <p className="text-sm font-medium text-foreground">Alert sound</p>
                 </div>
+
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
@@ -492,9 +594,9 @@ export default function SettingsPage() {
                         hint: osSoundHint(),
                       },
                       {
-                        id: "ringtone" as const,
-                        label: "Ringtone",
-                        hint: osRingtoneHint(),
+                        id: "preset" as const,
+                        label: "Library",
+                        hint: selectedCatalog?.name ?? "Pick a tone",
                       },
                       { id: "custom" as const, label: "Custom", hint: "Your file" },
                     ] as const
@@ -512,10 +614,80 @@ export default function SettingsPage() {
                       )}
                     >
                       <p className="text-xs font-semibold">{opt.label}</p>
-                      <p className="text-[10px] text-foreground/45 mt-0.5">{opt.hint}</p>
+                      <p className="text-[10px] text-foreground/45 mt-0.5 truncate">{opt.hint}</p>
                     </button>
                   ))}
                 </div>
+
+                {soundMode === "preset" && (
+                  <div className="space-y-3 rounded-2xl border border-border/60 bg-gradient-to-b from-accent/20 to-transparent p-3">
+                    <div className="flex gap-1.5 p-1 rounded-xl bg-background/50 border border-border/40">
+                      {SOUND_CATEGORIES.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSoundCategory(cat.id)}
+                          className={cn(
+                            "flex-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors",
+                            soundCategory === cat.id
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-foreground/60 hover:text-foreground hover:bg-accent/40"
+                          )}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-foreground/50 px-0.5">
+                      {SOUND_CATEGORIES.find((c) => c.id === soundCategory)?.blurb}
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar pr-0.5">
+                      {soundsByCategory(soundCategory).map((sound) => {
+                        const active = selectedSoundId === sound.id;
+                        return (
+                          <motion.button
+                            key={sound.id}
+                            type="button"
+                            whileTap={{ scale: 0.98 }}
+                            disabled={notifUpdating}
+                            onClick={() => handleSelectCatalogSound(sound.id)}
+                            className={cn(
+                              "text-left rounded-xl border px-3 py-2.5 transition-all",
+                              active
+                                ? "border-primary/60 bg-primary/15"
+                                : "border-border/70 bg-background/40 hover:border-primary/30 hover:bg-accent/25"
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold text-foreground truncate">
+                                  {sound.name}
+                                </p>
+                                <p className="text-[10px] text-foreground/50 mt-0.5 leading-snug">
+                                  {sound.blurb}
+                                </p>
+                              </div>
+                              <span
+                                className={cn(
+                                  "shrink-0 mt-0.5 w-6 h-6 rounded-full border flex items-center justify-center",
+                                  active
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border text-foreground/40"
+                                )}
+                              >
+                                {active ? (
+                                  <Check className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Play className="w-3 h-3" />
+                                )}
+                              </span>
+                            </div>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {soundMode === "custom" && (
                   <div className="space-y-2 pt-1">
@@ -570,6 +742,91 @@ export default function SettingsPage() {
             <p className="px-4 py-2 text-xs text-red-400 border-t border-border/50">{soundError}</p>
           )}
         </Section>
+
+        {showDesktopSection && desktopPrefs && (
+          <Section label="Desktop">
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Show in system tray</p>
+                <p className="text-xs text-foreground/50 mt-0.5">
+                  Keep an icon in the notification area for background reminders.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={desktopPrefs.showTrayIcon}
+                disabled={desktopUpdating}
+                onClick={() => handleDesktopPrefToggle("showTrayIcon")}
+                className={cn(
+                  "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  desktopPrefs.showTrayIcon ? "bg-primary/20" : "bg-foreground/10"
+                )}
+              >
+                <motion.div
+                  animate={{ x: desktopPrefs.showTrayIcon ? 20 : 2 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className={cn(
+                    "absolute top-1 w-4 h-4 rounded-full shadow-sm",
+                    desktopPrefs.showTrayIcon ? "bg-primary" : "bg-foreground"
+                  )}
+                />
+              </button>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Minimize to tray on close</p>
+                <p className="text-xs text-foreground/50 mt-0.5">
+                  {desktopPrefs.showTrayIcon
+                    ? "Closing the window keeps the app running in the background."
+                    : "Enable the tray icon to use this option."}
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={desktopPrefs.minimizeToTray}
+                disabled={desktopUpdating || !desktopPrefs.showTrayIcon}
+                onClick={() => handleDesktopPrefToggle("minimizeToTray")}
+                className={cn(
+                  "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40",
+                  desktopPrefs.minimizeToTray && desktopPrefs.showTrayIcon
+                    ? "bg-primary/20"
+                    : "bg-foreground/10",
+                  !desktopPrefs.showTrayIcon && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <motion.div
+                  animate={{
+                    x: desktopPrefs.minimizeToTray && desktopPrefs.showTrayIcon ? 20 : 2,
+                  }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className={cn(
+                    "absolute top-1 w-4 h-4 rounded-full shadow-sm",
+                    desktopPrefs.minimizeToTray && desktopPrefs.showTrayIcon
+                      ? "bg-primary"
+                      : "bg-foreground"
+                  )}
+                />
+              </button>
+            </div>
+            <p className="px-4 py-2 text-[11px] text-foreground/45 border-t border-border/50">
+              Quit from the tray menu when you want to fully exit. Left-click the tray icon to reopen.
+            </p>
+          </Section>
+        )}
+
+        {runtime === "android" && (
+          <Section label="Background">
+            <div className="px-4 py-3.5 space-y-1">
+              <p className="text-sm font-medium text-foreground">Android reminders</p>
+              <p className="text-xs text-foreground/50 leading-relaxed">
+                Task reminders are scheduled with the system so they can fire while the app is in the
+                background. Keep notifications allowed, and grant exact alarms if Android asks.
+              </p>
+            </div>
+          </Section>
+        )}
 
         {/* Newsletter / Email preferences */}
         <Section label="Newsletter">

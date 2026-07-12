@@ -1,56 +1,31 @@
 /**
  * Cross-platform task notifications.
- * - Tauri (Windows / macOS / Linux / Android / iOS): native plugin + OS default sounds
- * - Web: Notification API
- *
- * Sound modes:
- * - normal   → each OS default notification sound (no app audio)
- * - ringtone → platform system alert tone when available, else in-app chime
- * - custom   → silent OS toast + uploaded audio playback
+ * - Immediate toasts + OS sounds
+ * - Native Schedule.at for Android/desktop background delivery (app killed / sleeping)
  */
 
 import type { NotificationSoundMode } from "../types/todo";
 import { isTauri } from "./tauri";
-import { getOsKind, type OsKind } from "./platform";
-import { playCustomSound, playRingtone } from "./notificationSound";
+import { getAppRuntime, getOsKind, type OsKind } from "./platform";
+import {
+  playCatalogSound,
+  playCustomSound,
+  playOsDefaultNotify,
+  playWindowsDefaultNotify,
+} from "./notificationSound";
+import { getCatalogSound, windowsMediaPath } from "./soundCatalog";
 
-const CHANNEL_DEFAULT = "task-reminders";
-const CHANNEL_SILENT = "task-reminders-silent";
+export const CHANNEL_DEFAULT = "task-reminders";
+export const CHANNEL_SILENT = "task-reminders-silent";
 
 let channelsReady = false;
 
-function notifIdFromTag(tag: string): number {
+export function notifIdFromTag(tag: string): number {
   let h = 0;
   for (let i = 0; i < tag.length; i++) {
     h = (Math.imul(31, h) + tag.charCodeAt(i)) | 0;
   }
-  // Keep in signed 32-bit range, avoid 0
   return h === 0 ? 1 : h;
-}
-
-/**
- * Platform system alert for "ringtone" mode.
- * Omitting sound on Windows/Android/iOS uses the OS default notification sound.
- */
-function platformRingtoneSound(os: OsKind): string | undefined {
-  switch (os) {
-    case "macos":
-      // Named system sound installed with macOS
-      return "Ping";
-    case "linux":
-      // Freedesktop / XDG theme sound
-      return "message-new-instant";
-    case "windows":
-      // Windows toast default sound (plugin expects a .wav path for custom;
-      // omit to use the system notification sound)
-      return undefined;
-    case "android":
-    case "ios":
-      // Channel / UNNotificationSound.default
-      return undefined;
-    default:
-      return undefined;
-  }
 }
 
 async function ensureNativeChannels(): Promise<void> {
@@ -59,7 +34,6 @@ async function ensureNativeChannels(): Promise<void> {
     const { createChannel, Importance, Visibility } = await import(
       "@tauri-apps/plugin-notification"
     );
-    // Default channel → Android/iOS play the device default notification sound
     await createChannel({
       id: CHANNEL_DEFAULT,
       name: "Task reminders",
@@ -68,13 +42,11 @@ async function ensureNativeChannels(): Promise<void> {
       visibility: Visibility.Private,
       vibration: true,
       lights: true,
-      // no `sound` → OS / user default
     });
-    // Silent channel for custom / in-app ringtone (avoid double sound with OS default)
     await createChannel({
       id: CHANNEL_SILENT,
       name: "Task reminders (custom sound)",
-      description: "Visual reminders when using a custom or in-app alert sound",
+      description: "Visual reminders when using a custom or library alert sound",
       importance: Importance.Default,
       visibility: Visibility.Private,
       vibration: true,
@@ -82,7 +54,6 @@ async function ensureNativeChannels(): Promise<void> {
     });
     channelsReady = true;
   } catch {
-    // Channels are Android-primary; desktop may no-op
     channelsReady = true;
   }
 }
@@ -118,7 +89,7 @@ export async function requestNativeNotificationPermission(): Promise<boolean> {
       if (granted) await ensureNativeChannels();
       return granted;
     } catch {
-      // fall through to Web API
+      // fall through
     }
   }
   if (!("Notification" in window)) return false;
@@ -139,40 +110,125 @@ export interface ShowTaskNotificationOpts {
   tag: string;
   mode?: NotificationSoundMode;
   customSoundUrl?: string;
+  soundId?: string;
+  /** When set, schedule natively so it fires even if the app is backgrounded/killed. */
+  scheduleAt?: Date;
 }
 
-/**
- * Show a task reminder using the best path for the current platform,
- * then play app-owned audio only when needed (ringtone fallback / custom).
- */
+function shouldPlayAppAudio(mode: NotificationSoundMode, os: OsKind): boolean {
+  if (mode === "custom" || mode === "preset" || mode === "ringtone") return true;
+  return os === "windows";
+}
+
+function buildSoundPayload(
+  mode: NotificationSoundMode,
+  os: OsKind,
+  soundId: string | undefined,
+  silentOsToast: boolean
+): { silent?: boolean; sound?: string; channelId: string } {
+  const channelId = silentOsToast ? CHANNEL_SILENT : CHANNEL_DEFAULT;
+  if (silentOsToast) return { silent: true, channelId };
+
+  if (mode === "normal" && os === "windows") {
+    return {
+      channelId,
+      sound: windowsMediaPath("Windows Notify System Generic.wav"),
+    };
+  }
+  if (mode === "preset" || mode === "ringtone") {
+    const sound = getCatalogSound(soundId || "ring-classic");
+    if (os === "macos" && sound?.macSound) return { channelId, sound: sound.macSound };
+    if (os === "linux" && sound?.linuxSound) return { channelId, sound: sound.linuxSound };
+    if (os === "windows" && sound?.windowsFiles?.[0]) {
+      return { channelId, sound: windowsMediaPath(sound.windowsFiles[0]) };
+    }
+  }
+  return { channelId };
+}
+
 export async function showTaskNotification(opts: ShowTaskNotificationOpts): Promise<void> {
   const mode: NotificationSoundMode = opts.mode ?? "normal";
   const os = getOsKind();
-  const useAppAudio = mode === "custom" || (mode === "ringtone" && needsAppRingtone(os));
-  const silentOsToast = mode === "custom" || useAppAudio;
+  const playAudio = shouldPlayAppAudio(mode, os) && !opts.scheduleAt;
+  const silentOsToast = playAudio;
 
   if (isTauri()) {
     await showNativeNotification(opts, mode, os, silentOsToast);
   } else {
-    await showWebNotification(opts, silentOsToast);
+    await showWebNotification(opts, silentOsToast && mode !== "normal");
   }
 
-  // App-owned audio (never for "normal" — OS already played its default)
+  // Scheduled native notifications play OS/channel sound — skip in-app audio
+  if (opts.scheduleAt || !playAudio) return;
+
   if (mode === "custom" && opts.customSoundUrl) {
     await playCustomSound(opts.customSoundUrl);
-  } else if (mode === "ringtone" && needsAppRingtone(os)) {
-    await playRingtone();
-  } else if (mode === "ringtone" && !isTauri()) {
-    // Web has no reliable OS ringtone hook
-    await playRingtone();
+    return;
+  }
+  if (mode === "preset" || mode === "ringtone") {
+    await playCatalogSound(opts.soundId || "ring-classic");
+    return;
+  }
+  if (mode === "normal") {
+    if (os === "windows") {
+      if (!(await playWindowsDefaultNotify())) await playOsDefaultNotify();
+    } else {
+      await playOsDefaultNotify();
+    }
   }
 }
 
-function needsAppRingtone(os: OsKind): boolean {
-  // macOS / Linux: named system sounds via the plugin ("Ping", XDG theme).
-  // Windows / Android / iOS / web: play our in-app ringtone (OS "default"
-  // is already used by Normal mode, so Ringtone stays distinct).
-  return os !== "macos" && os !== "linux";
+/**
+ * Register a native OS-scheduled notification (Android/desktop).
+ * Survives app backgrounding; on Android uses allowWhileIdle when possible.
+ */
+export async function scheduleNativeNotification(
+  opts: ShowTaskNotificationOpts & { scheduleAt: Date }
+): Promise<void> {
+  if (!isTauri()) return;
+  if (opts.scheduleAt.getTime() <= Date.now()) return;
+
+  await ensureNativeChannels();
+  const mode: NotificationSoundMode = opts.mode ?? "normal";
+  const os = getOsKind();
+  // Prefer audible OS channel for background delivery (app audio won't run when killed)
+  const soundBits = buildSoundPayload(mode, os, opts.soundId, false);
+
+  try {
+    const { sendNotification, Schedule } = await import("@tauri-apps/plugin-notification");
+    const allowWhileIdle = getAppRuntime() === "android" || getAppRuntime() === "ios";
+    sendNotification({
+      id: notifIdFromTag(opts.tag),
+      title: opts.title,
+      body: opts.body,
+      channelId: soundBits.channelId,
+      silent: soundBits.silent,
+      sound: soundBits.sound,
+      schedule: Schedule.at(opts.scheduleAt, false, allowWhileIdle),
+    });
+  } catch {
+    // Plugin may not support schedule on this platform — JS timers remain
+  }
+}
+
+export async function cancelNativeNotification(tag: string): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { cancel } = await import("@tauri-apps/plugin-notification");
+    await cancel([notifIdFromTag(tag)]);
+  } catch {
+    // ignore
+  }
+}
+
+export async function cancelAllNativeNotifications(): Promise<void> {
+  if (!isTauri()) return;
+  try {
+    const { cancelAll } = await import("@tauri-apps/plugin-notification");
+    await cancelAll();
+  } catch {
+    // ignore
+  }
 }
 
 async function showNativeNotification(
@@ -183,7 +239,8 @@ async function showNativeNotification(
 ): Promise<void> {
   await ensureNativeChannels();
   try {
-    const { sendNotification } = await import("@tauri-apps/plugin-notification");
+    const { sendNotification, Schedule } = await import("@tauri-apps/plugin-notification");
+    const soundBits = buildSoundPayload(mode, os, opts.soundId, silentOsToast);
 
     const payload: {
       id: number;
@@ -192,21 +249,20 @@ async function showNativeNotification(
       channelId: string;
       silent?: boolean;
       sound?: string;
+      schedule?: ReturnType<typeof Schedule.at>;
     } = {
       id: notifIdFromTag(opts.tag),
       title: opts.title,
       body: opts.body,
-      channelId: silentOsToast ? CHANNEL_SILENT : CHANNEL_DEFAULT,
+      channelId: soundBits.channelId,
+      silent: soundBits.silent,
+      sound: soundBits.sound,
     };
 
-    if (silentOsToast) {
-      payload.silent = true;
-    } else if (mode === "ringtone") {
-      const sound = platformRingtoneSound(os);
-      if (sound) payload.sound = sound;
-      // else: OS / channel default (Android, iOS, Windows)
+    if (opts.scheduleAt && opts.scheduleAt.getTime() > Date.now()) {
+      const allowWhileIdle = getAppRuntime() === "android" || getAppRuntime() === "ios";
+      payload.schedule = Schedule.at(opts.scheduleAt, false, allowWhileIdle);
     }
-    // mode === "normal": no sound field → Windows/macOS/Linux/Android/iOS defaults
 
     sendNotification(payload);
   } catch {
@@ -233,45 +289,37 @@ async function showWebNotification(
   }
 }
 
-/** Preview helper for Settings — respects mode without scheduling a task. */
 export async function previewNotificationSound(opts: {
   mode: NotificationSoundMode;
   customSoundUrl?: string;
+  soundId?: string;
 }): Promise<void> {
   const mode = opts.mode;
-  const os = getOsKind();
 
   if (mode === "normal") {
+    await playOsDefaultNotify();
     if (isTauri()) {
-      await showTaskNotification({
-        title: "Roboticela ToDo",
-        body: "This uses your system default notification sound.",
-        tag: "preview-normal",
-        mode: "normal",
-      });
-    } else if ("Notification" in window && Notification.permission === "granted") {
-      new Notification("Roboticela ToDo", {
-        body: "This uses your browser / OS default notification sound.",
-        tag: "preview-normal",
-        silent: false,
-      });
-    } else {
-      await playRingtone();
+      try {
+        await showNativeNotification(
+          {
+            title: "Roboticela ToDo",
+            body: "System default notification sound",
+            tag: "preview-normal",
+            mode: "normal",
+          },
+          "normal",
+          getOsKind(),
+          true
+        );
+      } catch {
+        // visual optional
+      }
     }
     return;
   }
 
-  if (mode === "ringtone") {
-    if (isTauri() && !needsAppRingtone(os)) {
-      await showTaskNotification({
-        title: "Roboticela ToDo",
-        body: "Ringtone preview",
-        tag: "preview-ringtone",
-        mode: "ringtone",
-      });
-    } else {
-      await playRingtone();
-    }
+  if (mode === "preset" || mode === "ringtone") {
+    await playCatalogSound(opts.soundId || "ring-classic");
     return;
   }
 

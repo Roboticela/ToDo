@@ -7,6 +7,12 @@
   ],
   "permissions": [
     "core:default",
+    "core:tray:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-close",
     "android-ui:default",
     "dialog:allow-save",
     "opener:default",

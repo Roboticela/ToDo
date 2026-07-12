@@ -3,8 +3,9 @@ import type { NotificationSoundMode, User } from "../types/todo";
 /** Map a `/api/users/me` (or auth) JSON payload into the client User shape. */
 export function mapUserFromApi(userData: Record<string, unknown>): User {
   const mode = userData.notificationSoundMode;
-  const notificationSoundMode: NotificationSoundMode =
-    mode === "ringtone" || mode === "custom" ? mode : "normal";
+  let notificationSoundMode: NotificationSoundMode = "normal";
+  if (mode === "custom") notificationSoundMode = "custom";
+  else if (mode === "ringtone" || mode === "preset") notificationSoundMode = "preset";
 
   return {
     id: String(userData.id),
@@ -19,6 +20,10 @@ export function mapUserFromApi(userData: Record<string, unknown>): User {
     subscribedToReminders: userData.subscribedToReminders !== false,
     taskNotificationsEnabled: userData.taskNotificationsEnabled !== false,
     notificationSoundMode,
+    notificationSoundId:
+      typeof userData.notificationSoundId === "string"
+        ? userData.notificationSoundId
+        : undefined,
     customSoundUrl:
       typeof userData.customSoundUrl === "string" ? userData.customSoundUrl : undefined,
     hasPassword: userData.hasPassword !== false,
