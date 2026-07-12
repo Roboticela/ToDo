@@ -75,6 +75,7 @@ model DesktopAuthCode {
 model DesktopPendingAuth {
   requestId  String   @id
   pollSecret String
+  userCode   String   @unique
   code       String?
   expiresAt  DateTime
   createdAt  DateTime @default(now())

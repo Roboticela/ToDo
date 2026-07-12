@@ -16,6 +16,17 @@ function historyMinForReq(req, historyDays) {
   return getHistoryMinDateStr(historyDays, resolveTodayStr(req));
 }
 
+/** Serialize per-user plan-limit checks so concurrent sync/create cannot exceed caps. */
+async function withUserTaskLimitLock(userId, fn) {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+      return fn(tx);
+    },
+    { timeout: 20000 }
+  );
+}
+
 function taskToJson(t) {
   return {
     id: t.id,
@@ -104,13 +115,13 @@ async function wouldExceedDailyCapForRepeatDays(
     return false;
   }
   const fromStr = startDate && startDate > todayStr ? startDate : todayStr;
-  // Sample enough weeks to catch dense calendars; still bounded for performance
-  const WEEKS = 8;
+  // Cover up to 2 years (or until endDate) so long-running repeats cannot bypass the cap
+  const MAX_WEEKS = 104;
 
   for (const dow of repeatDays) {
     if (typeof dow !== "number") continue;
     let sample = nextDateOnWeekday(fromStr, dow);
-    for (let w = 0; w < WEEKS; w++) {
+    for (let w = 0; w < MAX_WEEKS; w++) {
       if (endDate && sample > endDate) break;
       const count = await countTasksOnDate(userId, sample, excludeId);
       if (count >= maxDailyTasks) return true;
@@ -190,18 +201,6 @@ router.post("/", requireAuth, async (req, res) => {
     });
   }
 
-  if (willBeRepeating && limits.maxRepeatTasks != null) {
-    const repeatCount = await prisma.task.count({
-      where: { userId, deletedAt: null, isRepeating: true },
-    });
-    if (repeatCount >= limits.maxRepeatTasks) {
-      return res.status(403).json({
-        error: "Plan limit reached",
-        code: "MAX_REPEAT_TASKS",
-        limit: limits.maxRepeatTasks,
-      });
-    }
-  }
   if (limits.maxDailyTasks != null) {
     if (!willBeRepeating) {
       const count = await countTasksOnDate(userId, body.date, null);
@@ -234,26 +233,44 @@ router.post("/", requireAuth, async (req, res) => {
     }
   }
 
-  const task = await prisma.task.create({
-    data: {
-      id: body.id,
-      userId: req.user.id,
-      title: body.title,
-      description: body.description ?? null,
-      type: body.type,
-      category: body.category,
-      priority: body.priority ?? "medium",
-      date: body.date,
-      time: body.time ?? null,
-      startTime: body.startTime ?? null,
-      endTime: body.endTime ?? null,
-      isRepeating: willBeRepeating,
-      repeatDays: Array.isArray(body.repeatDays) ? body.repeatDays : [],
-      endDate: body.endDate ?? null,
-      status: body.status || "pending",
-      completedAt: body.completedAt ? new Date(body.completedAt) : null,
-    },
-  });
+  const createData = {
+    id: body.id,
+    userId,
+    title: body.title,
+    description: body.description ?? null,
+    type: body.type,
+    category: body.category,
+    priority: body.priority ?? "medium",
+    date: body.date,
+    time: body.time ?? null,
+    startTime: body.startTime ?? null,
+    endTime: body.endTime ?? null,
+    isRepeating: willBeRepeating,
+    repeatDays: Array.isArray(body.repeatDays) ? body.repeatDays : [],
+    endDate: body.endDate ?? null,
+    status: body.status || "pending",
+    completedAt: body.completedAt ? new Date(body.completedAt) : null,
+  };
+
+  if (willBeRepeating && limits.maxRepeatTasks != null) {
+    const created = await withUserTaskLimitLock(userId, async (tx) => {
+      const repeatCount = await tx.task.count({
+        where: { userId, deletedAt: null, isRepeating: true },
+      });
+      if (repeatCount >= limits.maxRepeatTasks) return null;
+      return tx.task.create({ data: createData });
+    });
+    if (!created) {
+      return res.status(403).json({
+        error: "Plan limit reached",
+        code: "MAX_REPEAT_TASKS",
+        limit: limits.maxRepeatTasks,
+      });
+    }
+    return res.status(201).json(taskToJson(created));
+  }
+
+  const task = await prisma.task.create({ data: createData });
   res.status(201).json(taskToJson(task));
 });
 
@@ -287,20 +304,6 @@ router.patch("/:id", requireAuth, async (req, res) => {
   const effective = getEffectivePlan(req.user);
   const limits = getPlanLimits(effective.plan);
   const softDeleting = data.deletedAt != null;
-  if (enablingRepeat) {
-    if (limits.maxRepeatTasks != null) {
-      const repeatCount = await prisma.task.count({
-        where: { userId: req.user.id, deletedAt: null, isRepeating: true },
-      });
-      if (repeatCount >= limits.maxRepeatTasks) {
-        return res.status(403).json({
-          error: "Plan limit reached",
-          code: "MAX_REPEAT_TASKS",
-          limit: limits.maxRepeatTasks,
-        });
-      }
-    }
-  }
 
   const nextDate = data.date !== undefined ? data.date : existing.date;
   const nextRepeating =
@@ -366,6 +369,24 @@ router.patch("/:id", requireAuth, async (req, res) => {
         limit: limits.maxDailyTasks,
       });
     }
+  }
+
+  if (enablingRepeat && limits.maxRepeatTasks != null) {
+    const updated = await withUserTaskLimitLock(req.user.id, async (tx) => {
+      const repeatCount = await tx.task.count({
+        where: { userId: req.user.id, deletedAt: null, isRepeating: true },
+      });
+      if (repeatCount >= limits.maxRepeatTasks) return null;
+      return tx.task.update({ where: { id: existing.id }, data });
+    });
+    if (!updated) {
+      return res.status(403).json({
+        error: "Plan limit reached",
+        code: "MAX_REPEAT_TASKS",
+        limit: limits.maxRepeatTasks,
+      });
+    }
+    return res.json(taskToJson(updated));
   }
 
   const task = await prisma.task.update({
@@ -514,20 +535,6 @@ router.post("/sync", requireAuth, async (req, res) => {
       continue;
     }
 
-    if ((isNew && willBeRepeating) || enablingRepeat) {
-      if (limits.maxRepeatTasks != null) {
-        const repeatCount = await prisma.task.count({
-          where: { userId, deletedAt: null, isRepeating: true },
-        });
-        // Count existing row toward limit only if already repeating
-        const alreadyCounted = existing?.isRepeating ? 1 : 0;
-        if (repeatCount - alreadyCounted >= limits.maxRepeatTasks) {
-          rejectedTaskIds.push(t.id);
-          continue;
-        }
-      }
-    }
-
     if (limits.maxDailyTasks != null && !willBeRepeating && (isNew || dateChanged)) {
       const count = await countTasksOnDate(userId, t.date, existing?.id ?? null);
       if (count >= limits.maxDailyTasks) {
@@ -565,9 +572,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         ? existing.deletedAt
         : null;
 
-    clientTaskIds.push(t.id);
-    if (t.updatedAt) clientTaskUpdatedAt.set(t.id, t.updatedAt);
-    await prisma.task.upsert({
+    const upsertArgs = {
       where: { id: t.id },
       create: {
         id: t.id,
@@ -605,7 +610,32 @@ router.post("/sync", requireAuth, async (req, res) => {
         completedAt: t.completedAt ? new Date(t.completedAt) : null,
         deletedAt: deletedAtValue,
       },
-    });
+    };
+
+    const needsRepeatLock =
+      limits.maxRepeatTasks != null &&
+      ((isNew && willBeRepeating) || enablingRepeat);
+
+    if (needsRepeatLock) {
+      const accepted = await withUserTaskLimitLock(userId, async (tx) => {
+        const repeatCount = await tx.task.count({
+          where: { userId, deletedAt: null, isRepeating: true },
+        });
+        const alreadyCounted = existing?.isRepeating ? 1 : 0;
+        if (repeatCount - alreadyCounted >= limits.maxRepeatTasks) return false;
+        await tx.task.upsert(upsertArgs);
+        return true;
+      });
+      if (!accepted) {
+        rejectedTaskIds.push(t.id);
+        continue;
+      }
+    } else {
+      await prisma.task.upsert(upsertArgs);
+    }
+
+    clientTaskIds.push(t.id);
+    if (t.updatedAt) clientTaskUpdatedAt.set(t.id, t.updatedAt);
   }
 
   const clientCompletionIds = [];

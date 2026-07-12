@@ -29,7 +29,7 @@ export function mapUserFromApi(userData: Record<string, unknown>): User {
       notificationSoundMode === "preset" ? rawId || DEFAULT_LIBRARY_SOUND_ID : rawId,
     customSoundUrl:
       typeof userData.customSoundUrl === "string" ? userData.customSoundUrl : undefined,
-    hasPassword: userData.hasPassword !== false,
+    hasPassword: userData.hasPassword === true,
     createdAt: String(userData.createdAt ?? new Date().toISOString()),
   };
 }

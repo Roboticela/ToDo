@@ -41,7 +41,23 @@ export default function LoginPage() {
   const [pendingDesktopAuth, setPendingDesktopAuth] = useState<{
     requestId: string;
     pollSecret: string;
+    userCode: string;
   } | null>(null);
+
+  useEffect(() => {
+    const err = searchParams.get("error");
+    if (!err) return;
+    const messages: Record<string, string> = {
+      verify_email_before_google:
+        "Verify your email first, then try Google sign-in again. Check your inbox for the verification link.",
+      google_email_unverified: "Google did not verify this email. Try another account.",
+      email_linked_other_google: "This email is already linked to a different Google account.",
+      desktop_restart_required: "Please start Google sign-in again from the ToDo app.",
+      google_failed: "Google sign-in failed. Please try again.",
+    };
+    setError(messages[err] || "Sign-in failed. Please try again.");
+    setSearchParams({}, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -66,9 +82,9 @@ export default function LoginPage() {
     setError("");
     if (isTauri()) {
       try {
-        const { authUrl, requestId, pollSecret } = await startDesktopGoogleLogin();
-        await openLink(authUrl, { openInNewTab: true });
-        setPendingDesktopAuth({ requestId, pollSecret });
+        const { requestId, pollSecret, userCode, verificationUrl } = await startDesktopGoogleLogin();
+        await openLink(verificationUrl, { openInNewTab: true });
+        setPendingDesktopAuth({ requestId, pollSecret, userCode });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not start Google sign-in.");
       }
@@ -78,7 +94,7 @@ export default function LoginPage() {
     window.location.href = getGoogleAuthUrl();
   }
 
-  // Desktop: poll backend for code after user signs in with Google in browser
+  // Desktop: poll backend for code after user links device code in browser
   useEffect(() => {
     if (!isTauri() || !pendingDesktopAuth) return;
     let cancelled = false;
@@ -89,8 +105,8 @@ export default function LoginPage() {
       if (cancelled) return;
       setPendingDesktopAuth(null);
       if (code) {
-        const ok = await completeDesktopAuthWithCode(code, setAuthData);
-        if (ok) navigate("/todo");
+        const user = await completeDesktopAuthWithCode(code, setAuthData);
+        if (user) navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
         else setError("Login failed. Please try again.");
       } else {
         setError("Sign-in timed out. Please try again.");
@@ -221,9 +237,14 @@ export default function LoginPage() {
             className="w-full h-11 rounded-xl border border-border bg-accent/20 hover:bg-accent/40 text-foreground font-medium text-sm flex items-center justify-center gap-3 transition-all"
           >
             {pendingDesktopAuth ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
-                Sign in with Google in the browser
+              <span className="flex flex-col items-center gap-1 py-1">
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                  Enter this code in the browser
+                </span>
+                <span className="font-mono text-lg tracking-[0.2em] text-foreground">
+                  {pendingDesktopAuth.userCode}
+                </span>
               </span>
             ) : (
               <>

@@ -504,7 +504,7 @@ export default function SettingsPage() {
             value={currentUser.email}
             onClick={() => setActiveModal("edit-email")}
           />
-          {currentUser.hasPassword !== false && (
+          {currentUser.hasPassword === true && (
             <SettingsRow
               icon={<Lock className="w-4 h-4 text-primary/70" />}
               label="Change Password"

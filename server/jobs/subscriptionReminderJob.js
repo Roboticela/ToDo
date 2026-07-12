@@ -41,15 +41,11 @@ async function runReminderJob() {
       try {
         const unsubscribeToken = createUnsubscribeToken(user.id);
         await sendSubscriptionReminderEmail(user.email, user.name, unsubscribeToken);
+        // Reminder emails only — never mutate plan here (avoids racing Paddle webhooks).
+        // getEffectivePlan already treats missing/past planExpiresAt as free at read time.
         await prisma.user.update({
           where: { id: user.id },
-          data: {
-            lastSubscriptionReminderAt: new Date(),
-            // Normalize expired paid rows so future jobs and APIs stay consistent
-            ...(user.plan !== "free"
-              ? { plan: "free", planExpiresAt: null }
-              : {}),
-          },
+          data: { lastSubscriptionReminderAt: new Date() },
         });
       } catch (e) {
         console.error("[subscriptionReminder] send failed for", user.id, e);

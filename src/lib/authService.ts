@@ -113,11 +113,12 @@ export function loginWithGoogleRedirect(): void {
   window.location.href = getGoogleAuthUrl();
 }
 
-/** Desktop only: get auth URL from backend (includes requestId + pollSecret). App opens this URL in browser then polls desktop-pending. */
+/** Desktop only: start device-code Google sign-in. App shows userCode, opens verificationUrl, then polls. */
 export async function startDesktopGoogleLogin(): Promise<{
-  authUrl: string;
   requestId: string;
   pollSecret: string;
+  userCode: string;
+  verificationUrl: string;
 }> {
   const res = await fetch(`${API_BASE}/api/auth/desktop-login-start`, {
     method: "POST",

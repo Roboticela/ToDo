@@ -17,6 +17,7 @@ import RegisterPage from "./pages/auth/RegisterPage";
 import ForgotPasswordPage from "./pages/auth/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/auth/ResetPasswordPage";
 import AuthCallbackPage from "./pages/auth/AuthCallbackPage";
+import DesktopDevicePage from "./pages/auth/DesktopDevicePage";
 import DesktopSuccessPage from "./pages/auth/DesktopSuccessPage";
 import VerifiedPage from "./pages/auth/VerifiedPage";
 import EmailPreferencesPage from "./pages/auth/EmailPreferencesPage";
@@ -58,6 +59,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
               <Route path="/auth/reset-password" element={<ResetPasswordPage />} />
               <Route path="/auth/callback" element={<AuthCallbackPage />} />
+              <Route path="/auth/desktop-device" element={<DesktopDevicePage />} />
               <Route path="/auth/desktop-success" element={<DesktopSuccessPage />} />
               <Route path="/auth/verified" element={<VerifiedPage />} />
               <Route path="/auth/email-preferences" element={<EmailPreferencesPage />} />

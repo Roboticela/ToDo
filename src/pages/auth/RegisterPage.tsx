@@ -33,6 +33,7 @@ export default function RegisterPage() {
   const [pendingDesktopAuth, setPendingDesktopAuth] = useState<{
     requestId: string;
     pollSecret: string;
+    userCode: string;
   } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -66,9 +67,9 @@ export default function RegisterPage() {
     setError("");
     if (isTauri()) {
       try {
-        const { authUrl, requestId, pollSecret } = await startDesktopGoogleLogin();
-        await openLink(authUrl, { openInNewTab: true });
-        setPendingDesktopAuth({ requestId, pollSecret });
+        const { requestId, pollSecret, userCode, verificationUrl } = await startDesktopGoogleLogin();
+        await openLink(verificationUrl, { openInNewTab: true });
+        setPendingDesktopAuth({ requestId, pollSecret, userCode });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not start Google sign-up.");
       }
@@ -77,7 +78,7 @@ export default function RegisterPage() {
     window.location.href = getGoogleAuthUrl();
   }
 
-  // Desktop: poll backend for code after user signs up with Google in browser
+  // Desktop: poll backend for code after user links device code in browser
   useEffect(() => {
     if (!isTauri() || !pendingDesktopAuth) return;
     let cancelled = false;
@@ -88,8 +89,8 @@ export default function RegisterPage() {
       if (cancelled) return;
       setPendingDesktopAuth(null);
       if (code) {
-        const ok = await completeDesktopAuthWithCode(code, setAuthData);
-        if (ok) navigate("/todo");
+        const user = await completeDesktopAuthWithCode(code, setAuthData);
+        if (user) navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
         else setError("Sign-up failed. Please try again.");
       } else {
         setError("Sign-up timed out. Please try again.");
@@ -234,9 +235,14 @@ export default function RegisterPage() {
             className="w-full h-11 rounded-xl border border-border bg-accent/20 hover:bg-accent/40 text-foreground font-medium text-sm flex items-center justify-center gap-3 transition-all"
           >
             {pendingDesktopAuth ? (
-              <span className="flex items-center gap-2">
-                <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
-                Sign up with Google in the browser
+              <span className="flex flex-col items-center gap-1 py-1">
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                  Enter this code in the browser
+                </span>
+                <span className="font-mono text-lg tracking-[0.2em] text-foreground">
+                  {pendingDesktopAuth.userCode}
+                </span>
               </span>
             ) : (
               <>

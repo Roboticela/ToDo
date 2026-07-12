@@ -21,6 +21,22 @@ const router = Router();
 // One-time codes for desktop/web OAuth (persisted so restarts / multi-instance work)
 const DESKTOP_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const REFRESH_GRACE_MS = 30 * 1000; // concurrent tab refresh window
+const USER_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateUserCode() {
+  const bytes = crypto.randomBytes(8);
+  let raw = "";
+  for (let i = 0; i < 8; i++) {
+    raw += USER_CODE_ALPHABET[bytes[i] % USER_CODE_ALPHABET.length];
+  }
+  return `${raw.slice(0, 4)}-${raw.slice(4)}`;
+}
+
+function normalizeUserCode(code) {
+  return String(code || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "");
+}
 
 async function sweepDesktopAuth() {
   const now = new Date();
@@ -525,7 +541,8 @@ router.get("/google", (req, res) => {
   if (!googleClient) {
     return res.status(503).json({ error: "Google sign-in is not configured" });
   }
-  const client = req.query.client || "web"; // web | desktop
+  // web = browser app; desktop-device = link a desktop pending code after Google sign-in
+  const client = req.query.client === "desktop-device" ? "desktop-device" : "web";
   const state = Buffer.from(JSON.stringify({ client })).toString("base64url");
   const scope = "openid email profile";
   const url = googleClient.generateAuthUrl({
@@ -538,7 +555,7 @@ router.get("/google", (req, res) => {
   res.redirect(url);
 });
 
-// ─── Desktop: app gets auth URL from backend, then polls for code (no deep link / paste) ───
+// ─── Desktop: device-code flow (app shows userCode; browser opens fixed URL) ───
 
 router.post("/desktop-login-start", async (req, res) => {
   if (!googleClient) {
@@ -546,24 +563,38 @@ router.post("/desktop-login-start", async (req, res) => {
   }
   const requestId = uuidv4();
   const pollSecret = uuidv4();
+  let userCode = generateUserCode();
+  let created = false;
   await sweepDesktopAuth();
-  await prisma.desktopPendingAuth.create({
-    data: {
-      requestId,
-      pollSecret,
-      expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
-    },
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await prisma.desktopPendingAuth.create({
+        data: {
+          requestId,
+          pollSecret,
+          userCode: normalizeUserCode(userCode),
+          expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
+        },
+      });
+      created = true;
+      break;
+    } catch (e) {
+      if (e?.code === "P2002") {
+        userCode = generateUserCode();
+        continue;
+      }
+      throw e;
+    }
+  }
+  if (!created) {
+    return res.status(500).json({ error: "Could not start Google sign-in" });
+  }
+  res.json({
+    requestId,
+    pollSecret,
+    userCode,
+    verificationUrl: `${config.frontendUrl}/auth/desktop-device`,
   });
-  const state = Buffer.from(JSON.stringify({ client: "desktop", requestId })).toString("base64url");
-  const scope = "openid email profile";
-  const authUrl = googleClient.generateAuthUrl({
-    access_type: "offline",
-    scope,
-    state,
-    redirect_uri: `${config.backendUrl}/api/auth/google/callback`,
-    prompt: "consent",
-  });
-  res.json({ authUrl, requestId, pollSecret });
 });
 
 router.get("/desktop-pending", async (req, res) => {
@@ -581,12 +612,48 @@ router.get("/desktop-pending", async (req, res) => {
     await prisma.desktopPendingAuth.delete({ where: { requestId: entry.requestId } }).catch(() => {});
     return res.status(401).json({ error: "Sign-in expired" });
   }
-  // Do not delete the slot until a code is ready (preserves pollSecret across empty polls)
   if (!entry.code) {
     return res.status(204).send();
   }
   await prisma.desktopPendingAuth.delete({ where: { requestId: entry.requestId } }).catch(() => {});
   res.json({ code: entry.code });
+});
+
+/** Attach a Google one-time auth code to a desktop pending slot (requires typing userCode from the app). */
+router.post("/desktop-link", async (req, res) => {
+  try {
+    const { userCode, code } = req.body || {};
+    const normalized = normalizeUserCode(userCode);
+    if (!normalized || !code) {
+      return res.status(400).json({ error: "userCode and code are required" });
+    }
+    await sweepDesktopAuth();
+    const pending = await prisma.desktopPendingAuth.findUnique({ where: { userCode: normalized } });
+    if (!pending || new Date() > pending.expiresAt) {
+      return res.status(404).json({
+        error: "Invalid or expired device code. Start Google sign-in from the app again.",
+      });
+    }
+    if (pending.code) {
+      return res.status(409).json({ error: "This device code was already used" });
+    }
+    const entry = await consumeDesktopAuthCode(code);
+    if (!entry) {
+      return res.status(401).json({ error: "Invalid or expired Google sign-in. Please try again." });
+    }
+    const pollCode = await createDesktopAuthCode(entry.accessToken, entry.refreshToken, entry.userId);
+    await prisma.desktopPendingAuth.update({
+      where: { requestId: pending.requestId },
+      data: {
+        code: pollCode,
+        expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
+      },
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error("[auth] desktop-link", e);
+    res.status(500).json({ error: "Could not link device sign-in" });
+  }
 });
 
 // ─── Google OAuth: callback (exchange code, create session, redirect) ───────────
@@ -602,12 +669,10 @@ router.get("/google/callback", async (req, res) => {
     }
 
     let client = "web";
-    let requestId = null;
     if (state) {
       try {
         const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
         client = decoded.client || "web";
-        requestId = decoded.requestId || null;
       } catch {
         // ignore
       }
@@ -654,10 +719,14 @@ router.get("/google/callback", async (req, res) => {
       if (payload.email_verified !== true) {
         return res.redirect(`${config.frontendUrl}/auth/login?error=google_email_unverified`);
       }
-      const updateData = { googleId, emailVerifiedAt: user.emailVerifiedAt || new Date() };
+      // Require our email verification first — otherwise an attacker can
+      // pre-register the victim's email+password and hijack the Google login.
+      if (!user.emailVerifiedAt) {
+        return res.redirect(`${config.frontendUrl}/auth/login?error=verify_email_before_google`);
+      }
       user = await prisma.user.update({
         where: { id: user.id },
-        data: updateData,
+        data: { googleId },
       });
     } else {
       const updateData = {};
@@ -700,23 +769,15 @@ router.get("/google/callback", async (req, res) => {
     // One-time code for both web and desktop — never put tokens in the browser URL
     const authCode = await createDesktopAuthCode(accessToken, refreshToken, user.id);
 
+    // Legacy desktop OAuth (requestId in state) was phishable — force device-code flow
     if (client === "desktop") {
-      if (!requestId) {
-        // Desktop without requestId cannot be polled — force the start+poll flow
-        return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
-      }
-      const pending = await prisma.desktopPendingAuth.findUnique({ where: { requestId } });
-      if (!pending) {
-        return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
-      }
-      await prisma.desktopPendingAuth.update({
-        where: { requestId },
-        data: {
-          code: authCode,
-          expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
-        },
-      });
-      return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
+      return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
+    }
+
+    if (client === "desktop-device") {
+      return res.redirect(
+        `${config.frontendUrl}/auth/desktop-device#code=${encodeURIComponent(authCode)}`
+      );
     }
 
     // Put code in the URL hash (not query) so Referer headers don't leak it

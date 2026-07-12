@@ -94,8 +94,8 @@ async function countTasksOnDateForLimits(
   return direct.length + matching.length;
 }
 
-/** Sample the next few occurrences of each weekday (aligned with server). */
-const REPEAT_CAP_WEEKS = 8;
+/** Sample occurrences of each weekday (aligned with server; up to 2 years). */
+const REPEAT_CAP_WEEKS = 104;
 
 function sampleDatesForWeekday(
   from: string,

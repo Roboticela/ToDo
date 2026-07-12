@@ -513,22 +513,25 @@ export async function handlePaddleWebhook(req, res) {
           existing.currentPeriodEnd ||
           null;
         const periodEndDate = periodEnd ? new Date(periodEnd) : null;
+        // Honor remaining paid period; if Paddle omits ends_at, keep ~1 billing month of access
+        const gracePeriodEnd =
+          periodEndDate || fallbackPeriodEnd(existing.currentPeriodEnd);
 
         await prisma.subscription.update({
           where: { id: existing.id },
           data: {
             status: eventType === "subscription.past_due" ? "past_due" : "cancelled",
-            currentPeriodEnd: periodEndDate,
+            currentPeriodEnd: gracePeriodEnd,
           },
         });
 
         if (eventType === "subscription.past_due") {
           await setUserPlanUnlessLifetime(existing.userId, {
             plan: existing.plan,
-            planExpiresAt: periodEndDate || fallbackPeriodEnd(existing.currentPeriodEnd),
+            planExpiresAt: gracePeriodEnd,
           });
         } else {
-          await applyPaidPeriodOrFree(existing.userId, existing.plan, periodEndDate);
+          await applyPaidPeriodOrFree(existing.userId, existing.plan, gracePeriodEnd);
         }
       }
     }

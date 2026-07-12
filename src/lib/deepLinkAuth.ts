@@ -7,15 +7,16 @@ import type { User, AuthSession } from "../types/todo";
 /**
  * Exchange one-time code for tokens via backend, then save session and set auth.
  * Used by the app after polling GET desktop-pending (desktop flow).
+ * Returns the mapped user on success, or null on failure.
  */
 export async function completeDesktopAuthWithCode(
   code: string,
   setAuthData: (user: User, session: AuthSession) => void
-): Promise<boolean> {
+): Promise<User | null> {
   const apiBase = getApiBase();
   if (!apiBase) {
     console.error("[deepLink] getApiBase() is empty – set VITE_API_URL (e.g. in .env)");
-    return false;
+    return null;
   }
   const exchangeRes = await fetch(`${apiBase}/api/auth/desktop-exchange`, {
     method: "POST",
@@ -25,7 +26,7 @@ export async function completeDesktopAuthWithCode(
   if (!exchangeRes.ok) {
     const err = await exchangeRes.json().catch(() => ({}));
     console.warn("[deepLink] desktop-exchange failed", exchangeRes.status, err);
-    return false;
+    return null;
   }
   const data = await exchangeRes.json();
   // Prefer full session payload from server; fall back to flat token fields
@@ -35,18 +36,18 @@ export async function completeDesktopAuthWithCode(
     await saveUser(user);
     await saveSession(data.session);
     setAuthData(user, data.session);
-    return true;
+    return user;
   }
 
   const { accessToken, refreshToken, userId } = data;
-  if (!accessToken || !userId) return false;
+  if (!accessToken || !userId) return null;
 
   const meRes = await fetch(`${apiBase}/api/users/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!meRes.ok) return false;
+  if (!meRes.ok) return null;
   const userData = await meRes.json();
-  if (!userData?.id) return false;
+  if (!userData?.id) return null;
   const me = mapUserFromApi(userData);
   const session: AuthSession = {
     accessToken,
@@ -58,5 +59,5 @@ export async function completeDesktopAuthWithCode(
   await saveUser(me);
   await saveSession(session);
   setAuthData(me, session);
-  return true;
+  return me;
 }
