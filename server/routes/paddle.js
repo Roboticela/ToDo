@@ -168,10 +168,23 @@ export async function handlePaddleWebhook(req, res) {
         where: { id: sub.id },
       });
       if (existing) {
+        const customData = sub.custom_data || {};
+        const planFromCustom =
+          customData.plan === "pro" || customData.plan === "basic" ? customData.plan : null;
+        const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
+        const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
+        const plan =
+          planFromCustom ||
+          (priceId.includes("pro") || productId.includes("pro")
+            ? "pro"
+            : priceId.includes("basic") || productId.includes("basic")
+              ? "basic"
+              : existing.plan);
         const periodEnd = sub.current_billing_period?.ends_at;
         await prisma.subscription.update({
           where: { id: existing.id },
           data: {
+            plan,
             status: sub.status || "active",
             currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
           },
@@ -179,7 +192,7 @@ export async function handlePaddleWebhook(req, res) {
         await prisma.user.update({
           where: { id: existing.userId },
           data: {
-            plan: existing.plan,
+            plan,
             planExpiresAt: periodEnd ? new Date(periodEnd) : null,
           },
         });

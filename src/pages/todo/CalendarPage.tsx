@@ -97,7 +97,11 @@ export default function CalendarPage() {
 
     const reload = () => loadMonthIndicators();
     window.addEventListener("tasks-synced", reload);
-    return () => window.removeEventListener("tasks-synced", reload);
+    window.addEventListener("tasks-changed", reload);
+    return () => {
+      window.removeEventListener("tasks-synced", reload);
+      window.removeEventListener("tasks-changed", reload);
+    };
     // days is derived from currentMonth; including the array would re-run every render
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, currentMonth]);

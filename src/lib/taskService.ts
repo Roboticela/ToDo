@@ -13,7 +13,7 @@ import {
   getAllCompletionsByUser,
   deleteNotificationsByTask,
 } from "./db";
-import { scheduleTaskNotifications } from "./notificationService";
+import { scheduleTaskNotifications, cancelTimersForTask } from "./notificationService";
 
 // ─── Create Task ───────────────────────────────────────────────────────────────
 
@@ -127,6 +127,11 @@ export async function completeTask(task: Task, date: string): Promise<void> {
 
   if (task.isRepeating) {
     await upsertCompletionForDate(task, date, "completed");
+    await saveTask({
+      ...task,
+      updatedAt: now,
+      syncStatus: "pending",
+    });
   } else {
     const updated: Task = {
       ...task,
@@ -137,6 +142,14 @@ export async function completeTask(task: Task, date: string): Promise<void> {
     };
     await saveTask(updated);
   }
+
+  // Stop pending reminders for this task (one-time) or reschedule remaining (repeating)
+  await cancelTimersForTask(task.id);
+  await deleteNotificationsByTask(task.id);
+  if (task.isRepeating) {
+    const fresh = await getTask(task.id);
+    if (fresh) await scheduleTaskNotifications(fresh);
+  }
 }
 
 // ─── Skip repeating task for one date (hide this occurrence only) ──────────────
@@ -144,6 +157,11 @@ export async function completeTask(task: Task, date: string): Promise<void> {
 export async function skipTaskForDate(task: Task, date: string): Promise<void> {
   if (!task.isRepeating) return;
   await upsertCompletionForDate(task, date, "skipped");
+  await saveTask({
+    ...task,
+    updatedAt: new Date().toISOString(),
+    syncStatus: "pending",
+  });
 }
 
 // ─── Set end date for repeating task (stops showing after this date) ────────────
@@ -179,6 +197,11 @@ export async function uncompleteTask(task: Task, date: string): Promise<void> {
     for (const comp of comps) {
       await deleteCompletion(comp.id);
     }
+    await saveTask({
+      ...task,
+      updatedAt: new Date().toISOString(),
+      syncStatus: "pending",
+    });
   } else {
     const updated: Task = {
       ...task,
@@ -188,6 +211,7 @@ export async function uncompleteTask(task: Task, date: string): Promise<void> {
       syncStatus: "pending",
     };
     await saveTask(updated);
+    await scheduleTaskNotifications(updated);
   }
 }
 

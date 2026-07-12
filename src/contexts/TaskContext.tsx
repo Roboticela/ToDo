@@ -13,7 +13,7 @@ import {
   getTasksForDate,
   getTodayString,
 } from "../lib/taskService";
-import { assertCanCreateTask, assertCanEnableRepeating, clampDateToHistory } from "../lib/planLimits";
+import { assertCanCreateTask, assertCanEnableRepeating, assertCanMoveTaskToDate, clampDateToHistory } from "../lib/planLimits";
 import { useAuth } from "./AuthContext";
 import { useSync } from "./SyncContext";
 
@@ -85,6 +85,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       const task = await svcCreate(user.id, data);
       await refreshTasks();
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
       return task;
     },
     [user, refreshTasks, scheduleSync]
@@ -98,9 +99,20 @@ export function TaskProvider({ children }: { children: ReactNode }) {
           ? Boolean(data.isRepeating && (data.repeatDays ?? task.repeatDays).length > 0)
           : task.isRepeating;
       await assertCanEnableRepeating(user.id, user.plan, task.isRepeating, willRepeat);
+      if (data.date && data.date !== task.date) {
+        await assertCanMoveTaskToDate(
+          user.id,
+          user.plan,
+          task.id,
+          task.date,
+          data.date,
+          willRepeat
+        );
+      }
       const updated = await svcUpdate(task, data);
       await refreshTasks();
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
       return updated;
     },
     [user, refreshTasks, scheduleSync]
@@ -111,6 +123,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       await svcDelete(taskId);
       await refreshTasks();
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
     [refreshTasks, scheduleSync]
   );
@@ -120,6 +133,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       await svcSkipTaskForDate(task, date);
       await refreshTasks();
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
     [refreshTasks, scheduleSync]
   );
@@ -129,6 +143,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       const updated = await svcSetTaskEndDate(task, endDate);
       await refreshTasks();
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
       return updated;
     },
     [refreshTasks, scheduleSync]
@@ -139,6 +154,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       const updated = await svcEndSeries(task, fromDate);
       await refreshTasks();
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
       return updated;
     },
     [refreshTasks, scheduleSync]
@@ -149,6 +165,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       await svcComplete(task, selectedDate);
       await refreshTasks({ silent: true });
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
     [selectedDate, refreshTasks, scheduleSync]
   );
@@ -158,6 +175,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       await svcUncomplete(task, selectedDate);
       await refreshTasks({ silent: true });
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
     [selectedDate, refreshTasks, scheduleSync]
   );

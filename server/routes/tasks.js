@@ -176,9 +176,9 @@ router.patch("/:id", requireAuth, async (req, res) => {
 
   const enablingRepeat =
     data.isRepeating === true && !existing.isRepeating;
+  const effective = getEffectivePlan(req.user);
+  const limits = getPlanLimits(effective.plan);
   if (enablingRepeat) {
-    const effective = getEffectivePlan(req.user);
-    const limits = getPlanLimits(effective.plan);
     if (limits.maxRepeatTasks != null) {
       const repeatCount = await prisma.task.count({
         where: { userId: req.user.id, deletedAt: null, isRepeating: true },
@@ -190,6 +190,41 @@ router.patch("/:id", requireAuth, async (req, res) => {
           limit: limits.maxRepeatTasks,
         });
       }
+    }
+  }
+
+  const nextDate = data.date !== undefined ? data.date : existing.date;
+  const nextRepeating =
+    data.isRepeating !== undefined ? Boolean(data.isRepeating) : existing.isRepeating;
+  const dateChanged = data.date !== undefined && data.date !== existing.date;
+  if (limits.maxDailyTasks != null && !nextRepeating && dateChanged) {
+    const dayOfWeek = new Date(nextDate + "T12:00:00").getDay();
+    const oneTimeCount = await prisma.task.count({
+      where: {
+        userId: req.user.id,
+        deletedAt: null,
+        date: nextDate,
+        isRepeating: false,
+        id: { not: existing.id },
+      },
+    });
+    const repeatingOnDay = await prisma.task.count({
+      where: {
+        userId: req.user.id,
+        deletedAt: null,
+        isRepeating: true,
+        date: { lte: nextDate },
+        OR: [{ endDate: null }, { endDate: { gte: nextDate } }],
+        repeatDays: { has: dayOfWeek },
+        id: { not: existing.id },
+      },
+    });
+    if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
+      return res.status(403).json({
+        error: "Plan limit reached",
+        code: "MAX_DAILY_TASKS",
+        limit: limits.maxDailyTasks,
+      });
     }
   }
 
@@ -264,12 +299,12 @@ router.post("/sync", requireAuth, async (req, res) => {
       continue;
     }
 
-    // Last-write-wins: skip stale client updates
+    // Last-write-wins: skip stale client updates (do NOT prune completions for these —
+    // a lagging device must not wipe newer completions from another device)
     if (existing && t.updatedAt && existing.updatedAt) {
       const clientTs = new Date(t.updatedAt).getTime();
       const serverTs = new Date(existing.updatedAt).getTime();
       if (!Number.isNaN(clientTs) && clientTs < serverTs) {
-        clientTaskIds.push(t.id);
         continue;
       }
     }
@@ -277,6 +312,7 @@ router.post("/sync", requireAuth, async (req, res) => {
     const willBeRepeating = Boolean(t.isRepeating);
     const isNew = !existing;
     const enablingRepeat = willBeRepeating && (!existing || !existing.isRepeating);
+    const dateChanged = existing && t.date && t.date !== existing.date;
 
     if ((isNew && willBeRepeating) || enablingRepeat) {
       if (limits.maxRepeatTasks != null) {
@@ -291,10 +327,16 @@ router.post("/sync", requireAuth, async (req, res) => {
       }
     }
 
-    if (isNew && limits.maxDailyTasks != null && !willBeRepeating) {
+    if (limits.maxDailyTasks != null && !willBeRepeating && (isNew || dateChanged)) {
       const dayOfWeek = new Date(t.date + "T12:00:00").getDay();
       const oneTimeCount = await prisma.task.count({
-        where: { userId, deletedAt: null, date: t.date, isRepeating: false },
+        where: {
+          userId,
+          deletedAt: null,
+          date: t.date,
+          isRepeating: false,
+          ...(existing ? { id: { not: existing.id } } : {}),
+        },
       });
       const repeatingOnDay = await prisma.task.count({
         where: {
@@ -304,12 +346,20 @@ router.post("/sync", requireAuth, async (req, res) => {
           date: { lte: t.date },
           OR: [{ endDate: null }, { endDate: { gte: t.date } }],
           repeatDays: { has: dayOfWeek },
+          ...(existing ? { id: { not: existing.id } } : {}),
         },
       });
       if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
         continue;
       }
     }
+
+    // Soft-delete is sticky: never clear a server deletedAt unless the client also soft-deleted
+    const deletedAtValue = t.deletedAt
+      ? new Date(t.deletedAt)
+      : existing?.deletedAt
+        ? existing.deletedAt
+        : null;
 
     clientTaskIds.push(t.id);
     await prisma.task.upsert({
@@ -331,7 +381,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         endDate: t.endDate ?? null,
         status: t.status || "pending",
         completedAt: t.completedAt ? new Date(t.completedAt) : null,
-        deletedAt: t.deletedAt ? new Date(t.deletedAt) : null,
+        deletedAt: deletedAtValue,
       },
       update: {
         title: t.title,
@@ -348,7 +398,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         endDate: t.endDate ?? null,
         status: t.status || "pending",
         completedAt: t.completedAt ? new Date(t.completedAt) : null,
-        deletedAt: t.deletedAt ? new Date(t.deletedAt) : null,
+        deletedAt: deletedAtValue,
       },
     });
   }

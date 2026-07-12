@@ -69,6 +69,7 @@ export default function SettingsPage() {
             planExpiresAt: userData.planExpiresAt,
             emailVerifiedAt: userData.emailVerifiedAt,
             subscribedToReminders: userData.subscribedToReminders ?? true,
+            hasPassword: userData.hasPassword,
             createdAt: userData.createdAt,
           };
           await saveUser(updatedUser);

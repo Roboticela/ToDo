@@ -53,12 +53,27 @@ function getOccurrenceDates(task: Task): string[] {
 
 export async function scheduleTaskNotifications(task: Task): Promise<void> {
   if (task.type === "daily") return;
+  // One-time tasks that are already done should not get reminders
+  if (!task.isRepeating && task.status === "completed") return;
 
   const now = new Date();
   const occurrenceDates = getOccurrenceDates(task);
   const notifs: ScheduledNotification[] = [];
 
+  // Skip dates that already have a completion/skip record
+  let doneDates = new Set<string>();
+  if (task.isRepeating) {
+    const { getCompletionsByTask } = await import("./db");
+    const comps = await getCompletionsByTask(task.id);
+    doneDates = new Set(
+      comps
+        .filter((c) => c.status === "completed" || c.status === "skipped")
+        .map((c) => c.date)
+    );
+  }
+
   for (const date of occurrenceDates) {
+    if (doneDates.has(date)) continue;
     if (task.type === "time-based" && task.time) {
       const scheduledAt = new Date(`${date}T${task.time}:00`);
       if (scheduledAt > now) {
@@ -214,4 +229,17 @@ export function clearAllTimers(): void {
     clearTimeout(timer);
   }
   notificationTimers.clear();
+}
+
+/** Clear in-memory timers for a task's pending notifications (call before deleting DB rows). */
+export async function cancelTimersForTask(taskId: string): Promise<void> {
+  const pending = await getPendingNotifications();
+  for (const n of pending) {
+    if (n.taskId !== taskId) continue;
+    const timer = notificationTimers.get(n.id);
+    if (timer) {
+      clearTimeout(timer);
+      notificationTimers.delete(n.id);
+    }
+  }
 }

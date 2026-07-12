@@ -28,6 +28,7 @@ import {
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { getAnalyticsForDateRange, getEarliestTaskDate } from "../../lib/taskService";
+import { getHistoryCutoff } from "../../lib/planLimits";
 import DatePicker from "../../components/todo/DatePicker";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -178,6 +179,13 @@ export default function AnalyticsPage() {
 
     setEffectiveFrom(startDate);
     setEffectiveTo(endDate);
+
+    // Clamp to plan history window (e.g. Basic = 14 days)
+    const cutoff = getHistoryCutoff(user.plan);
+    if (cutoff && startDate < cutoff) {
+      startDate = cutoff;
+      setEffectiveFrom(startDate);
+    }
 
     getAnalyticsForDateRange(user.id, startDate, endDate)
       .then(setStats)

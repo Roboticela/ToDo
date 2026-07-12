@@ -95,6 +95,29 @@ export async function assertCanEnableRepeating(
   }
 }
 
+/** When moving a non-repeating task onto another day that may already be full. */
+export async function assertCanMoveTaskToDate(
+  userId: string,
+  plan: string | undefined,
+  taskId: string,
+  fromDate: string,
+  toDate: string,
+  isRepeating: boolean
+): Promise<void> {
+  if (isRepeating || fromDate === toDate) return;
+  const features = PLAN_FEATURES[normalizePlan(plan)];
+  if (features.maxDailyTasks == null) return;
+  const existing = await getTasksForDate(userId, toDate);
+  const others = existing.filter((t) => t.id !== taskId);
+  if (others.length >= features.maxDailyTasks) {
+    throw new PlanLimitError(
+      "MAX_DAILY_TASKS",
+      features.maxDailyTasks,
+      `Your plan allows up to ${features.maxDailyTasks} tasks on a day. Upgrade to add more.`
+    );
+  }
+}
+
 export async function countVisibleTasksOnDate(userId: string, date: string): Promise<number> {
   return (await getTasksForDate(userId, date)).length;
 }

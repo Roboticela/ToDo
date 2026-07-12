@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
 import { uploadAvatarFromDataUrl, deleteAvatarByUrl } from "../services/r2Service.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
+import { config } from "../config.js";
 
 const router = Router();
 
@@ -54,7 +55,14 @@ router.patch("/:userId", requireAuth, async (req, res) => {
         const r2Url = await uploadAvatarFromDataUrl(avatarUrl, req.user.id);
         updates.avatarUrl = r2Url || req.user.avatarUrl;
       } else {
-        updates.avatarUrl = avatarUrl.trim();
+        // Only allow our R2 public host (or clearing); reject arbitrary third-party URLs
+        const publicBase = (config.r2?.publicUrl || "").replace(/\/$/, "");
+        const trimmed = avatarUrl.trim();
+        if (publicBase && trimmed.startsWith(publicBase + "/")) {
+          updates.avatarUrl = trimmed;
+        } else {
+          return res.status(400).json({ error: "Avatar must be uploaded as an image" });
+        }
       }
     } else {
       updates.avatarUrl = null;

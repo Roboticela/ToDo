@@ -540,9 +540,20 @@ router.get("/google/callback", async (req, res) => {
           emailVerifiedAt: new Date(),
         },
       });
+    } else if (user.googleId && user.googleId !== googleId) {
+      return res.redirect(`${config.frontendUrl}/auth/login?error=email_linked_other_google`);
+    } else if (!user.googleId && user.email === email) {
+      // Only auto-link when Google asserts the email is verified
+      if (payload.email_verified !== true) {
+        return res.redirect(`${config.frontendUrl}/auth/login?error=google_email_unverified`);
+      }
+      const updateData = { googleId, emailVerifiedAt: user.emailVerifiedAt || new Date() };
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: updateData,
+      });
     } else {
       const updateData = {};
-      if (!user.googleId) updateData.googleId = googleId;
       if (!user.emailVerifiedAt) updateData.emailVerifiedAt = new Date();
       if (Object.keys(updateData).length > 0) {
         user = await prisma.user.update({

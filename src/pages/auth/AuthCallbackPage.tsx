@@ -1,9 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveUser, saveSession } from "../../lib/db";
 import { getApiBase } from "../../lib/apiBase";
 import type { User, AuthSession } from "../../types/todo";
+
+/** Prevent StrictMode double-mount from consuming a one-time code twice */
+const exchangedCodes = new Set<string>();
 
 /**
  * Handles OAuth callback from backend redirect.
@@ -14,10 +17,14 @@ export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const { setAuthData } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const startedRef = useRef(false);
 
   useEffect(() => {
     const code = searchParams.get("code");
     if (code) {
+      if (exchangedCodes.has(code) || startedRef.current) return;
+      startedRef.current = true;
+      exchangedCodes.add(code);
       exchangeCode(code);
       return;
     }
@@ -39,6 +46,8 @@ export default function AuthCallbackPage() {
         body: JSON.stringify({ code }),
       });
       if (!res.ok) {
+        exchangedCodes.delete(code);
+        startedRef.current = false;
         setError("Sign-in expired. Please try again.");
         return;
       }
@@ -51,6 +60,8 @@ export default function AuthCallbackPage() {
       window.history.replaceState({}, "", "/auth/callback");
       window.location.replace("/todo");
     } catch {
+      exchangedCodes.delete(code);
+      startedRef.current = false;
       setError("Something went wrong");
     }
   }
