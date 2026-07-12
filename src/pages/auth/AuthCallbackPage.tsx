@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveUser, saveSession } from "../../lib/db";
+import { clearLocalAuthState, isValidAuthPayload } from "../../lib/authService";
 import { getApiBase } from "../../lib/apiBase";
-import type { User, AuthSession } from "../../types/todo";
 
 /** Prevent StrictMode double-mount from consuming a one-time code twice */
 const exchangedCodes = new Set<string>();
@@ -64,11 +64,16 @@ export default function AuthCallbackPage() {
         return;
       }
       const data = await res.json();
-      const user = data.user as User;
-      const session = data.session as AuthSession;
-      await saveUser(user);
-      await saveSession(session);
-      setAuthData(user, session);
+      if (!isValidAuthPayload(data)) {
+        exchangedCodes.delete(code);
+        startedRef.current = false;
+        setError("Invalid sign-in response. Please try again.");
+        return;
+      }
+      await clearLocalAuthState();
+      await saveUser(data.user);
+      await saveSession(data.session);
+      setAuthData(data.user, data.session);
       window.history.replaceState({}, "", "/auth/callback");
       window.location.replace("/todo");
     } catch {

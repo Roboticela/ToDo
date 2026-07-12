@@ -360,9 +360,14 @@ export async function getAnalyticsForDateRange(
     let dayInProgress = 0;
     for (const task of tasksForDay) {
       totalTasks++;
+      // One-time: only count completed on the day they were actually completed
+      // (avoids rewriting past "missed" days when the task is finished later).
       const isCompleted = task.isRepeating
         ? completionsForDay.some((c) => c.taskId === task.id)
-        : task.status === "completed";
+        : task.status === "completed" &&
+          (task.completedAt
+            ? task.completedAt.slice(0, 10) === day
+            : task.date === day);
       if (isCompleted) {
         dayCompleted++;
         if (task.category === "dont") dontCompleted++;

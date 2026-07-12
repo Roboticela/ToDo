@@ -85,18 +85,28 @@ async function doSync(userId: string): Promise<SyncResult> {
   const data = await res.json();
   const serverTasks: Task[] = data.tasks || [];
   const serverCompletions: TaskCompletion[] = data.completions || [];
+  const rejectedTaskIds = new Set<string>(
+    Array.isArray(data.rejectedTaskIds) ? data.rejectedTaskIds : []
+  );
 
   const [liveTasks, liveComps] = await Promise.all([
     getAllTasksByUserForSync(userId),
     getAllCompletionsByUser(userId),
   ]);
   const liveCompIds = new Set(liveComps.map((c) => c.id));
+  const rejectedLocals = liveTasks.filter((t) => rejectedTaskIds.has(t.id));
 
   await replaceTasksAndCompletionsFromServer(userId, serverTasks, serverCompletions);
+
+  // Keep plan-limit-rejected tasks locally so they are not silently deleted
+  for (const t of rejectedLocals) {
+    await saveTask({ ...t, syncStatus: "pending" });
+  }
 
   // Re-apply only true in-flight edits (newer than server, or created during this round-trip).
   // Do not resurrect tasks the server rejected (were in snapshot but missing from response).
   for (const t of liveTasks) {
+    if (rejectedTaskIds.has(t.id)) continue;
     if (t.syncStatus !== "pending") continue;
     const s = serverTasks.find((x) => x.id === t.id);
     if (s && t.updatedAt && s.updatedAt && t.updatedAt > s.updatedAt) {

@@ -270,17 +270,43 @@ router.post("/:taskId/completions", requireAuth, async (req, res) => {
   if (!body.id || !body.date || !body.status) {
     return res.status(400).json({ error: "id, date, status required" });
   }
-  const comp = await prisma.taskCompletion.create({
-    data: {
-      id: body.id,
-      taskId: req.params.taskId,
-      userId: req.user.id,
-      date: body.date,
-      status: body.status,
-      completedAt: body.completedAt ? new Date(body.completedAt) : new Date(),
-    },
+  const completedAt = body.completedAt ? new Date(body.completedAt) : new Date();
+  const existing = await prisma.taskCompletion.findUnique({
+    where: { taskId_date: { taskId: req.params.taskId, date: body.date } },
   });
-  res.status(201).json(completionToJson(comp));
+  if (existing) {
+    if (existing.userId !== req.user.id) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    const comp = await prisma.taskCompletion.update({
+      where: { id: existing.id },
+      data: { status: body.status, completedAt },
+    });
+    return res.status(200).json(completionToJson(comp));
+  }
+  try {
+    const comp = await prisma.taskCompletion.create({
+      data: {
+        id: body.id,
+        taskId: req.params.taskId,
+        userId: req.user.id,
+        date: body.date,
+        status: body.status,
+        completedAt,
+      },
+    });
+    res.status(201).json(completionToJson(comp));
+  } catch (e) {
+    if (e?.code === "P2002") {
+      const again = await prisma.taskCompletion.findUnique({
+        where: { taskId_date: { taskId: req.params.taskId, date: body.date } },
+      });
+      if (again && again.userId === req.user.id) {
+        return res.status(200).json(completionToJson(again));
+      }
+    }
+    throw e;
+  }
 });
 
 // Sync: bulk upsert tasks and completions (scoped to the authenticated user)
@@ -291,6 +317,8 @@ router.post("/sync", requireAuth, async (req, res) => {
   const limits = getPlanLimits(effective.plan);
 
   const clientTaskIds = [];
+  /** Tasks rejected due to plan limits — returned so the client can keep them locally */
+  const rejectedTaskIds = [];
   /** taskId -> client updatedAt ISO (for safe completion prune) */
   const clientTaskUpdatedAt = new Map();
   /** "taskId|date" pairs the client still has */
@@ -332,6 +360,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         // Count existing row toward limit only if already repeating
         const alreadyCounted = existing?.isRepeating ? 1 : 0;
         if (repeatCount - alreadyCounted >= limits.maxRepeatTasks) {
+          rejectedTaskIds.push(t.id);
           continue;
         }
       }
@@ -360,6 +389,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         },
       });
       if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
+        rejectedTaskIds.push(t.id);
         continue;
       }
     }
@@ -456,33 +486,65 @@ router.post("/sync", requireAuth, async (req, res) => {
     if (existingById && existingById.userId !== userId) continue;
 
     if (existingById) {
-      // Same id, different date — treat as move; unique on new pair is free
+      // Same id, different date — treat as move; handle unique collision on (taskId, date)
       if (clientAt.getTime() < existingById.completedAt.getTime() && existingById.date === c.date) {
         clientCompletionIds.push(existingById.id);
         continue;
       }
-      await prisma.taskCompletion.update({
-        where: { id: c.id },
-        data: {
-          taskId: c.taskId,
-          date: c.date,
-          status: c.status,
-          completedAt: clientAt,
-        },
+      const conflict = await prisma.taskCompletion.findUnique({
+        where: { taskId_date: { taskId: c.taskId, date: c.date } },
       });
-      clientCompletionIds.push(c.id);
+      if (conflict && conflict.id !== c.id) {
+        if (conflict.userId !== userId) continue;
+        // Keep the newer of the two rows under the conflict id; drop the moving id
+        if (clientAt.getTime() >= conflict.completedAt.getTime()) {
+          await prisma.taskCompletion.update({
+            where: { id: conflict.id },
+            data: { status: c.status, completedAt: clientAt },
+          });
+        }
+        await prisma.taskCompletion.deleteMany({ where: { id: c.id, userId } });
+        clientCompletionIds.push(conflict.id);
+        continue;
+      }
+      try {
+        await prisma.taskCompletion.update({
+          where: { id: c.id },
+          data: {
+            taskId: c.taskId,
+            date: c.date,
+            status: c.status,
+            completedAt: clientAt,
+          },
+        });
+        clientCompletionIds.push(c.id);
+      } catch (e) {
+        if (e?.code === "P2002") continue;
+        throw e;
+      }
     } else {
-      await prisma.taskCompletion.create({
-        data: {
-          id: c.id,
-          taskId: c.taskId,
-          userId,
-          date: c.date,
-          status: c.status,
-          completedAt: clientAt,
-        },
-      });
-      clientCompletionIds.push(c.id);
+      try {
+        await prisma.taskCompletion.create({
+          data: {
+            id: c.id,
+            taskId: c.taskId,
+            userId,
+            date: c.date,
+            status: c.status,
+            completedAt: clientAt,
+          },
+        });
+        clientCompletionIds.push(c.id);
+      } catch (e) {
+        if (e?.code === "P2002") {
+          const pair = await prisma.taskCompletion.findUnique({
+            where: { taskId_date: { taskId: c.taskId, date: c.date } },
+          });
+          if (pair) clientCompletionIds.push(pair.id);
+          continue;
+        }
+        throw e;
+      }
     }
   }
 
@@ -540,6 +602,7 @@ router.post("/sync", requireAuth, async (req, res) => {
   res.json({
     tasks: allTasks.map(taskToJson),
     completions: allCompletions.map(completionToJson),
+    rejectedTaskIds,
   });
 });
 

@@ -3,9 +3,16 @@ import crypto from "crypto";
 import { prisma } from "../lib/prisma.js";
 import { config } from "../config.js";
 import { requireAuth } from "../middleware/auth.js";
+import { getEffectivePlan } from "../lib/planUtils.js";
 
 const router = Router();
 const PADDLE_API_BASE = "https://api.paddle.com";
+
+/** Fallback expiry when Paddle omits billing period end (≈1 billing month). */
+function fallbackPeriodEnd(existingEnd) {
+  if (existingEnd) return new Date(existingEnd);
+  return new Date(Date.now() + 35 * 24 * 60 * 60 * 1000);
+}
 
 async function paddleRequest(method, path, body = null) {
   const url = `${PADDLE_API_BASE}${path}`;
@@ -57,10 +64,21 @@ router.post("/create-checkout", requireAuth, async (req, res) => {
   }
 
   // Avoid accidental double subscriptions — manage upgrades via the portal
+  const effective = getEffectivePlan(req.user);
+  if (effective?.plan === "lifetime") {
+    return res.status(409).json({
+      error: "You already have a lifetime plan.",
+    });
+  }
+
+  const now = new Date();
   const blockingSub = await prisma.subscription.findFirst({
     where: {
       userId: req.user.id,
-      status: { in: ["active", "past_due"] },
+      OR: [
+        { status: { in: ["active", "past_due"] } },
+        { status: "cancelled", currentPeriodEnd: { gt: now } },
+      ],
     },
   });
   if (blockingSub) {
@@ -137,6 +155,8 @@ export async function handlePaddleWebhook(req, res) {
       if (userId && planFromData === "lifetime") {
         const isOneTime = !tx.subscription_id;
         if (isOneTime) {
+          // Stop recurring billing so lifetime buyers are not charged again
+          await cancelActiveSubscriptionsForUser(userId);
           await prisma.user.update({
             where: { id: userId },
             data: { plan: "lifetime", planExpiresAt: null },
@@ -156,6 +176,7 @@ export async function handlePaddleWebhook(req, res) {
           planFromCustom ||
           (priceId.includes("pro") || productId.includes("pro") ? "pro" : "basic");
         const periodEnd = sub.current_billing_period?.ends_at;
+        const periodEndDate = periodEnd ? new Date(periodEnd) : fallbackPeriodEnd(null);
         await prisma.subscription.upsert({
           where: { id: sub.id },
           create: {
@@ -165,19 +186,19 @@ export async function handlePaddleWebhook(req, res) {
             paddleCustomerId: sub.customer_id,
             plan,
             status: sub.status || "active",
-            currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+            currentPeriodEnd: periodEndDate,
           },
           update: {
             plan,
             status: sub.status || "active",
-            currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+            currentPeriodEnd: periodEndDate,
           },
         });
         await prisma.user.update({
           where: { id: userId },
           data: {
             plan,
-            planExpiresAt: periodEnd ? new Date(periodEnd) : null,
+            planExpiresAt: periodEndDate,
           },
         });
       }
@@ -200,7 +221,18 @@ export async function handlePaddleWebhook(req, res) {
             ? "basic"
             : existing?.plan || "basic");
       const periodEnd = sub.current_billing_period?.ends_at;
+      const periodEndDate = periodEnd
+        ? new Date(periodEnd)
+        : fallbackPeriodEnd(existing?.currentPeriodEnd);
       const ownerId = existing?.userId || userId;
+      const rawStatus = (sub.status || existing?.status || "active").toString().toLowerCase();
+      const status =
+        rawStatus === "canceled" || rawStatus === "cancelled"
+          ? "cancelled"
+          : rawStatus === "past_due"
+            ? "past_due"
+            : rawStatus || "active";
+
       if (ownerId && sub.id) {
         await prisma.subscription.upsert({
           where: { id: sub.id },
@@ -210,22 +242,39 @@ export async function handlePaddleWebhook(req, res) {
             paddleSubscriptionId: sub.id,
             paddleCustomerId: sub.customer_id,
             plan,
-            status: sub.status || "active",
-            currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+            status,
+            currentPeriodEnd: periodEndDate,
           },
           update: {
             plan,
-            status: sub.status || "active",
-            currentPeriodEnd: periodEnd ? new Date(periodEnd) : null,
+            status,
+            currentPeriodEnd: periodEndDate,
           },
         });
-        await prisma.user.update({
-          where: { id: ownerId },
-          data: {
-            plan,
-            planExpiresAt: periodEnd ? new Date(periodEnd) : null,
-          },
-        });
+
+        if (status === "cancelled") {
+          const stillInPaidPeriod = periodEndDate && periodEndDate > new Date();
+          if (stillInPaidPeriod) {
+            await prisma.user.update({
+              where: { id: ownerId },
+              data: { plan: existing?.plan || plan, planExpiresAt: periodEndDate },
+            });
+          } else {
+            await prisma.user.update({
+              where: { id: ownerId },
+              data: { plan: "free", planExpiresAt: null },
+            });
+          }
+        } else if (status === "active" || status === "past_due" || status === "trialing") {
+          // Only grant/refresh paid access for healthy subscription states
+          await prisma.user.update({
+            where: { id: ownerId },
+            data: {
+              plan,
+              planExpiresAt: periodEndDate,
+            },
+          });
+        }
       }
     } else if (eventType === "subscription.canceled" || eventType === "subscription.past_due") {
       const sub = data;

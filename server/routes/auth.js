@@ -260,6 +260,10 @@ router.post("/forgot-password", async (req, res) => {
     if (user) {
       const token = uuidv4();
       const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+      // Invalidate prior unused reset tokens for this user
+      await prisma.passwordResetToken.deleteMany({
+        where: { userId: user.id, usedAt: null },
+      });
       await prisma.passwordResetToken.create({
         data: {
           userId: user.id,
@@ -438,16 +442,32 @@ router.get("/confirm-email-change", async (req, res) => {
   if (!user || !user.pendingEmail || !user.pendingEmailTokenExpiresAt || new Date() > user.pendingEmailTokenExpiresAt) {
     return res.redirect(`${config.frontendUrl}/todo/settings?error=invalid_or_expired`);
   }
-  await prisma.user.update({
-    where: { id: user.id },
-    data: {
+  const taken = await prisma.user.findFirst({
+    where: {
       email: user.pendingEmail,
-      emailVerifiedAt: new Date(),
-      pendingEmail: null,
-      pendingEmailToken: null,
-      pendingEmailTokenExpiresAt: null,
+      NOT: { id: user.id },
     },
   });
+  if (taken) {
+    return res.redirect(`${config.frontendUrl}/todo/settings?error=email_taken`);
+  }
+  try {
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        email: user.pendingEmail,
+        emailVerifiedAt: new Date(),
+        pendingEmail: null,
+        pendingEmailToken: null,
+        pendingEmailTokenExpiresAt: null,
+      },
+    });
+  } catch (e) {
+    if (e?.code === "P2002") {
+      return res.redirect(`${config.frontendUrl}/todo/settings?error=email_taken`);
+    }
+    throw e;
+  }
   return res.redirect(`${config.frontendUrl}/todo/settings?email_changed=1`);
 });
 
@@ -506,6 +526,10 @@ router.get("/desktop-pending", (req, res) => {
   if (!entry || entry.pollSecret !== pollSecret) {
     return res.status(401).json({ error: "Invalid poll credentials" });
   }
+  if (entry.expiresAt && Date.now() > entry.expiresAt) {
+    desktopPendingAuth.delete(requestId);
+    return res.status(401).json({ error: "Sign-in expired" });
+  }
   // Do not delete the slot until a code is ready (preserves pollSecret across empty polls)
   if (!entry.code) {
     return res.status(204).send();
@@ -547,8 +571,11 @@ router.get("/google/callback", async (req, res) => {
     });
     const payload = ticket.getPayload();
     const googleId = payload.sub;
-    const email = payload.email;
-    const name = payload.name || payload.email?.split("@")[0] || "User";
+    const email = (payload.email || "").trim().toLowerCase();
+    if (!email) {
+      return res.redirect(`${config.frontendUrl}/auth/login?error=google_email_missing`);
+    }
+    const name = payload.name || email.split("@")[0] || "User";
     const googlePictureUrl = payload.picture || null;
 
     let user = await prisma.user.findFirst({
@@ -566,7 +593,7 @@ router.get("/google/callback", async (req, res) => {
       });
     } else if (user.googleId && user.googleId !== googleId) {
       return res.redirect(`${config.frontendUrl}/auth/login?error=email_linked_other_google`);
-    } else if (!user.googleId && user.email === email) {
+    } else if (!user.googleId && user.email.toLowerCase() === email) {
       // Only auto-link when Google asserts the email is verified
       if (payload.email_verified !== true) {
         return res.redirect(`${config.frontendUrl}/auth/login?error=google_email_unverified`);

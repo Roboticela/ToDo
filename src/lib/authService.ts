@@ -5,6 +5,25 @@ import { getApiBase } from "./apiBase";
 
 const API_BASE = getApiBase();
 
+/** Wipe prior local account data before persisting a new sign-in. */
+async function clearLocalAuthState(): Promise<void> {
+  const { clearAllTimers } = await import("./notificationService");
+  clearAllTimers();
+  const { clearAll } = await import("./db");
+  await clearAll();
+}
+
+function isValidAuthPayload(data: unknown): data is { user: User; session: AuthSession } {
+  if (!data || typeof data !== "object") return false;
+  const d = data as { user?: User; session?: AuthSession };
+  return Boolean(
+    d.user?.id &&
+      d.session?.accessToken &&
+      d.session?.userId &&
+      d.session.userId === d.user.id
+  );
+}
+
 // ─── Register ─────────────────────────────────────────────────────────────────
 
 export async function register(
@@ -21,6 +40,10 @@ export async function register(
     });
     if (res.ok) {
       const data = await res.json();
+      if (!isValidAuthPayload(data)) {
+        throw new Error("Invalid registration response");
+      }
+      await clearLocalAuthState();
       await saveUser(data.user);
       await saveSession(data.session);
       return data;
@@ -53,6 +76,10 @@ export async function login(
     });
     if (res.ok) {
       const data = await res.json();
+      if (!isValidAuthPayload(data)) {
+        throw new Error("Invalid login response");
+      }
+      await clearLocalAuthState();
       await saveUser(data.user);
       await saveSession(data.session);
       return data;
@@ -207,6 +234,7 @@ export async function refreshSession(): Promise<{ user: User; session: AuthSessi
     });
     if (!res.ok) return null;
     const data = await res.json();
+    if (!isValidAuthPayload(data)) return null;
     await saveUser(data.user);
     await saveSession(data.session);
     return { user: data.user, session: data.session };
@@ -214,6 +242,8 @@ export async function refreshSession(): Promise<{ user: User; session: AuthSessi
     return null;
   }
 }
+
+export { clearLocalAuthState, isValidAuthPayload };
 
 // ─── Logout ───────────────────────────────────────────────────────────────────
 
@@ -304,6 +334,8 @@ export async function deleteAccount(userId: string): Promise<void> {
     const errBody = await res.json().catch(() => ({}));
     throw new Error(errBody.error || "Failed to delete account on server. Try again.");
   }
+  const { clearAllTimers } = await import("./notificationService");
+  clearAllTimers();
   await deleteSession(userId);
   const { clearAll } = await import("./db");
   await clearAll();

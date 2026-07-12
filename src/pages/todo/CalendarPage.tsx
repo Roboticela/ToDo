@@ -292,9 +292,14 @@ export default function CalendarPage() {
           </div>
           <motion.button
             type="button"
-            onClick={() => { setEditTask(null); setShowForm(true); }}
-            whileTap={{ scale: 0.88 }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 text-primary text-xs font-medium hover:bg-primary/25 transition-colors"
+            onClick={() => {
+              if (!selectedDay) return;
+              setEditTask(null);
+              setShowForm(true);
+            }}
+            disabled={!selectedDay}
+            whileTap={selectedDay ? { scale: 0.88 } : undefined}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 text-primary text-xs font-medium hover:bg-primary/25 transition-colors disabled:opacity-40 disabled:pointer-events-none"
           >
             <Plus className="w-3.5 h-3.5" />
             Add Task

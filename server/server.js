@@ -11,7 +11,7 @@ import emailRoutes from "./routes/email.js";
 import { startSubscriptionReminderJob } from "./jobs/subscriptionReminderJob.js";
 
 // Validate required env vars and log configuration on startup
-const REQUIRED_ENV = ["DATABASE_URL", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"];
+const REQUIRED_ENV = ["DATABASE_URL", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "EMAIL_UNSUBSCRIBE_SECRET"];
 const OPTIONAL_ENV = [
   "FRONTEND_URL", "BACKEND_URL", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
   "SMTP_HOST", "SMTP_USER", "SMTP_PASS", "PADDLE_API_KEY", "PADDLE_WEBHOOK_SECRET",

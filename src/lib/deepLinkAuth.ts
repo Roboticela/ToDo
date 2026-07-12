@@ -1,5 +1,6 @@
 import { saveUser, saveSession } from "./db";
 import { getApiBase } from "./apiBase";
+import { clearLocalAuthState, isValidAuthPayload } from "./authService";
 import type { User, AuthSession } from "../types/todo";
 
 /**
@@ -27,12 +28,11 @@ export async function completeDesktopAuthWithCode(
   }
   const data = await exchangeRes.json();
   // Prefer full session payload from server; fall back to flat token fields
-  const user = (data.user || null) as User | null;
-  const sessionFromServer = data.session as AuthSession | undefined;
-  if (user && sessionFromServer?.accessToken) {
-    await saveUser(user);
-    await saveSession(sessionFromServer);
-    setAuthData(user, sessionFromServer);
+  if (isValidAuthPayload(data)) {
+    await clearLocalAuthState();
+    await saveUser(data.user);
+    await saveSession(data.session);
+    setAuthData(data.user, data.session);
     return true;
   }
 
@@ -44,6 +44,7 @@ export async function completeDesktopAuthWithCode(
   });
   if (!meRes.ok) return false;
   const userData = await meRes.json();
+  if (!userData?.id) return false;
   const me: User = {
     id: userData.id,
     name: userData.name,
@@ -62,6 +63,7 @@ export async function completeDesktopAuthWithCode(
     expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
     userId,
   };
+  await clearLocalAuthState();
   await saveUser(me);
   await saveSession(session);
   setAuthData(me, session);

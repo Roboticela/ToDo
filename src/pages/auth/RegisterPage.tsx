@@ -11,11 +11,17 @@ import { completeDesktopAuthWithCode } from "../../lib/deepLinkAuth";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { setAuthData } = useAuth();
+  const { setAuthData, isAuthenticated, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     document.title = "Sign up - Roboticela ToDo";
   }, []);
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigate("/todo", { replace: true });
+    }
+  }, [authLoading, isAuthenticated, navigate]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

@@ -49,6 +49,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       applySession(refreshed.user, refreshed.session);
       return refreshed.session;
     }
+    // Do not hand out an already-expired access token
+    if (expiresAt <= Date.now()) return null;
     return current;
   }, [applySession]);
 

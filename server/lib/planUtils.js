@@ -1,6 +1,7 @@
 /**
- * Effective plan: if planExpiresAt is in the past and plan is not "free", treat as free.
- * Returns { plan, planExpiresAt } for API responses.
+ * Effective plan: if planExpiresAt is missing or in the past and plan is not
+ * "free"/"lifetime", treat as free. Recurring plans require an explicit expiry;
+ * null no longer means "paid forever".
  */
 export function getEffectivePlan(user) {
   if (!user) return null;
@@ -8,7 +9,10 @@ export function getEffectivePlan(user) {
   if (plan === "pending") plan = "free";
   const planExpiresAt = user.planExpiresAt ?? null;
   // lifetime never expires; free doesn't expire
-  const isExpired = plan !== "free" && plan !== "lifetime" && planExpiresAt && new Date(planExpiresAt) < new Date();
+  const isExpired =
+    plan !== "free" &&
+    plan !== "lifetime" &&
+    (!planExpiresAt || new Date(planExpiresAt) < new Date());
   return {
     plan: isExpired ? "free" : plan,
     planExpiresAt: isExpired ? null : planExpiresAt,
