@@ -31,9 +31,10 @@ export async function completeDesktopAuthWithCode(
   // Prefer full session payload from server; fall back to flat token fields
   if (isValidAuthPayload(data)) {
     await clearLocalAuthState();
-    await saveUser(data.user);
+    const user = mapUserFromApi(data.user as unknown as Record<string, unknown>);
+    await saveUser(user);
     await saveSession(data.session);
-    setAuthData(data.user, data.session);
+    setAuthData(user, data.session);
     return true;
   }
 

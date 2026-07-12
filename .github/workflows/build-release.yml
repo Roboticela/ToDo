@@ -198,7 +198,8 @@ jobs:
             librsvg2-dev \
             patchelf \
             libsoup-3.0-dev \
-            libjavascriptcoregtk-4.1-dev
+            libjavascriptcoregtk-4.1-dev \
+            xdg-utils
 
       - name: Install system dependencies (cross armv7)
         if: matrix.arch == 'armv7'
@@ -206,9 +207,12 @@ jobs:
           sudo apt-get install -y \
             gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf \
             libwebkit2gtk-4.1-dev:armhf \
+            libappindicator3-dev:armhf \
             librsvg2-dev:armhf \
             libsoup-3.0-dev:armhf \
-            patchelf
+            libjavascriptcoregtk-4.1-dev:armhf \
+            patchelf \
+            xdg-utils
 
       - name: Configure cross-compilation environment
         if: matrix.cross == true
@@ -548,6 +552,19 @@ jobs:
 
       - name: List artifacts
         run: find artifacts -type f 2>/dev/null | sort || true
+
+      - name: Require at least one release binary
+        run: |
+          mkdir -p artifacts
+          count=$(find artifacts -type f \( \
+            -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' -o \
+            -name '*.exe' -o -name '*.msi' -o -name '*.apk' -o -name '*.aab' \
+          \) | wc -l)
+          echo "Found $count release binary file(s)"
+          if [ "$count" -lt 1 ]; then
+            echo "::error::No release binaries found in artifacts/. Refusing to create an empty GitHub Release."
+            exit 1
+          fi
 
       - name: Generate checksums
         run: |

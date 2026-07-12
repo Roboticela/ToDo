@@ -39,17 +39,12 @@ export function getEffectiveClientPlan(
   return p;
 }
 
-/** UTC YYYY-MM-DD — matches server getHistoryMinDateStr. */
-function utcYmdDaysAgo(daysAgoInclusive: number): string {
-  const now = new Date();
-  const d = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  );
-  d.setUTCDate(d.getUTCDate() - (daysAgoInclusive - 1));
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+/** Local YYYY-MM-DD — matches task dates and getTodayString(). */
+function localYmdDaysAgo(daysAgoInclusive: number): string {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - (daysAgoInclusive - 1));
+  return format(d, "yyyy-MM-dd");
 }
 
 export function getHistoryCutoff(
@@ -58,7 +53,7 @@ export function getHistoryCutoff(
 ): string | null {
   const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.historyDays == null) return null;
-  return utcYmdDaysAgo(features.historyDays);
+  return localYmdDaysAgo(features.historyDays);
 }
 
 /** Clamp a browsable date to the plan's history window (past only). */

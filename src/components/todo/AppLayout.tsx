@@ -63,6 +63,18 @@ export default function AppLayout() {
     }
   }, [isAuthenticated, isLoading, navigate]);
 
+  // New signups must pick a plan before using the app
+  useEffect(() => {
+    if (
+      !isLoading &&
+      isAuthenticated &&
+      user?.plan === "pending" &&
+      location.pathname !== "/todo/subscription"
+    ) {
+      navigate("/todo/subscription", { replace: true });
+    }
+  }, [isAuthenticated, isLoading, user?.plan, location.pathname, navigate]);
+
   useEffect(() => {
     if (isAuthenticated && user) {
       clearAllTimers();

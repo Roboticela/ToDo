@@ -5,6 +5,7 @@
 import { isTauri } from "./tauri";
 import { getOsKind } from "./platform";
 import {
+  DEFAULT_LIBRARY_SOUND_ID,
   DEFAULT_RINGTONE_SOUND_ID,
   getCatalogSound,
   macSystemSoundPath,
@@ -264,7 +265,11 @@ export async function playNotificationSound(opts: {
     await playOsDefaultNotify();
     return;
   }
-  if (mode === "preset" || mode === "ringtone") {
+  if (mode === "preset") {
+    await playCatalogSound(opts.soundId || DEFAULT_LIBRARY_SOUND_ID);
+    return;
+  }
+  if (mode === "ringtone") {
     await playCatalogSound(opts.soundId || DEFAULT_RINGTONE_SOUND_ID);
     return;
   }

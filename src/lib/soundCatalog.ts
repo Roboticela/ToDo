@@ -130,12 +130,15 @@ export function soundsByCategory(category: SoundCategory): CatalogSound[] {
   return SOUND_CATALOG.filter((s) => s.category === category);
 }
 
-/** Resolve legacy "ringtone" mode to a preset id. */
+/** Resolve preset/ringtone mode to a catalog id with the correct default per mode. */
 export function resolvePresetId(
   mode: NotificationSoundMode | undefined,
   soundId: string | undefined
 ): string | undefined {
-  if (mode === "preset" || mode === "ringtone") {
+  if (mode === "preset") {
+    return getCatalogSound(soundId)?.id || DEFAULT_LIBRARY_SOUND_ID;
+  }
+  if (mode === "ringtone") {
     return getCatalogSound(soundId)?.id || DEFAULT_RINGTONE_SOUND_ID;
   }
   return soundId;

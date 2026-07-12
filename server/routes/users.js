@@ -28,7 +28,8 @@ function toUserResponse(user) {
     name: user.name,
     email: user.email,
     avatarUrl: user.avatarUrl ?? undefined,
-    plan: effective.plan,
+    // Preserve pending so the client can run plan-selection onboarding
+    plan: user.plan === "pending" ? "pending" : effective.plan,
     planExpiresAt: effective.planExpiresAt ? effective.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,

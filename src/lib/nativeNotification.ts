@@ -13,7 +13,7 @@ import {
   playOsDefaultNotify,
   playWindowsDefaultNotify,
 } from "./notificationSound";
-import { DEFAULT_RINGTONE_SOUND_ID, windowsMediaPath } from "./soundCatalog";
+import { DEFAULT_LIBRARY_SOUND_ID, DEFAULT_RINGTONE_SOUND_ID, windowsMediaPath } from "./soundCatalog";
 
 export const CHANNEL_DEFAULT = "task-reminders";
 export const CHANNEL_SILENT = "task-reminders-silent";
@@ -158,7 +158,11 @@ export async function showTaskNotification(opts: ShowTaskNotificationOpts): Prom
     await playCustomSound(opts.customSoundUrl);
     return;
   }
-  if (mode === "preset" || mode === "ringtone") {
+  if (mode === "preset") {
+    await playCatalogSound(opts.soundId || DEFAULT_LIBRARY_SOUND_ID);
+    return;
+  }
+  if (mode === "ringtone") {
     await playCatalogSound(opts.soundId || DEFAULT_RINGTONE_SOUND_ID);
     return;
   }
@@ -311,7 +315,11 @@ export async function previewNotificationSound(opts: {
     return;
   }
 
-  if (mode === "preset" || mode === "ringtone") {
+  if (mode === "preset") {
+    await playCatalogSound(opts.soundId || DEFAULT_LIBRARY_SOUND_ID);
+    return;
+  }
+  if (mode === "ringtone") {
     await playCatalogSound(opts.soundId || DEFAULT_RINGTONE_SOUND_ID);
     return;
   }

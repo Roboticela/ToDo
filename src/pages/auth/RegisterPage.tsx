@@ -11,7 +11,7 @@ import { completeDesktopAuthWithCode } from "../../lib/deepLinkAuth";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
-  const { setAuthData, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { setAuthData, isAuthenticated, isLoading: authLoading, user } = useAuth();
 
   useEffect(() => {
     document.title = "Sign up - Roboticela ToDo";
@@ -19,9 +19,9 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      navigate("/todo", { replace: true });
+      navigate(user?.plan === "pending" ? "/todo/subscription" : "/todo", { replace: true });
     }
-  }, [authLoading, isAuthenticated, navigate]);
+  }, [authLoading, isAuthenticated, user?.plan, navigate]);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -54,7 +54,7 @@ export default function RegisterPage() {
     try {
       const { user, session } = await register(name, email, password);
       setAuthData(user, session);
-      navigate("/todo");
+      navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
     } finally {

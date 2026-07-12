@@ -80,9 +80,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const updatedUser = mapUserFromApi(userData);
                 await saveUser(updatedUser);
                 applySession(updatedUser, savedSession);
+              } else if (res.status === 401) {
+                // Access token rejected — try refresh once, else clear session
+                const refreshed = await refreshSession();
+                if (refreshed) {
+                  applySession(refreshed.user, refreshed.session);
+                } else {
+                  await authLogout(savedSession.userId);
+                  setUser(null);
+                  setSession(null);
+                  sessionRef.current = null;
+                }
               }
+              // Non-401 errors (network/5xx): keep cached user
             } catch {
-              // keep cached user
+              // keep cached user on network failure
             }
           }
           setIsLoading(false);
@@ -128,12 +140,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
         if (res.status === 401) {
           const refreshed = await refreshSession();
-          if (!refreshed) return;
+          if (!refreshed) {
+            await authLogout(fresh.userId);
+            setUser(null);
+            setSession(null);
+            sessionRef.current = null;
+            return;
+          }
           applySession(refreshed.user, refreshed.session);
           const retry = await fetch(`${getApiBase()}/api/users/me`, {
             headers: { Authorization: `Bearer ${refreshed.session.accessToken}` },
           });
-          if (!retry.ok) return;
+          if (!retry.ok) {
+            if (retry.status === 401) {
+              await authLogout(refreshed.session.userId);
+              setUser(null);
+              setSession(null);
+              sessionRef.current = null;
+            }
+            return;
+          }
           const userData = await retry.json();
           const updatedUser = mapUserFromApi(userData);
           await saveUser(updatedUser);

@@ -33,18 +33,40 @@ export function getPlanLimits(plan) {
 }
 
 /** YYYY-MM-DD for the oldest date still visible under historyDays (inclusive).
- *  Uses UTC calendar days so client and server agree regardless of server TZ.
+ *  Uses the client's local calendar day when provided (X-Client-Today), otherwise
+ *  the server's local calendar — matching task dates and daily-cap sampling.
  */
-export function getHistoryMinDateStr(historyDays) {
+export function getLocalTodayStr() {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const y = today.getFullYear();
+  const m = String(today.getMonth() + 1).padStart(2, "0");
+  const d = String(today.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Prefer validated X-Client-Today (within ±1 day of server local today). */
+export function resolveTodayStr(req) {
+  const raw = req?.get?.("x-client-today") || req?.headers?.["x-client-today"];
+  const candidate = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof candidate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(candidate)) {
+    const serverToday = getLocalTodayStr();
+    const toUtcNoon = (ymd) => Date.parse(`${ymd}T12:00:00Z`);
+    const diffDays = Math.abs(toUtcNoon(candidate) - toUtcNoon(serverToday)) / 86_400_000;
+    if (diffDays <= 1) return candidate;
+  }
+  return getLocalTodayStr();
+}
+
+export function getHistoryMinDateStr(historyDays, todayStr = getLocalTodayStr()) {
   if (historyDays == null) return null;
-  const now = new Date();
-  const minDate = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  );
-  minDate.setUTCDate(minDate.getUTCDate() - (historyDays - 1));
-  const y = minDate.getUTCFullYear();
-  const m = String(minDate.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(minDate.getUTCDate()).padStart(2, "0");
+  const base = Date.parse(`${todayStr}T12:00:00`);
+  if (Number.isNaN(base)) return null;
+  const minDate = new Date(base);
+  minDate.setDate(minDate.getDate() - (historyDays - 1));
+  const y = minDate.getFullYear();
+  const m = String(minDate.getMonth() + 1).padStart(2, "0");
+  const d = String(minDate.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 

@@ -12,6 +12,29 @@ import { isTauri } from "./tauri";
 const DB_NAME = "roboticela-todo";
 const DB_VERSION = 1;
 
+/** Blocks local task/completion writes while sync applies server state (prevents race revive). */
+let syncApplyWaiters: Array<() => void> = [];
+let syncApplyHeld = false;
+
+/** Hold while replace + re-apply runs so in-flight deletes/edits wait and then write on top. */
+export function beginSyncApplyBarrier(): void {
+  syncApplyHeld = true;
+}
+
+export function endSyncApplyBarrier(): void {
+  syncApplyHeld = false;
+  const waiters = syncApplyWaiters;
+  syncApplyWaiters = [];
+  for (const w of waiters) w();
+}
+
+async function waitForSyncApplyBarrier(): Promise<void> {
+  if (!syncApplyHeld) return;
+  await new Promise<void>((resolve) => {
+    syncApplyWaiters.push(resolve);
+  });
+}
+
 export interface TodoDB {
   tasks: {
     key: string;
@@ -98,7 +121,11 @@ export function getDB(): Promise<IDBPDatabase<TodoDB>> {
 
 // ─── Task Operations ───────────────────────────────────────────────────────────
 
-export async function saveTask(task: Task): Promise<void> {
+export async function saveTask(
+  task: Task,
+  opts?: { bypassSyncBarrier?: boolean }
+): Promise<void> {
+  if (!opts?.bypassSyncBarrier) await waitForSyncApplyBarrier();
   if (isTauri()) return (await import("./dbTauri")).saveTask(task);
   const db = await getDB();
   await db.put("tasks", task);
@@ -132,6 +159,7 @@ export async function getAllTasksByUserForSync(userId: string): Promise<Task[]> 
 }
 
 export async function deleteTask(id: string): Promise<void> {
+  await waitForSyncApplyBarrier();
   if (isTauri()) return (await import("./dbTauri")).deleteTask(id);
   const db = await getDB();
   const task = await db.get("tasks", id);
@@ -150,7 +178,11 @@ export async function getRepeatTasksByUser(userId: string): Promise<Task[]> {
 
 // ─── Completion Operations ─────────────────────────────────────────────────────
 
-export async function saveCompletion(completion: TaskCompletion): Promise<void> {
+export async function saveCompletion(
+  completion: TaskCompletion,
+  opts?: { bypassSyncBarrier?: boolean }
+): Promise<void> {
+  if (!opts?.bypassSyncBarrier) await waitForSyncApplyBarrier();
   if (isTauri()) return (await import("./dbTauri")).saveCompletion(completion);
   const db = await getDB();
   await db.put("completions", completion);
@@ -176,7 +208,11 @@ export async function getAllCompletionsByUser(userId: string): Promise<TaskCompl
 }
 
 /** Delete a single completion by id (e.g. when uncompleting a repeat task). */
-export async function deleteCompletion(id: string): Promise<void> {
+export async function deleteCompletion(
+  id: string,
+  opts?: { bypassSyncBarrier?: boolean }
+): Promise<void> {
+  if (!opts?.bypassSyncBarrier) await waitForSyncApplyBarrier();
   if (isTauri()) return (await import("./dbTauri")).deleteCompletion(id);
   const db = await getDB();
   await db.delete("completions", id);

@@ -7,8 +7,11 @@ import {
   saveTask,
   saveCompletion,
   deleteCompletion,
+  beginSyncApplyBarrier,
+  endSyncApplyBarrier,
 } from "./db";
 import { getApiBase } from "./apiBase";
+import { getTodayString } from "./taskService";
 
 export type SyncResult =
   | { ok: true; tasks: Task[]; completions: TaskCompletion[] }
@@ -74,6 +77,7 @@ async function doSync(userId: string): Promise<SyncResult> {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
+        "X-Client-Today": getTodayString(),
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),
@@ -100,52 +104,59 @@ async function doSync(userId: string): Promise<SyncResult> {
     Array.isArray(data.rejectedTaskIds) ? data.rejectedTaskIds : []
   );
 
-  const [liveTasks, liveComps] = await Promise.all([
-    getAllTasksByUserForSync(userId),
-    getAllCompletionsByUser(userId),
-  ]);
-  const liveCompIds = new Set(liveComps.map((c) => c.id));
-  const rejectedLocals = liveTasks.filter((t) => rejectedTaskIds.has(t.id));
+  // Hold barrier so local deletes/edits wait until replace + re-apply finish,
+  // then write on top (avoids resurrecting tasks deleted during this window).
+  beginSyncApplyBarrier();
+  try {
+    const [liveTasks, liveComps] = await Promise.all([
+      getAllTasksByUserForSync(userId),
+      getAllCompletionsByUser(userId),
+    ]);
+    const liveCompIds = new Set(liveComps.map((c) => c.id));
+    const rejectedLocals = liveTasks.filter((t) => rejectedTaskIds.has(t.id));
 
-  await replaceTasksAndCompletionsFromServer(userId, serverTasks, serverCompletions);
+    await replaceTasksAndCompletionsFromServer(userId, serverTasks, serverCompletions);
 
-  // Keep plan-limit-rejected tasks locally so they are not silently deleted
-  for (const t of rejectedLocals) {
-    await saveTask({ ...t, syncStatus: "pending" });
-  }
+    // Keep plan-limit-rejected tasks locally so they are not silently deleted
+    for (const t of rejectedLocals) {
+      await saveTask({ ...t, syncStatus: "pending" }, { bypassSyncBarrier: true });
+    }
 
-  // Re-apply only true in-flight edits (newer than server, or created during this round-trip).
-  // Do not resurrect tasks the server rejected (were in snapshot but missing from response).
-  for (const t of liveTasks) {
-    if (rejectedTaskIds.has(t.id)) continue;
-    if (t.syncStatus !== "pending") continue;
-    const s = serverTasks.find((x) => x.id === t.id);
-    if (s && t.updatedAt && s.updatedAt && t.updatedAt > s.updatedAt) {
-      await saveTask({ ...t, syncStatus: "pending" });
-    } else if (!s && t.updatedAt && t.updatedAt > syncStartedAt && !snapshotTaskIds.has(t.id)) {
-      await saveTask({ ...t, syncStatus: "pending" });
+    // Re-apply only true in-flight edits (newer than server, or created during this round-trip).
+    // Do not resurrect tasks the server rejected (were in snapshot but missing from response).
+    for (const t of liveTasks) {
+      if (rejectedTaskIds.has(t.id)) continue;
+      if (t.syncStatus !== "pending") continue;
+      const s = serverTasks.find((x) => x.id === t.id);
+      if (s && t.updatedAt && s.updatedAt && t.updatedAt > s.updatedAt) {
+        await saveTask({ ...t, syncStatus: "pending" }, { bypassSyncBarrier: true });
+      } else if (!s && t.updatedAt && t.updatedAt > syncStartedAt && !snapshotTaskIds.has(t.id)) {
+        await saveTask({ ...t, syncStatus: "pending" }, { bypassSyncBarrier: true });
+      }
     }
-  }
-  for (const c of liveComps) {
-    if (c.syncStatus !== "pending") continue;
-    const s =
-      serverCompletions.find((x) => x.id === c.id) ||
-      serverCompletions.find((x) => x.taskId === c.taskId && x.date === c.date);
-    if (s && c.completedAt && s.completedAt && c.completedAt > s.completedAt) {
-      await saveCompletion({ ...c, syncStatus: "pending" });
-    } else if (
-      !s &&
-      c.completedAt &&
-      c.completedAt > syncStartedAt &&
-      !snapshotCompIds.has(c.id)
-    ) {
-      await saveCompletion({ ...c, syncStatus: "pending" });
+    for (const c of liveComps) {
+      if (c.syncStatus !== "pending") continue;
+      const s =
+        serverCompletions.find((x) => x.id === c.id) ||
+        serverCompletions.find((x) => x.taskId === c.taskId && x.date === c.date);
+      if (s && c.completedAt && s.completedAt && c.completedAt > s.completedAt) {
+        await saveCompletion({ ...c, syncStatus: "pending" }, { bypassSyncBarrier: true });
+      } else if (
+        !s &&
+        c.completedAt &&
+        c.completedAt > syncStartedAt &&
+        !snapshotCompIds.has(c.id)
+      ) {
+        await saveCompletion({ ...c, syncStatus: "pending" }, { bypassSyncBarrier: true });
+      }
     }
-  }
-  for (const id of snapshotCompIds) {
-    if (!liveCompIds.has(id) && serverCompletions.some((c) => c.id === id)) {
-      await deleteCompletion(id);
+    for (const id of snapshotCompIds) {
+      if (!liveCompIds.has(id) && serverCompletions.some((c) => c.id === id)) {
+        await deleteCompletion(id, { bypassSyncBarrier: true });
+      }
     }
+  } finally {
+    endSyncApplyBarrier();
   }
 
   return { ok: true, tasks: serverTasks, completions: serverCompletions };

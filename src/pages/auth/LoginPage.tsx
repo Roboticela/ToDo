@@ -12,7 +12,7 @@ import { completeDesktopAuthWithCode } from "../../lib/deepLinkAuth";
 export default function LoginPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { setAuthData, isAuthenticated } = useAuth();
+  const { setAuthData, isAuthenticated, user } = useAuth();
   const [email, setEmail] = useState("");
   const [showVerifiedMessage, setShowVerifiedMessage] = useState(false);
 
@@ -23,9 +23,9 @@ export default function LoginPage() {
   // If we become authenticated while on login (e.g. deep link just processed), go to app
   useEffect(() => {
     if (isAuthenticated) {
-      navigate("/todo", { replace: true });
+      navigate(user?.plan === "pending" ? "/todo/subscription" : "/todo", { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, user?.plan, navigate]);
 
   useEffect(() => {
     if (searchParams.get("verified") === "1") {
@@ -54,7 +54,7 @@ export default function LoginPage() {
     try {
       const { user, session } = await login(email, password);
       setAuthData(user, session);
-      navigate("/todo");
+      navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed. Please try again.");
     } finally {

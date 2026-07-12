@@ -4,6 +4,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { saveUser, saveSession } from "../../lib/db";
 import { clearLocalAuthState, isValidAuthPayload } from "../../lib/authService";
 import { getApiBase } from "../../lib/apiBase";
+import { mapUserFromApi } from "../../lib/mapUserFromApi";
 
 /** Prevent StrictMode double-mount from consuming a one-time code twice */
 const exchangedCodes = new Set<string>();
@@ -71,11 +72,12 @@ export default function AuthCallbackPage() {
         return;
       }
       await clearLocalAuthState();
-      await saveUser(data.user);
+      const user = mapUserFromApi(data.user as Record<string, unknown>);
+      await saveUser(user);
       await saveSession(data.session);
-      setAuthData(data.user, data.session);
+      setAuthData(user, data.session);
       window.history.replaceState({}, "", "/auth/callback");
-      window.location.replace("/todo");
+      window.location.replace(user.plan === "pending" ? "/todo/subscription" : "/todo");
     } catch {
       exchangedCodes.delete(code);
       startedRef.current = false;

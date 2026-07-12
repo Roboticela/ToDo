@@ -6,9 +6,15 @@ import {
   getPlanLimits,
   getHistoryMinDateStr,
   isTaskInHistoryWindow,
+  resolveTodayStr,
+  getLocalTodayStr,
 } from "../lib/planUtils.js";
 
 const router = Router();
+
+function historyMinForReq(req, historyDays) {
+  return getHistoryMinDateStr(historyDays, resolveTodayStr(req));
+}
 
 function taskToJson(t) {
   return {
@@ -91,14 +97,12 @@ async function wouldExceedDailyCapForRepeatDays(
   repeatDays,
   startDate,
   endDate,
-  maxDailyTasks
+  maxDailyTasks,
+  todayStr = getLocalTodayStr()
 ) {
   if (maxDailyTasks == null || !Array.isArray(repeatDays) || repeatDays.length === 0) {
     return false;
   }
-  const today = new Date();
-  today.setHours(12, 0, 0, 0);
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const fromStr = startDate && startDate > todayStr ? startDate : todayStr;
   // Sample enough weeks to catch dense calendars; still bounded for performance
   const WEEKS = 8;
@@ -140,7 +144,7 @@ router.get("/", requireAuth, async (req, res) => {
   const dateQuery = typeof date === "string" ? date : null;
   const effective = getEffectivePlan(req.user);
   const limits = getPlanLimits(effective.plan);
-  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  const minDateStr = historyMinForReq(req, limits.historyDays);
   const historyPart = historyWhereClause(minDateStr, dateQuery);
   if (historyPart.__empty) return res.json([]);
 
@@ -159,7 +163,7 @@ router.get("/:id", requireAuth, async (req, res) => {
   if (!task) return res.status(404).json({ error: "Task not found" });
   const effective = getEffectivePlan(req.user);
   const limits = getPlanLimits(effective.plan);
-  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  const minDateStr = historyMinForReq(req, limits.historyDays);
   if (!isTaskInHistoryWindow(task, minDateStr)) {
     return res.status(404).json({ error: "Task not found" });
   }
@@ -176,7 +180,7 @@ router.post("/", requireAuth, async (req, res) => {
   const limits = getPlanLimits(effective.plan);
   const userId = req.user.id;
   const willBeRepeating = Boolean(body.isRepeating);
-  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  const minDateStr = historyMinForReq(req, limits.historyDays);
 
   if (!willBeRepeating && minDateStr && body.date < minDateStr) {
     return res.status(403).json({
@@ -217,7 +221,8 @@ router.post("/", requireAuth, async (req, res) => {
           days,
           body.date,
           body.endDate ?? null,
-          limits.maxDailyTasks
+          limits.maxDailyTasks,
+          resolveTodayStr(req)
         )
       ) {
         return res.status(403).json({
@@ -317,7 +322,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     data.endDate !== undefined &&
     existing.endDate != null &&
     (data.endDate == null || data.endDate > existing.endDate);
-  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  const minDateStr = historyMinForReq(req, limits.historyDays);
 
   // Block moving a non-repeating task outside the history window (soft-delete still allowed)
   if (!softDeleting && !nextRepeating && minDateStr && nextDate < minDateStr && dateChanged) {
@@ -351,7 +356,8 @@ router.patch("/:id", requireAuth, async (req, res) => {
         nextRepeatDays,
         nextDate,
         nextEndDate,
-        limits.maxDailyTasks
+        limits.maxDailyTasks,
+        resolveTodayStr(req)
       )
     ) {
       return res.status(403).json({
@@ -495,7 +501,7 @@ router.post("/sync", requireAuth, async (req, res) => {
       existing &&
       existing.endDate != null &&
       (t.endDate == null || t.endDate > existing.endDate);
-    const minDateStr = getHistoryMinDateStr(limits.historyDays);
+    const minDateStr = historyMinForReq(req, limits.historyDays);
 
     if (
       !isSoftDelete &&
@@ -543,7 +549,8 @@ router.post("/sync", requireAuth, async (req, res) => {
           clientRepeatDays,
           t.date,
           t.endDate ?? null,
-          limits.maxDailyTasks
+          limits.maxDailyTasks,
+          resolveTodayStr(req)
         )
       ) {
         rejectedTaskIds.push(t.id);
@@ -741,7 +748,7 @@ router.post("/sync", requireAuth, async (req, res) => {
   });
 
   // Clamp history for free/basic plans in the sync response (and thus local store)
-  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  const minDateStr = historyMinForReq(req, limits.historyDays);
   if (minDateStr) {
     allTasks = allTasks.filter((t) => isTaskInHistoryWindow(t, minDateStr));
     const keptIds = new Set(allTasks.map((t) => t.id));

@@ -32,6 +32,9 @@ console.log("[startup] Environment check:");
 
 const app = express();
 
+// Trust reverse proxies (nginx, Cloudflare, etc.) so req.ip is the client IP
+app.set("trust proxy", 1);
+
 app.use(
   cors({
     origin: [

@@ -243,7 +243,7 @@ router.post("/create-checkout", requireAuth, async (req, res) => {
         plan: plan || "basic",
         interval: plan === "lifetime" ? "lifetime" : billingInterval,
       },
-      customer_ip: req.ip || undefined,
+      customer_ip: (typeof req.ip === "string" && req.ip) || undefined,
     });
     const checkoutUrl = tx.data?.checkout?.url;
     if (!checkoutUrl) {
