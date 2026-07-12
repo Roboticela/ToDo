@@ -56,6 +56,18 @@ router.post("/create-checkout", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Invalid plan or price not configured" });
   }
 
+  // Avoid accidental double subscriptions — manage upgrades via the portal
+  if (plan !== "lifetime") {
+    const active = await prisma.subscription.findFirst({
+      where: { userId: req.user.id, status: "active" },
+    });
+    if (active) {
+      return res.status(409).json({
+        error: "You already have an active subscription. Use Manage Subscription to change plans.",
+      });
+    }
+  }
+
   try {
     const tx = await paddleRequest("POST", "/transactions", {
       items: [{ price_id: priceId, quantity: 1 }],
@@ -91,6 +103,12 @@ export async function handlePaddleWebhook(req, res) {
   const ts = parts.ts;
   const h1 = parts.h1;
   if (!ts || !h1) {
+    return res.status(400).end();
+  }
+
+  // Reject replayed webhooks (Paddle ts is unix seconds)
+  const tsSec = Number(ts);
+  if (!Number.isFinite(tsSec) || Math.abs(Date.now() / 1000 - tsSec) > 300) {
     return res.status(400).end();
   }
 
@@ -282,5 +300,27 @@ router.post("/portal", requireAuth, async (req, res) => {
     res.status(502).json({ error: e?.message || "Portal session failed" });
   }
 });
+
+/** Cancel all active/past_due Paddle subscriptions for a user (e.g. on account delete). */
+export async function cancelActiveSubscriptionsForUser(userId) {
+  if (!config.paddle.apiKey) return;
+  const subs = await prisma.subscription.findMany({
+    where: { userId, status: { in: ["active", "past_due"] } },
+  });
+  for (const sub of subs) {
+    const paddleId = sub.paddleSubscriptionId || sub.id;
+    try {
+      await paddleRequest("POST", `/subscriptions/${paddleId}/cancel`, {
+        effective_from: "immediately",
+      });
+      await prisma.subscription.update({
+        where: { id: sub.id },
+        data: { status: "cancelled" },
+      });
+    } catch (e) {
+      console.error("[paddle] cancel on account delete", paddleId, e?.message || e);
+    }
+  }
+}
 
 export default router;

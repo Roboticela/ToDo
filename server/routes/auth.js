@@ -21,7 +21,7 @@ const router = Router();
 // One-time codes for desktop OAuth: app gets code by polling (no tokens in browser URL)
 const DESKTOP_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const desktopAuthCodes = new Map(); // code -> { accessToken, refreshToken, userId, expiresAt }
-const desktopPendingAuth = new Map(); // requestId -> { code }
+const desktopPendingAuth = new Map(); // requestId -> { code?, pollSecret }
 
 function createDesktopAuthCode(accessToken, refreshToken, userId) {
   const code = crypto.randomBytes(24).toString("hex");
@@ -465,6 +465,8 @@ router.post("/desktop-login-start", (req, res) => {
     return res.status(503).json({ error: "Google sign-in is not configured" });
   }
   const requestId = uuidv4();
+  const pollSecret = uuidv4();
+  desktopPendingAuth.set(requestId, { pollSecret });
   const state = Buffer.from(JSON.stringify({ client: "desktop", requestId })).toString("base64url");
   const scope = "openid email profile";
   const authUrl = googleClient.generateAuthUrl({
@@ -474,19 +476,24 @@ router.post("/desktop-login-start", (req, res) => {
     redirect_uri: `${config.backendUrl}/api/auth/google/callback`,
     prompt: "consent",
   });
-  res.json({ authUrl, requestId });
+  res.json({ authUrl, requestId, pollSecret });
 });
 
 router.get("/desktop-pending", (req, res) => {
   const requestId = req.query.requestId;
-  if (!requestId) {
-    return res.status(400).json({ error: "Missing requestId" });
+  const pollSecret = req.query.pollSecret || req.headers["x-poll-secret"];
+  if (!requestId || !pollSecret) {
+    return res.status(400).json({ error: "Missing requestId or pollSecret" });
   }
   const entry = desktopPendingAuth.get(requestId);
-  desktopPendingAuth.delete(requestId);
-  if (!entry?.code) {
+  if (!entry || entry.pollSecret !== pollSecret) {
+    return res.status(401).json({ error: "Invalid poll credentials" });
+  }
+  // Do not delete the slot until a code is ready (preserves pollSecret across empty polls)
+  if (!entry.code) {
     return res.status(204).send();
   }
+  desktopPendingAuth.delete(requestId);
   res.json({ code: entry.code });
 });
 
@@ -595,7 +602,8 @@ router.get("/google/callback", async (req, res) => {
 
     if (client === "desktop") {
       if (requestId) {
-        desktopPendingAuth.set(requestId, { code: authCode });
+        const prev = desktopPendingAuth.get(requestId) || {};
+        desktopPendingAuth.set(requestId, { ...prev, code: authCode });
       }
       return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
     }

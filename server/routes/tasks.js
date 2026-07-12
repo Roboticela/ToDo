@@ -289,6 +289,10 @@ router.post("/sync", requireAuth, async (req, res) => {
   const limits = getPlanLimits(effective.plan);
 
   const clientTaskIds = [];
+  /** taskId -> client updatedAt ISO (for safe completion prune) */
+  const clientTaskUpdatedAt = new Map();
+  /** "taskId|date" pairs the client still has */
+  const clientCompletionPairs = new Set();
 
   for (const t of tasks) {
     if (!t.id || !t.title || !t.type || !t.category || !t.date) continue;
@@ -299,13 +303,17 @@ router.post("/sync", requireAuth, async (req, res) => {
       continue;
     }
 
-    // Last-write-wins: skip stale client updates (do NOT prune completions for these —
-    // a lagging device must not wipe newer completions from another device)
+    // Last-write-wins for normal edits; soft-delete still wins over a newer edit
     if (existing && t.updatedAt && existing.updatedAt) {
       const clientTs = new Date(t.updatedAt).getTime();
       const serverTs = new Date(existing.updatedAt).getTime();
+      const clientDeleting = Boolean(t.deletedAt);
+      const serverDeleted = Boolean(existing.deletedAt);
       if (!Number.isNaN(clientTs) && clientTs < serverTs) {
-        continue;
+        // Allow an older client soft-delete to apply (delete wins over concurrent edits)
+        if (!(clientDeleting && !serverDeleted)) {
+          continue;
+        }
       }
     }
 
@@ -362,6 +370,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         : null;
 
     clientTaskIds.push(t.id);
+    if (t.updatedAt) clientTaskUpdatedAt.set(t.id, t.updatedAt);
     await prisma.task.upsert({
       where: { id: t.id },
       create: {
@@ -406,6 +415,7 @@ router.post("/sync", requireAuth, async (req, res) => {
   const clientCompletionIds = [];
   for (const c of completions) {
     if (!c.id || !c.taskId || !c.date || !c.status) continue;
+    clientCompletionPairs.add(`${c.taskId}|${c.date}`);
 
     // Ensure completion belongs to a task owned by this user
     const task = await prisma.task.findFirst({ where: { id: c.taskId, userId } });
@@ -474,18 +484,31 @@ router.post("/sync", requireAuth, async (req, res) => {
     }
   }
 
-  // Prune completions only for tasks the client actually applied.
-  // Empty local DB (fresh device) sends no tasks → skip delete → server data is returned intact.
+  // Prune completions only when the client could have known about them.
+  // Never delete a server completion newer than the client's task.updatedAt
+  // (that completion came from another device after this client's last edit).
   if (clientTaskIds.length > 0) {
-    await prisma.taskCompletion.deleteMany({
-      where: {
-        userId,
-        taskId: { in: clientTaskIds },
-        ...(clientCompletionIds.length > 0
-          ? { id: { notIn: clientCompletionIds } }
-          : {}),
-      },
+    const serverComps = await prisma.taskCompletion.findMany({
+      where: { userId, taskId: { in: clientTaskIds } },
     });
+    const toDelete = [];
+    for (const sc of serverComps) {
+      if (clientCompletionIds.includes(sc.id)) continue;
+      if (clientCompletionPairs.has(`${sc.taskId}|${sc.date}`)) continue;
+      const clientUpdated = clientTaskUpdatedAt.get(sc.taskId);
+      if (clientUpdated) {
+        const clientTs = new Date(clientUpdated).getTime();
+        if (!Number.isNaN(clientTs) && sc.completedAt.getTime() > clientTs) {
+          continue; // keep foreign/newer completion
+        }
+      }
+      toDelete.push(sc.id);
+    }
+    if (toDelete.length > 0) {
+      await prisma.taskCompletion.deleteMany({
+        where: { userId, id: { in: toDelete } },
+      });
+    }
   }
 
   let allTasks = await prisma.task.findMany({

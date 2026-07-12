@@ -190,7 +190,11 @@ export async function initNotificationScheduler(): Promise<void> {
 
   for (const notif of pending) {
     const scheduledAt = new Date(notif.scheduledAt);
-    if (scheduledAt <= now) continue;
+    if (scheduledAt <= now) {
+      // Drop overdue pending rows so they don't accumulate forever
+      await markNotificationFired(notif.id);
+      continue;
+    }
 
     const task = await getTask(notif.taskId);
     if (!task) {

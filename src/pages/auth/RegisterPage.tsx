@@ -24,7 +24,10 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [pendingDesktopAuth, setPendingDesktopAuth] = useState<{
+    requestId: string;
+    pollSecret: string;
+  } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,9 +60,9 @@ export default function RegisterPage() {
     setError("");
     if (isTauri()) {
       try {
-        const { authUrl, requestId } = await startDesktopGoogleLogin();
+        const { authUrl, requestId, pollSecret } = await startDesktopGoogleLogin();
         await openLink(authUrl, { openInNewTab: true });
-        setPendingRequestId(requestId);
+        setPendingDesktopAuth({ requestId, pollSecret });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not start Google sign-up.");
       }
@@ -70,12 +73,14 @@ export default function RegisterPage() {
 
   // Desktop: poll backend for code after user signs up with Google in browser
   useEffect(() => {
-    if (!isTauri() || !pendingRequestId) return;
+    if (!isTauri() || !pendingDesktopAuth) return;
     let cancelled = false;
     (async () => {
-      const code = await pollDesktopPending(pendingRequestId);
+      const code = await pollDesktopPending(pendingDesktopAuth.requestId, {
+        pollSecret: pendingDesktopAuth.pollSecret,
+      });
       if (cancelled) return;
-      setPendingRequestId(null);
+      setPendingDesktopAuth(null);
       if (code) {
         const ok = await completeDesktopAuthWithCode(code, setAuthData);
         if (ok) navigate("/todo");
@@ -87,7 +92,7 @@ export default function RegisterPage() {
     return () => {
       cancelled = true;
     };
-  }, [pendingRequestId, setAuthData, navigate]);
+  }, [pendingDesktopAuth, setAuthData, navigate]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -218,11 +223,11 @@ export default function RegisterPage() {
           <motion.button
             type="button"
             onClick={handleGoogle}
-            disabled={isLoading || !!pendingRequestId}
+            disabled={isLoading || !!pendingDesktopAuth}
             whileTap={{ scale: 0.98 }}
             className="w-full h-11 rounded-xl border border-border bg-accent/20 hover:bg-accent/40 text-foreground font-medium text-sm flex items-center justify-center gap-3 transition-all"
           >
-            {pendingRequestId ? (
+            {pendingDesktopAuth ? (
               <span className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
                 Sign up with Google in the browser

@@ -4,6 +4,7 @@ import { requireAuth } from "../middleware/auth.js";
 import { uploadAvatarFromDataUrl, deleteAvatarByUrl } from "../services/r2Service.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
 import { config } from "../config.js";
+import { cancelActiveSubscriptionsForUser } from "./paddle.js";
 
 const router = Router();
 
@@ -90,6 +91,11 @@ router.patch("/:userId", requireAuth, async (req, res) => {
 router.delete("/:userId", requireAuth, async (req, res) => {
   if (req.params.userId !== req.user.id) {
     return res.status(403).json({ error: "Forbidden" });
+  }
+  // Stop billing before wiping the account
+  await cancelActiveSubscriptionsForUser(req.user.id);
+  if (req.user.avatarUrl) {
+    await deleteAvatarByUrl(req.user.avatarUrl);
   }
   await prisma.user.delete({ where: { id: req.user.id } });
   res.status(204).end();

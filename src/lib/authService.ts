@@ -83,8 +83,12 @@ export function loginWithGoogleRedirect(): void {
   window.location.href = getGoogleAuthUrl();
 }
 
-/** Desktop only: get auth URL from backend (includes requestId in state). App opens this URL in browser then polls desktop-pending. */
-export async function startDesktopGoogleLogin(): Promise<{ authUrl: string; requestId: string }> {
+/** Desktop only: get auth URL from backend (includes requestId + pollSecret). App opens this URL in browser then polls desktop-pending. */
+export async function startDesktopGoogleLogin(): Promise<{
+  authUrl: string;
+  requestId: string;
+  pollSecret: string;
+}> {
   const res = await fetch(`${API_BASE}/api/auth/desktop-login-start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -101,17 +105,26 @@ export async function startDesktopGoogleLogin(): Promise<{ authUrl: string; requ
 /** Desktop only: poll backend for one-time code (after user completed Google sign-in in browser). Returns code or null on timeout. */
 export async function pollDesktopPending(
   requestId: string,
-  options: { intervalMs?: number; timeoutMs?: number } = {}
+  options: { intervalMs?: number; timeoutMs?: number; pollSecret?: string } = {}
 ): Promise<string | null> {
-  const { intervalMs = 2000, timeoutMs = 5 * 60 * 1000 } = options;
+  const { intervalMs = 2000, timeoutMs = 5 * 60 * 1000, pollSecret } = options;
+  if (!pollSecret) {
+    throw new Error("pollSecret is required");
+  }
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const res = await fetch(`${API_BASE}/api/auth/desktop-pending?requestId=${encodeURIComponent(requestId)}`, {
+    const url =
+      `${API_BASE}/api/auth/desktop-pending?requestId=${encodeURIComponent(requestId)}` +
+      `&pollSecret=${encodeURIComponent(pollSecret)}`;
+    const res = await fetch(url, {
       signal: AbortSignal.timeout(intervalMs + 1000),
     });
     if (res.status === 200) {
       const data = await res.json();
       if (data?.code) return data.code;
+    }
+    if (res.status === 401) {
+      return null;
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }
