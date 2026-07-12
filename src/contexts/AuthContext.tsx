@@ -130,12 +130,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!session || session.accessToken.startsWith("local_")) return;
 
     async function refetchProfile() {
-      const current = sessionRef.current;
-      if (!current?.accessToken || current.accessToken.startsWith("local_")) return;
       try {
+        const fresh = await ensureFreshSession();
+        if (!fresh?.accessToken || fresh.accessToken.startsWith("local_")) return;
         const res = await fetch(`${getApiBase()}/api/users/me`, {
-          headers: { Authorization: `Bearer ${current.accessToken}` },
+          headers: { Authorization: `Bearer ${fresh.accessToken}` },
         });
+        if (res.status === 401) {
+          const refreshed = await refreshSession();
+          if (!refreshed) return;
+          applySession(refreshed.user, refreshed.session);
+          const retry = await fetch(`${getApiBase()}/api/users/me`, {
+            headers: { Authorization: `Bearer ${refreshed.session.accessToken}` },
+          });
+          if (!retry.ok) return;
+          const userData = await retry.json();
+          const updatedUser: User = {
+            id: userData.id,
+            name: userData.name,
+            email: userData.email,
+            avatarUrl: userData.avatarUrl,
+            plan: userData.plan,
+            planExpiresAt: userData.planExpiresAt,
+            emailVerifiedAt: userData.emailVerifiedAt,
+            subscribedToReminders: userData.subscribedToReminders ?? true,
+            hasPassword: userData.hasPassword,
+            createdAt: userData.createdAt,
+          };
+          await saveUser(updatedUser);
+          setUser(updatedUser);
+          return;
+        }
         if (!res.ok) return;
         const userData = await res.json();
         const updatedUser: User = {
@@ -169,7 +194,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [session]);
+  }, [session, ensureFreshSession, applySession]);
 
   const setAuthData = useCallback(
     (newUser: User, newSession: AuthSession) => {

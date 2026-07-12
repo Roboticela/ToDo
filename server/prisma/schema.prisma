@@ -42,14 +42,36 @@ model User {
 }
 
 model Session {
-  id           String   @id @default(uuid())
-  userId       String
-  accessToken  String
-  refreshToken String
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  id                        String    @id @default(uuid())
+  userId                    String
+  accessToken               String
+  refreshToken              String
+  /** Prior refresh token kept briefly so concurrent tab refreshes don't log each other out. */
+  previousRefreshToken      String?
+  previousRefreshValidUntil DateTime?
+  expiresAt                 DateTime
+  createdAt                 DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+/** One-time OAuth exchange codes (web + desktop). Persisted so multi-instance / restarts work. */
+model DesktopAuthCode {
+  code         String   @id
+  accessToken  String
+  refreshToken String
+  userId       String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+/** Desktop Google login poll slots (requestId + pollSecret → one-time code). */
+model DesktopPendingAuth {
+  requestId  String   @id
+  pollSecret String
+  code       String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
 }
 
 model PasswordResetToken {

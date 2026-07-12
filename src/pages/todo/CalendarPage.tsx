@@ -27,6 +27,7 @@ import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
 import { getTasksForDate, getTaskCompletionForDate } from "../../lib/taskService";
+import { clampDateToHistory, getHistoryCutoff } from "../../lib/planLimits";
 import TaskForm from "../../components/todo/TaskForm";
 import TaskCard from "../../components/todo/TaskCard";
 import type { Task } from "../../types/todo";
@@ -69,12 +70,14 @@ export default function CalendarPage() {
     if (!user) return;
     async function loadMonthIndicators() {
       const map = new Map<string, DayInfo>();
+      const cutoff = getHistoryCutoff(user!.plan, user!.planExpiresAt);
       const batchDays = days.slice(0, 42);
       await Promise.all(
         batchDays
           .filter((d) => isSameMonth(d, currentMonth))
           .map(async (d) => {
             const dateStr = format(d, "yyyy-MM-dd");
+            if (cutoff && dateStr < cutoff) return;
             const tasks = await getTasksForDate(user!.id, dateStr);
             if (tasks.length > 0) {
               let completedCount = 0;
@@ -109,13 +112,14 @@ export default function CalendarPage() {
   const loadDayTasks = useCallback(
     async (dateStr: string) => {
       if (!user) return;
+      const { date: clamped } = clampDateToHistory(dateStr, user.plan, user.planExpiresAt);
       setLoadingDay(true);
       try {
-        const tasks = await getTasksForDate(user.id, dateStr);
+        const tasks = await getTasksForDate(user.id, clamped);
         setDayTasks(tasks);
         let done = 0;
         for (const t of tasks) {
-          const { isCompleted } = await getTaskCompletionForDate(t, dateStr);
+          const { isCompleted } = await getTaskCompletionForDate(t, clamped);
           if (isCompleted) done++;
         }
         setCompletedCount(done);
@@ -144,7 +148,8 @@ export default function CalendarPage() {
   }, [selectedDay, loadDayTasks]);
 
   function handleDayClick(date: Date) {
-    const dateStr = format(date, "yyyy-MM-dd");
+    const raw = format(date, "yyyy-MM-dd");
+    const { date: dateStr } = clampDateToHistory(raw, user?.plan, user?.planExpiresAt);
     setSelectedDay(dateStr);
     setSelectedDate(dateStr);
     loadDayTasks(dateStr);

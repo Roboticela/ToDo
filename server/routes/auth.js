@@ -18,39 +18,38 @@ import { getEffectivePlan } from "../lib/planUtils.js";
 
 const router = Router();
 
-// One-time codes for desktop OAuth: app gets code by polling (no tokens in browser URL)
+// One-time codes for desktop/web OAuth (persisted so restarts / multi-instance work)
 const DESKTOP_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const desktopAuthCodes = new Map(); // code -> { accessToken, refreshToken, userId, expiresAt }
-const desktopPendingAuth = new Map(); // requestId -> { code?, pollSecret, expiresAt }
+const REFRESH_GRACE_MS = 30 * 1000; // concurrent tab refresh window
 
-function sweepDesktopAuthMaps() {
-  const now = Date.now();
-  for (const [code, entry] of desktopAuthCodes) {
-    if (!entry?.expiresAt || now > entry.expiresAt) desktopAuthCodes.delete(code);
-  }
-  for (const [requestId, entry] of desktopPendingAuth) {
-    if (!entry?.expiresAt || now > entry.expiresAt) desktopPendingAuth.delete(requestId);
-  }
+async function sweepDesktopAuth() {
+  const now = new Date();
+  await prisma.desktopAuthCode.deleteMany({ where: { expiresAt: { lt: now } } });
+  await prisma.desktopPendingAuth.deleteMany({ where: { expiresAt: { lt: now } } });
 }
 
-function createDesktopAuthCode(accessToken, refreshToken, userId) {
-  sweepDesktopAuthMaps();
+async function createDesktopAuthCode(accessToken, refreshToken, userId) {
+  await sweepDesktopAuth();
   const code = crypto.randomBytes(24).toString("hex");
-  desktopAuthCodes.set(code, {
-    accessToken,
-    refreshToken,
-    userId,
-    expiresAt: Date.now() + DESKTOP_CODE_TTL_MS,
+  await prisma.desktopAuthCode.create({
+    data: {
+      code,
+      accessToken,
+      refreshToken,
+      userId,
+      expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
+    },
   });
   return code;
 }
 
-function consumeDesktopAuthCode(code) {
-  sweepDesktopAuthMaps();
+async function consumeDesktopAuthCode(code) {
   if (!code || typeof code !== "string") return null;
-  const entry = desktopAuthCodes.get(code);
-  desktopAuthCodes.delete(code);
-  if (!entry || Date.now() > entry.expiresAt) return null;
+  await sweepDesktopAuth();
+  const entry = await prisma.desktopAuthCode.findUnique({ where: { code } });
+  if (!entry) return null;
+  await prisma.desktopAuthCode.delete({ where: { code } }).catch(() => {});
+  if (new Date() > entry.expiresAt) return null;
   return entry;
 }
 
@@ -195,11 +194,22 @@ router.post("/refresh", async (req, res) => {
     }
 
     const payload = verifyRefreshToken(token);
-    // Must match a stored session so logout/revoke invalidates refresh
+    const now = new Date();
+    // Must match a stored session so logout/revoke invalidates refresh.
+    // Also accept the previous token briefly so concurrent tabs don't race.
     const stored = await prisma.session.findFirst({
-      where: { userId: payload.userId, refreshToken: token },
+      where: {
+        userId: payload.userId,
+        OR: [
+          { refreshToken: token },
+          {
+            previousRefreshToken: token,
+            previousRefreshValidUntil: { gt: now },
+          },
+        ],
+      },
     });
-    if (!stored || new Date() > stored.expiresAt) {
+    if (!stored || now > stored.expiresAt) {
       return res.status(401).json({ error: "Invalid or expired refresh token" });
     }
 
@@ -208,12 +218,19 @@ router.post("/refresh", async (req, res) => {
       return res.status(401).json({ error: "User not found" });
     }
 
+    // Second tab hit the grace window — return the already-rotated tokens
+    if (stored.previousRefreshToken === token && stored.refreshToken !== token) {
+      return res.json(toSessionResponse(user, stored.accessToken, stored.refreshToken));
+    }
+
     const accessToken = signAccessToken({ userId: user.id });
     const newRefreshToken = signRefreshToken({ userId: user.id });
     await prisma.session.update({
       where: { id: stored.id },
       data: {
         accessToken,
+        previousRefreshToken: stored.refreshToken,
+        previousRefreshValidUntil: new Date(Date.now() + REFRESH_GRACE_MS),
         refreshToken: newRefreshToken,
         expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.refreshExpiry) * 1000),
       },
@@ -492,16 +509,19 @@ router.get("/google", (req, res) => {
 
 // ─── Desktop: app gets auth URL from backend, then polls for code (no deep link / paste) ───
 
-router.post("/desktop-login-start", (req, res) => {
+router.post("/desktop-login-start", async (req, res) => {
   if (!googleClient) {
     return res.status(503).json({ error: "Google sign-in is not configured" });
   }
   const requestId = uuidv4();
   const pollSecret = uuidv4();
-  sweepDesktopAuthMaps();
-  desktopPendingAuth.set(requestId, {
-    pollSecret,
-    expiresAt: Date.now() + DESKTOP_CODE_TTL_MS,
+  await sweepDesktopAuth();
+  await prisma.desktopPendingAuth.create({
+    data: {
+      requestId,
+      pollSecret,
+      expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
+    },
   });
   const state = Buffer.from(JSON.stringify({ client: "desktop", requestId })).toString("base64url");
   const scope = "openid email profile";
@@ -515,26 +535,26 @@ router.post("/desktop-login-start", (req, res) => {
   res.json({ authUrl, requestId, pollSecret });
 });
 
-router.get("/desktop-pending", (req, res) => {
-  sweepDesktopAuthMaps();
+router.get("/desktop-pending", async (req, res) => {
+  await sweepDesktopAuth();
   const requestId = req.query.requestId;
-  const pollSecret = req.query.pollSecret || req.headers["x-poll-secret"];
+  const pollSecret = req.headers["x-poll-secret"];
   if (!requestId || !pollSecret) {
     return res.status(400).json({ error: "Missing requestId or pollSecret" });
   }
-  const entry = desktopPendingAuth.get(requestId);
+  const entry = await prisma.desktopPendingAuth.findUnique({ where: { requestId: String(requestId) } });
   if (!entry || entry.pollSecret !== pollSecret) {
     return res.status(401).json({ error: "Invalid poll credentials" });
   }
-  if (entry.expiresAt && Date.now() > entry.expiresAt) {
-    desktopPendingAuth.delete(requestId);
+  if (new Date() > entry.expiresAt) {
+    await prisma.desktopPendingAuth.delete({ where: { requestId: entry.requestId } }).catch(() => {});
     return res.status(401).json({ error: "Sign-in expired" });
   }
   // Do not delete the slot until a code is ready (preserves pollSecret across empty polls)
   if (!entry.code) {
     return res.status(204).send();
   }
-  desktopPendingAuth.delete(requestId);
+  await prisma.desktopPendingAuth.delete({ where: { requestId: entry.requestId } }).catch(() => {});
   res.json({ code: entry.code });
 });
 
@@ -642,17 +662,24 @@ router.get("/google/callback", async (req, res) => {
     });
 
     // One-time code for both web and desktop — never put tokens in the browser URL
-    const authCode = createDesktopAuthCode(accessToken, refreshToken, user.id);
+    const authCode = await createDesktopAuthCode(accessToken, refreshToken, user.id);
 
     if (client === "desktop") {
-      if (requestId) {
-        const prev = desktopPendingAuth.get(requestId) || {};
-        desktopPendingAuth.set(requestId, {
-          ...prev,
-          code: authCode,
-          expiresAt: Date.now() + DESKTOP_CODE_TTL_MS,
-        });
+      if (!requestId) {
+        // Desktop without requestId cannot be polled — force the start+poll flow
+        return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
       }
+      const pending = await prisma.desktopPendingAuth.findUnique({ where: { requestId } });
+      if (!pending) {
+        return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
+      }
+      await prisma.desktopPendingAuth.update({
+        where: { requestId },
+        data: {
+          code: authCode,
+          expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
+        },
+      });
       return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
     }
 
@@ -668,7 +695,7 @@ router.get("/google/callback", async (req, res) => {
 
 router.post("/desktop-exchange", async (req, res) => {
   const { code } = req.body || {};
-  const entry = consumeDesktopAuthCode(code);
+  const entry = await consumeDesktopAuthCode(code);
   if (!entry) {
     return res.status(401).json({ error: "Invalid or expired code. Please sign in with Google again." });
   }

@@ -13,7 +13,7 @@ import {
   getTasksForDate,
   getTodayString,
 } from "../lib/taskService";
-import { assertCanCreateTask, assertCanEnableRepeating, assertCanMoveTaskToDate, clampDateToHistory } from "../lib/planLimits";
+import { assertCanCreateTask, assertCanEnableRepeating, assertCanMoveTaskToDate, assertCanExpandRepeatDays, clampDateToHistory } from "../lib/planLimits";
 import { useAuth } from "./AuthContext";
 import { useSync } from "./SyncContext";
 
@@ -107,6 +107,23 @@ export function TaskProvider({ children }: { children: ReactNode }) {
           task.date,
           data.date,
           willRepeat,
+          user.planExpiresAt
+        );
+      }
+      if (willRepeat) {
+        const nextDays = data.repeatDays ?? task.repeatDays ?? [];
+        const nextDate = data.date ?? task.date;
+        const nextEnd =
+          data.endDate !== undefined ? data.endDate : task.endDate;
+        await assertCanExpandRepeatDays(
+          user.id,
+          user.plan,
+          task.id,
+          nextDate,
+          nextEnd,
+          nextDays,
+          task.isRepeating,
+          task.repeatDays ?? [],
           user.planExpiresAt
         );
       }

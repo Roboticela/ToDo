@@ -68,15 +68,26 @@ async function doSync(userId: string): Promise<SyncResult> {
     })),
   };
 
-  const res = await fetch(`${getApiBase()}/api/tasks/sync`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${session.accessToken}`,
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(15000),
-  });
+  async function postSync(accessToken: string) {
+    return fetch(`${getApiBase()}/api/tasks/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+  }
+
+  let res = await postSync(session.accessToken);
+
+  if (res.status === 401 && !session.accessToken.startsWith("local_")) {
+    const refreshed = await refreshSession();
+    if (!refreshed) return { ok: false, reason: "no_session" };
+    session = refreshed.session;
+    res = await postSync(session.accessToken);
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

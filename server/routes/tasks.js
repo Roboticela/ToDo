@@ -1,10 +1,14 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
-import { getEffectivePlan, getPlanLimits } from "../lib/planUtils.js";
+import {
+  getEffectivePlan,
+  getPlanLimits,
+  getHistoryMinDateStr,
+  isTaskInHistoryWindow,
+} from "../lib/planUtils.js";
 
 const router = Router();
-const PLAN_VALUES = ["free", "basic", "pro"];
 
 function taskToJson(t) {
   return {
@@ -43,29 +47,94 @@ function completionToJson(c) {
   };
 }
 
+/** Next YYYY-MM-DD on/after fromDate that falls on dayOfWeek (0=Sun). */
+function nextDateOnWeekday(fromDateStr, dayOfWeek) {
+  const d = new Date(fromDateStr + "T12:00:00");
+  const delta = (dayOfWeek - d.getDay() + 7) % 7;
+  d.setDate(d.getDate() + delta);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+async function countTasksOnDate(userId, dateStr, excludeId) {
+  const dayOfWeek = new Date(dateStr + "T12:00:00").getDay();
+  const exclude = excludeId ? { id: { not: excludeId } } : {};
+  const oneTimeCount = await prisma.task.count({
+    where: {
+      userId,
+      deletedAt: null,
+      date: dateStr,
+      isRepeating: false,
+      ...exclude,
+    },
+  });
+  const repeatingOnDay = await prisma.task.count({
+    where: {
+      userId,
+      deletedAt: null,
+      isRepeating: true,
+      date: { lte: dateStr },
+      OR: [{ endDate: null }, { endDate: { gte: dateStr } }],
+      repeatDays: { has: dayOfWeek },
+      ...exclude,
+    },
+  });
+  return oneTimeCount + repeatingOnDay;
+}
+
+/** Reject when expanding repeatDays onto weekdays that are already at the daily cap. */
+async function wouldExceedDailyCapForRepeatDays(
+  userId,
+  excludeId,
+  repeatDays,
+  startDate,
+  endDate,
+  maxDailyTasks
+) {
+  if (maxDailyTasks == null || !Array.isArray(repeatDays) || repeatDays.length === 0) {
+    return false;
+  }
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const fromStr = startDate && startDate > todayStr ? startDate : todayStr;
+
+  for (const dow of repeatDays) {
+    if (typeof dow !== "number") continue;
+    const sample = nextDateOnWeekday(fromStr, dow);
+    if (endDate && sample > endDate) continue;
+    const count = await countTasksOnDate(userId, sample, excludeId);
+    if (count >= maxDailyTasks) return true;
+  }
+  return false;
+}
+
+function historyWhereClause(minDateStr, dateQuery) {
+  if (dateQuery) {
+    if (minDateStr && dateQuery < minDateStr) return { __empty: true };
+    return { date: dateQuery };
+  }
+  if (!minDateStr) return {};
+  // Keep active repeating templates even when their start date is older than the window
+  return {
+    OR: [{ isRepeating: true }, { date: { gte: minDateStr } }],
+  };
+}
+
 // List tasks for user (optionally by date). Enforce plan history window.
 router.get("/", requireAuth, async (req, res) => {
   const { date } = req.query;
-  const where = { userId: req.user.id, deletedAt: null };
-  if (date && typeof date === "string") where.date = date;
+  const dateQuery = typeof date === "string" ? date : null;
   const effective = getEffectivePlan(req.user);
   const limits = getPlanLimits(effective.plan);
-  if (limits.historyDays != null) {
-    const minDate = new Date();
-    minDate.setHours(0, 0, 0, 0);
-    minDate.setDate(minDate.getDate() - (limits.historyDays - 1));
-    const y = minDate.getFullYear();
-    const m = String(minDate.getMonth() + 1).padStart(2, "0");
-    const d = String(minDate.getDate()).padStart(2, "0");
-    const minDateStr = `${y}-${m}-${d}`;
-    if (where.date) {
-      if (where.date < minDateStr) return res.json([]);
-    } else {
-      where.date = { gte: minDateStr };
-    }
-  }
+  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  const historyPart = historyWhereClause(minDateStr, dateQuery);
+  if (historyPart.__empty) return res.json([]);
+
   const tasks = await prisma.task.findMany({
-    where,
+    where: { userId: req.user.id, deletedAt: null, ...historyPart },
     orderBy: [{ date: "asc" }, { time: "asc" }],
   });
   res.json(tasks.map(taskToJson));
@@ -77,10 +146,16 @@ router.get("/:id", requireAuth, async (req, res) => {
     where: { id: req.params.id, userId: req.user.id },
   });
   if (!task) return res.status(404).json({ error: "Task not found" });
+  const effective = getEffectivePlan(req.user);
+  const limits = getPlanLimits(effective.plan);
+  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  if (!isTaskInHistoryWindow(task, minDateStr)) {
+    return res.status(404).json({ error: "Task not found" });
+  }
   res.json(taskToJson(task));
 });
 
-// Create task. Enforce plan limits (repeat tasks, daily tasks).
+// Create task. Enforce plan limits (repeat tasks, daily tasks, history).
 router.post("/", requireAuth, async (req, res) => {
   const body = req.body;
   if (!body.id || !body.title || !body.type || !body.category || !body.date) {
@@ -89,8 +164,18 @@ router.post("/", requireAuth, async (req, res) => {
   const effective = getEffectivePlan(req.user);
   const limits = getPlanLimits(effective.plan);
   const userId = req.user.id;
+  const willBeRepeating = Boolean(body.isRepeating);
+  const minDateStr = getHistoryMinDateStr(limits.historyDays);
 
-  if (Boolean(body.isRepeating) && limits.maxRepeatTasks != null) {
+  if (!willBeRepeating && minDateStr && body.date < minDateStr) {
+    return res.status(403).json({
+      error: "Date outside plan history window",
+      code: "HISTORY_LIMIT",
+      limit: limits.historyDays,
+    });
+  }
+
+  if (willBeRepeating && limits.maxRepeatTasks != null) {
     const repeatCount = await prisma.task.count({
       where: { userId, deletedAt: null, isRepeating: true },
     });
@@ -103,26 +188,33 @@ router.post("/", requireAuth, async (req, res) => {
     }
   }
   if (limits.maxDailyTasks != null) {
-    const dayOfWeek = new Date(body.date + "T12:00:00").getDay();
-    const oneTimeCount = await prisma.task.count({
-      where: { userId, deletedAt: null, date: body.date, isRepeating: false },
-    });
-    const repeatingOnDay = await prisma.task.count({
-      where: {
-        userId,
-        deletedAt: null,
-        isRepeating: true,
-        date: { lte: body.date },
-        OR: [{ endDate: null }, { endDate: { gte: body.date } }],
-        repeatDays: { has: dayOfWeek },
-      },
-    });
-    if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
-      return res.status(403).json({
-        error: "Plan limit reached",
-        code: "MAX_DAILY_TASKS",
-        limit: limits.maxDailyTasks,
-      });
+    if (!willBeRepeating) {
+      const count = await countTasksOnDate(userId, body.date, null);
+      if (count >= limits.maxDailyTasks) {
+        return res.status(403).json({
+          error: "Plan limit reached",
+          code: "MAX_DAILY_TASKS",
+          limit: limits.maxDailyTasks,
+        });
+      }
+    } else {
+      const days = Array.isArray(body.repeatDays) ? body.repeatDays : [];
+      if (
+        await wouldExceedDailyCapForRepeatDays(
+          userId,
+          null,
+          days,
+          body.date,
+          body.endDate ?? null,
+          limits.maxDailyTasks
+        )
+      ) {
+        return res.status(403).json({
+          error: "Plan limit reached",
+          code: "MAX_DAILY_TASKS",
+          limit: limits.maxDailyTasks,
+        });
+      }
     }
   }
 
@@ -139,7 +231,7 @@ router.post("/", requireAuth, async (req, res) => {
       time: body.time ?? null,
       startTime: body.startTime ?? null,
       endTime: body.endTime ?? null,
-      isRepeating: Boolean(body.isRepeating),
+      isRepeating: willBeRepeating,
       repeatDays: Array.isArray(body.repeatDays) ? body.repeatDays : [],
       endDate: body.endDate ?? null,
       status: body.status || "pending",
@@ -178,6 +270,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
     data.isRepeating === true && !existing.isRepeating;
   const effective = getEffectivePlan(req.user);
   const limits = getPlanLimits(effective.plan);
+  const softDeleting = data.deletedAt != null;
   if (enablingRepeat) {
     if (limits.maxRepeatTasks != null) {
       const repeatCount = await prisma.task.count({
@@ -196,30 +289,56 @@ router.patch("/:id", requireAuth, async (req, res) => {
   const nextDate = data.date !== undefined ? data.date : existing.date;
   const nextRepeating =
     data.isRepeating !== undefined ? Boolean(data.isRepeating) : existing.isRepeating;
+  const nextRepeatDays =
+    data.repeatDays !== undefined
+      ? Array.isArray(data.repeatDays)
+        ? data.repeatDays
+        : []
+      : existing.repeatDays || [];
+  const nextEndDate =
+    data.endDate !== undefined ? data.endDate : existing.endDate;
   const dateChanged = data.date !== undefined && data.date !== existing.date;
+  const repeatDaysChanged =
+    data.repeatDays !== undefined &&
+    JSON.stringify([...(data.repeatDays || [])].sort()) !==
+      JSON.stringify([...(existing.repeatDays || [])].sort());
+  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+
+  // Block moving a non-repeating task outside the history window (soft-delete still allowed)
+  if (!softDeleting && !nextRepeating && minDateStr && nextDate < minDateStr && dateChanged) {
+    return res.status(403).json({
+      error: "Date outside plan history window",
+      code: "HISTORY_LIMIT",
+      limit: limits.historyDays,
+    });
+  }
+
   if (limits.maxDailyTasks != null && !nextRepeating && dateChanged) {
-    const dayOfWeek = new Date(nextDate + "T12:00:00").getDay();
-    const oneTimeCount = await prisma.task.count({
-      where: {
-        userId: req.user.id,
-        deletedAt: null,
-        date: nextDate,
-        isRepeating: false,
-        id: { not: existing.id },
-      },
-    });
-    const repeatingOnDay = await prisma.task.count({
-      where: {
-        userId: req.user.id,
-        deletedAt: null,
-        isRepeating: true,
-        date: { lte: nextDate },
-        OR: [{ endDate: null }, { endDate: { gte: nextDate } }],
-        repeatDays: { has: dayOfWeek },
-        id: { not: existing.id },
-      },
-    });
-    if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
+    const count = await countTasksOnDate(req.user.id, nextDate, existing.id);
+    if (count >= limits.maxDailyTasks) {
+      return res.status(403).json({
+        error: "Plan limit reached",
+        code: "MAX_DAILY_TASKS",
+        limit: limits.maxDailyTasks,
+      });
+    }
+  }
+
+  if (
+    limits.maxDailyTasks != null &&
+    nextRepeating &&
+    (enablingRepeat || repeatDaysChanged || dateChanged)
+  ) {
+    if (
+      await wouldExceedDailyCapForRepeatDays(
+        req.user.id,
+        existing.id,
+        nextRepeatDays,
+        nextDate,
+        nextEndDate,
+        limits.maxDailyTasks
+      )
+    ) {
       return res.status(403).json({
         error: "Plan limit reached",
         code: "MAX_DAILY_TASKS",
@@ -351,6 +470,24 @@ router.post("/sync", requireAuth, async (req, res) => {
     const isNew = !existing;
     const enablingRepeat = willBeRepeating && (!existing || !existing.isRepeating);
     const dateChanged = existing && t.date && t.date !== existing.date;
+    const isSoftDelete = Boolean(t.deletedAt);
+    const clientRepeatDays = Array.isArray(t.repeatDays) ? t.repeatDays : [];
+    const repeatDaysChanged =
+      existing &&
+      JSON.stringify([...clientRepeatDays].sort()) !==
+        JSON.stringify([...(existing.repeatDays || [])].sort());
+    const minDateStr = getHistoryMinDateStr(limits.historyDays);
+
+    if (
+      !isSoftDelete &&
+      !willBeRepeating &&
+      minDateStr &&
+      t.date < minDateStr &&
+      (isNew || dateChanged)
+    ) {
+      rejectedTaskIds.push(t.id);
+      continue;
+    }
 
     if ((isNew && willBeRepeating) || enablingRepeat) {
       if (limits.maxRepeatTasks != null) {
@@ -367,28 +504,29 @@ router.post("/sync", requireAuth, async (req, res) => {
     }
 
     if (limits.maxDailyTasks != null && !willBeRepeating && (isNew || dateChanged)) {
-      const dayOfWeek = new Date(t.date + "T12:00:00").getDay();
-      const oneTimeCount = await prisma.task.count({
-        where: {
+      const count = await countTasksOnDate(userId, t.date, existing?.id ?? null);
+      if (count >= limits.maxDailyTasks) {
+        rejectedTaskIds.push(t.id);
+        continue;
+      }
+    }
+
+    if (
+      limits.maxDailyTasks != null &&
+      willBeRepeating &&
+      !isSoftDelete &&
+      (isNew || enablingRepeat || dateChanged || repeatDaysChanged)
+    ) {
+      if (
+        await wouldExceedDailyCapForRepeatDays(
           userId,
-          deletedAt: null,
-          date: t.date,
-          isRepeating: false,
-          ...(existing ? { id: { not: existing.id } } : {}),
-        },
-      });
-      const repeatingOnDay = await prisma.task.count({
-        where: {
-          userId,
-          deletedAt: null,
-          isRepeating: true,
-          date: { lte: t.date },
-          OR: [{ endDate: null }, { endDate: { gte: t.date } }],
-          repeatDays: { has: dayOfWeek },
-          ...(existing ? { id: { not: existing.id } } : {}),
-        },
-      });
-      if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
+          existing?.id ?? null,
+          clientRepeatDays,
+          t.date,
+          t.endDate ?? null,
+          limits.maxDailyTasks
+        )
+      ) {
         rejectedTaskIds.push(t.id);
         continue;
       }
@@ -584,15 +722,9 @@ router.post("/sync", requireAuth, async (req, res) => {
   });
 
   // Clamp history for free/basic plans in the sync response (and thus local store)
-  if (limits.historyDays != null) {
-    const minDate = new Date();
-    minDate.setHours(0, 0, 0, 0);
-    minDate.setDate(minDate.getDate() - (limits.historyDays - 1));
-    const y = minDate.getFullYear();
-    const m = String(minDate.getMonth() + 1).padStart(2, "0");
-    const d = String(minDate.getDate()).padStart(2, "0");
-    const minDateStr = `${y}-${m}-${d}`;
-    allTasks = allTasks.filter((t) => t.isRepeating || t.date >= minDateStr);
+  const minDateStr = getHistoryMinDateStr(limits.historyDays);
+  if (minDateStr) {
+    allTasks = allTasks.filter((t) => isTaskInHistoryWindow(t, minDateStr));
     const keptIds = new Set(allTasks.map((t) => t.id));
     allCompletions = allCompletions.filter(
       (c) => c.date >= minDateStr && keptIds.has(c.taskId)

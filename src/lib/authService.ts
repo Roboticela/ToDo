@@ -1,6 +1,5 @@
 import type { User, AuthSession } from "../types/todo";
 import { saveUser, getUser, saveSession, getAnySession, deleteSession } from "./db";
-import { isTauri } from "./tauri";
 import { getApiBase } from "./apiBase";
 
 const API_BASE = getApiBase();
@@ -102,7 +101,8 @@ export async function login(
 // Native (Tauri): app gets auth URL from backend, opens browser, polls backend for code, then exchanges code for tokens.
 
 export function getGoogleAuthUrl(): string {
-  return `${getApiBase()}/api/auth/google?client=${isTauri() ? "desktop" : "web"}`;
+  // Always web. Desktop must use startDesktopGoogleLogin (needs requestId + pollSecret).
+  return `${getApiBase()}/api/auth/google?client=web`;
 }
 
 /** Starts Google OAuth. For web: redirects. For native: use startDesktopGoogleLogin + poll instead. */
@@ -140,10 +140,9 @@ export async function pollDesktopPending(
   }
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const url =
-      `${API_BASE}/api/auth/desktop-pending?requestId=${encodeURIComponent(requestId)}` +
-      `&pollSecret=${encodeURIComponent(pollSecret)}`;
+    const url = `${API_BASE}/api/auth/desktop-pending?requestId=${encodeURIComponent(requestId)}`;
     const res = await fetch(url, {
+      headers: { "x-poll-secret": pollSecret },
       signal: AbortSignal.timeout(intervalMs + 1000),
     });
     if (res.status === 200) {

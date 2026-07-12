@@ -131,6 +131,49 @@ export async function assertCanMoveTaskToDate(
   }
 }
 
+/** When expanding a repeating task onto additional weekdays that may already be full. */
+export async function assertCanExpandRepeatDays(
+  userId: string,
+  plan: string | undefined,
+  taskId: string,
+  startDate: string,
+  endDate: string | null | undefined,
+  nextRepeatDays: number[],
+  previouslyRepeating: boolean,
+  previousRepeatDays: number[],
+  planExpiresAt?: string | null
+): Promise<void> {
+  const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
+  if (features.maxDailyTasks == null) return;
+  if (!nextRepeatDays.length) return;
+
+  const prevSet = new Set(previouslyRepeating ? previousRepeatDays : []);
+  const added = nextRepeatDays.filter((d) => !prevSet.has(d));
+  // New repeating task: check all days. Existing: only newly added weekdays.
+  const daysToCheck = previouslyRepeating ? added : nextRepeatDays;
+  if (daysToCheck.length === 0) return;
+
+  const today = getTodayString();
+  const from = startDate > today ? startDate : today;
+
+  for (const dow of daysToCheck) {
+    const sample = new Date(from + "T12:00:00");
+    const delta = (dow - sample.getDay() + 7) % 7;
+    sample.setDate(sample.getDate() + delta);
+    const sampleStr = format(sample, "yyyy-MM-dd");
+    if (endDate && sampleStr > endDate) continue;
+    const existing = await getTasksForDate(userId, sampleStr);
+    const others = existing.filter((t) => t.id !== taskId);
+    if (others.length >= features.maxDailyTasks) {
+      throw new PlanLimitError(
+        "MAX_DAILY_TASKS",
+        features.maxDailyTasks,
+        `Your plan allows up to ${features.maxDailyTasks} tasks on a day. Upgrade to add more.`
+      );
+    }
+  }
+}
+
 export async function countVisibleTasksOnDate(userId: string, date: string): Promise<number> {
   return (await getTasksForDate(userId, date)).length;
 }

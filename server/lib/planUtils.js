@@ -31,3 +31,22 @@ export const PLAN_LIMITS = {
 export function getPlanLimits(plan) {
   return PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
 }
+
+/** YYYY-MM-DD for the oldest date still visible under historyDays (inclusive). */
+export function getHistoryMinDateStr(historyDays) {
+  if (historyDays == null) return null;
+  const minDate = new Date();
+  minDate.setHours(0, 0, 0, 0);
+  minDate.setDate(minDate.getDate() - (historyDays - 1));
+  const y = minDate.getFullYear();
+  const m = String(minDate.getMonth() + 1).padStart(2, "0");
+  const d = String(minDate.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** Shared visibility rule used by list, get-by-id, and sync responses. */
+export function isTaskInHistoryWindow(task, minDateStr) {
+  if (!minDateStr) return true;
+  if (task.isRepeating) return true;
+  return Boolean(task.date && task.date >= minDateStr);
+}

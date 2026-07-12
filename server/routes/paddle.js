@@ -14,6 +14,94 @@ function fallbackPeriodEnd(existingEnd) {
   return new Date(Date.now() + 35 * 24 * 60 * 60 * 1000);
 }
 
+function normalizeSubStatus(raw) {
+  const s = (raw || "active").toString().toLowerCase();
+  if (s === "canceled" || s === "cancelled") return "cancelled";
+  if (s === "past_due") return "past_due";
+  if (s === "paused") return "paused";
+  if (s === "trialing") return "trialing";
+  if (s === "active") return "active";
+  return s || "active";
+}
+
+function planFromPriceHints(sub, customData, fallbackPlan) {
+  const planFromCustom =
+    customData?.plan === "pro" || customData?.plan === "basic" ? customData.plan : null;
+  if (planFromCustom) return planFromCustom;
+  const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
+  const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
+  if (priceId.includes("pro") || productId.includes("pro")) return "pro";
+  if (priceId.includes("basic") || productId.includes("basic")) return "basic";
+  return fallbackPlan || "basic";
+}
+
+/**
+ * Resolve our user id for a Paddle subscription.
+ * custom_data on the subscription is often missing — fall back to DB + transaction custom_data.
+ */
+async function resolveSubscriptionOwner(sub) {
+  const customData = sub.custom_data || {};
+  if (customData.user_id) {
+    return { userId: customData.user_id, planHint: customData.plan || null, customData };
+  }
+
+  const existing = await prisma.subscription.findFirst({
+    where: { OR: [{ id: sub.id }, { paddleSubscriptionId: sub.id }] },
+  });
+  if (existing?.userId) {
+    return { userId: existing.userId, planHint: existing.plan, customData, existing };
+  }
+
+  if (sub.customer_id) {
+    const byCustomer = await prisma.subscription.findFirst({
+      where: { paddleCustomerId: sub.customer_id },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (byCustomer?.userId) {
+      return { userId: byCustomer.userId, planHint: byCustomer.plan, customData, existing: byCustomer };
+    }
+  }
+
+  // Paddle often keeps user_id only on the originating transaction
+  if (sub.id && config.paddle.apiKey) {
+    try {
+      const txs = await paddleRequest(
+        "GET",
+        `/transactions?subscription_id=${encodeURIComponent(sub.id)}`
+      );
+      for (const tx of txs.data || []) {
+        const uid = tx.custom_data?.user_id;
+        if (uid) {
+          return {
+            userId: uid,
+            planHint: tx.custom_data?.plan || null,
+            customData: { ...customData, ...tx.custom_data },
+          };
+        }
+      }
+    } catch (e) {
+      console.error("[paddle] resolve owner via transactions", e?.message || e);
+    }
+  }
+
+  return { userId: null, planHint: null, customData, existing: null };
+}
+
+async function applyPaidPeriodOrFree(userId, plan, periodEndDate) {
+  const stillInPaidPeriod = periodEndDate && periodEndDate > new Date();
+  if (stillInPaidPeriod) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { plan, planExpiresAt: periodEndDate },
+    });
+  } else {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { plan: "free", planExpiresAt: null },
+    });
+  }
+}
+
 async function paddleRequest(method, path, body = null) {
   const url = `${PADDLE_API_BASE}${path}`;
   const opts = {
@@ -162,19 +250,42 @@ export async function handlePaddleWebhook(req, res) {
             data: { plan: "lifetime", planExpiresAt: null },
           });
         }
+      } else if (
+        userId &&
+        tx.subscription_id &&
+        (planFromData === "basic" || planFromData === "pro")
+      ) {
+        // Link subscription early from transaction custom_data (often missing on sub webhooks)
+        const periodEndDate = fallbackPeriodEnd(null);
+        await prisma.subscription.upsert({
+          where: { id: tx.subscription_id },
+          create: {
+            id: tx.subscription_id,
+            userId,
+            paddleSubscriptionId: tx.subscription_id,
+            paddleCustomerId: tx.customer_id || null,
+            plan: planFromData,
+            status: "active",
+            currentPeriodEnd: periodEndDate,
+          },
+          update: {
+            userId,
+            paddleCustomerId: tx.customer_id || undefined,
+            plan: planFromData,
+            status: "active",
+          },
+        });
+        await prisma.user.update({
+          where: { id: userId },
+          data: { plan: planFromData, planExpiresAt: periodEndDate },
+        });
       }
     } else if (eventType === "subscription.created" || eventType === "subscription.activated") {
       const sub = data;
-      const customData = sub.custom_data || {};
-      const userId = customData.user_id;
+      const resolved = await resolveSubscriptionOwner(sub);
+      const userId = resolved.userId;
       if (userId && sub.id) {
-        const planFromCustom =
-          customData.plan === "pro" || customData.plan === "basic" ? customData.plan : null;
-        const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
-        const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
-        const plan =
-          planFromCustom ||
-          (priceId.includes("pro") || productId.includes("pro") ? "pro" : "basic");
+        const plan = planFromPriceHints(sub, resolved.customData, resolved.planHint);
         const periodEnd = sub.current_billing_period?.ends_at;
         const periodEndDate = periodEnd ? new Date(periodEnd) : fallbackPeriodEnd(null);
         await prisma.subscription.upsert({
@@ -185,13 +296,15 @@ export async function handlePaddleWebhook(req, res) {
             paddleSubscriptionId: sub.id,
             paddleCustomerId: sub.customer_id,
             plan,
-            status: sub.status || "active",
+            status: normalizeSubStatus(sub.status),
             currentPeriodEnd: periodEndDate,
           },
           update: {
+            userId,
             plan,
-            status: sub.status || "active",
+            status: normalizeSubStatus(sub.status),
             currentPeriodEnd: periodEndDate,
+            paddleCustomerId: sub.customer_id || undefined,
           },
         });
         await prisma.user.update({
@@ -201,37 +314,24 @@ export async function handlePaddleWebhook(req, res) {
             planExpiresAt: periodEndDate,
           },
         });
+      } else if (sub.id) {
+        console.error("[paddle] subscription event missing user link", eventType, sub.id);
       }
     } else if (eventType === "subscription.updated") {
       const sub = data;
-      const customData = sub.custom_data || {};
-      const userId = customData.user_id;
-      const existing = await prisma.subscription.findFirst({
-        where: { id: sub.id },
-      });
-      const planFromCustom =
-        customData.plan === "pro" || customData.plan === "basic" ? customData.plan : null;
-      const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
-      const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
-      const plan =
-        planFromCustom ||
-        (priceId.includes("pro") || productId.includes("pro")
-          ? "pro"
-          : priceId.includes("basic") || productId.includes("basic")
-            ? "basic"
-            : existing?.plan || "basic");
+      const resolved = await resolveSubscriptionOwner(sub);
+      const existing =
+        resolved.existing ||
+        (await prisma.subscription.findFirst({
+          where: { OR: [{ id: sub.id }, { paddleSubscriptionId: sub.id }] },
+        }));
+      const plan = planFromPriceHints(sub, resolved.customData, existing?.plan || resolved.planHint);
       const periodEnd = sub.current_billing_period?.ends_at;
       const periodEndDate = periodEnd
         ? new Date(periodEnd)
         : fallbackPeriodEnd(existing?.currentPeriodEnd);
-      const ownerId = existing?.userId || userId;
-      const rawStatus = (sub.status || existing?.status || "active").toString().toLowerCase();
-      const status =
-        rawStatus === "canceled" || rawStatus === "cancelled"
-          ? "cancelled"
-          : rawStatus === "past_due"
-            ? "past_due"
-            : rawStatus || "active";
+      const ownerId = existing?.userId || resolved.userId;
+      const status = normalizeSubStatus(sub.status || existing?.status);
 
       if (ownerId && sub.id) {
         await prisma.subscription.upsert({
@@ -249,24 +349,11 @@ export async function handlePaddleWebhook(req, res) {
             plan,
             status,
             currentPeriodEnd: periodEndDate,
+            paddleCustomerId: sub.customer_id || undefined,
           },
         });
 
-        if (status === "cancelled") {
-          const stillInPaidPeriod = periodEndDate && periodEndDate > new Date();
-          if (stillInPaidPeriod) {
-            await prisma.user.update({
-              where: { id: ownerId },
-              data: { plan: existing?.plan || plan, planExpiresAt: periodEndDate },
-            });
-          } else {
-            await prisma.user.update({
-              where: { id: ownerId },
-              data: { plan: "free", planExpiresAt: null },
-            });
-          }
-        } else if (status === "active" || status === "past_due" || status === "trialing") {
-          // Only grant/refresh paid access for healthy subscription states
+        if (status === "active" || status === "past_due" || status === "trialing") {
           await prisma.user.update({
             where: { id: ownerId },
             data: {
@@ -274,12 +361,15 @@ export async function handlePaddleWebhook(req, res) {
               planExpiresAt: periodEndDate,
             },
           });
+        } else {
+          // paused, cancelled, inactive, etc. — honor paid period then free
+          await applyPaidPeriodOrFree(ownerId, existing?.plan || plan, periodEndDate);
         }
       }
     } else if (eventType === "subscription.canceled" || eventType === "subscription.past_due") {
       const sub = data;
       const existing = await prisma.subscription.findFirst({
-        where: { id: sub.id },
+        where: { OR: [{ id: sub.id }, { paddleSubscriptionId: sub.id }] },
       });
       if (existing) {
         const periodEnd =
@@ -287,7 +377,6 @@ export async function handlePaddleWebhook(req, res) {
           existing.currentPeriodEnd ||
           null;
         const periodEndDate = periodEnd ? new Date(periodEnd) : null;
-        const stillInPaidPeriod = periodEndDate && periodEndDate > new Date();
 
         await prisma.subscription.update({
           where: { id: existing.id },
@@ -297,20 +386,16 @@ export async function handlePaddleWebhook(req, res) {
           },
         });
 
-        if (stillInPaidPeriod) {
-          // Keep paid plan until the period they already paid for ends
+        if (eventType === "subscription.past_due") {
           await prisma.user.update({
             where: { id: existing.userId },
             data: {
               plan: existing.plan,
-              planExpiresAt: periodEndDate,
+              planExpiresAt: periodEndDate || fallbackPeriodEnd(existing.currentPeriodEnd),
             },
           });
         } else {
-          await prisma.user.update({
-            where: { id: existing.userId },
-            data: { plan: "free", planExpiresAt: null },
-          });
+          await applyPaidPeriodOrFree(existing.userId, existing.plan, periodEndDate);
         }
       }
     }
