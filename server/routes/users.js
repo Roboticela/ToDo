@@ -37,14 +37,19 @@ router.patch("/:userId", requireAuth, async (req, res) => {
   const updates = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
   // Select Free: only from pending (new signup). Paid users must cancel via Paddle portal.
+  // Expired paid plans are already effectively free — allow clearing the DB row.
   if (plan === "free") {
+    const effective = getEffectivePlan(req.user);
     if (req.user.plan === "pending") {
       updates.plan = "free";
       updates.planExpiresAt = null;
-    } else if (req.user.plan !== "free") {
+    } else if (effective.plan !== "free") {
       return res.status(400).json({
         error: "Cancel your paid subscription in Manage Subscription to switch to Free.",
       });
+    } else if (req.user.plan !== "free") {
+      updates.plan = "free";
+      updates.planExpiresAt = null;
     }
   }
   if (avatarUrl !== undefined) {

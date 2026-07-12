@@ -225,8 +225,9 @@ router.post("/refresh", async (req, res) => {
 
     const accessToken = signAccessToken({ userId: user.id });
     const newRefreshToken = signRefreshToken({ userId: user.id });
-    await prisma.session.update({
-      where: { id: stored.id },
+    // Conditional update so two tabs rotating the same token don't orphan each other
+    const rotated = await prisma.session.updateMany({
+      where: { id: stored.id, refreshToken: token },
       data: {
         accessToken,
         previousRefreshToken: stored.refreshToken,
@@ -235,6 +236,19 @@ router.post("/refresh", async (req, res) => {
         expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.refreshExpiry) * 1000),
       },
     });
+    if (rotated.count === 0) {
+      const again = await prisma.session.findUnique({ where: { id: stored.id } });
+      if (
+        again &&
+        again.previousRefreshToken === token &&
+        again.refreshToken !== token &&
+        again.previousRefreshValidUntil &&
+        again.previousRefreshValidUntil > now
+      ) {
+        return res.json(toSessionResponse(user, again.accessToken, again.refreshToken));
+      }
+      return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
 
     res.json(toSessionResponse(user, accessToken, newRefreshToken));
   } catch {
@@ -584,7 +598,9 @@ router.get("/google/callback", async (req, res) => {
 
     const redirectUri = `${config.backendUrl}/api/auth/google/callback`;
     const { tokens } = await googleClient.getToken({ code, redirect_uri: redirectUri });
-    googleClient.setCredentials({ access_token: tokens.id_token });
+    if (!tokens.id_token) {
+      return res.redirect(`${config.frontendUrl}/auth/login?error=google_failed`);
+    }
     const ticket = await googleClient.verifyIdToken({
       idToken: tokens.id_token,
       audience: config.google.clientId,

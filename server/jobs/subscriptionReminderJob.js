@@ -15,13 +15,25 @@ function getReminderCutoff() {
 async function runReminderJob() {
   try {
     const cutoff = getReminderCutoff();
+    const now = new Date();
     const users = await prisma.user.findMany({
       where: {
-        plan: "free",
         subscribedToReminders: true,
         OR: [
-          { lastSubscriptionReminderAt: null },
-          { lastSubscriptionReminderAt: { lt: cutoff } },
+          { plan: "free" },
+          // Lazy expiry: basic/pro with missing or past planExpiresAt are effectively free
+          {
+            plan: { in: ["basic", "pro"] },
+            OR: [{ planExpiresAt: null }, { planExpiresAt: { lt: now } }],
+          },
+        ],
+        AND: [
+          {
+            OR: [
+              { lastSubscriptionReminderAt: null },
+              { lastSubscriptionReminderAt: { lt: cutoff } },
+            ],
+          },
         ],
       },
     });
@@ -31,7 +43,13 @@ async function runReminderJob() {
         await sendSubscriptionReminderEmail(user.email, user.name, unsubscribeToken);
         await prisma.user.update({
           where: { id: user.id },
-          data: { lastSubscriptionReminderAt: new Date() },
+          data: {
+            lastSubscriptionReminderAt: new Date(),
+            // Normalize expired paid rows so future jobs and APIs stay consistent
+            ...(user.plan !== "free"
+              ? { plan: "free", planExpiresAt: null }
+              : {}),
+          },
         });
       } catch (e) {
         console.error("[subscriptionReminder] send failed for", user.id, e);

@@ -19,14 +19,20 @@ export class PlanLimitError extends Error {
   }
 }
 
-/** Effective plan on the client, mirroring server getEffectivePlan (honours planExpiresAt). */
+/** Effective plan on the client, mirroring server getEffectivePlan (honours planExpiresAt).
+ *  Recurring plans with missing expiry are treated as free (null no longer means "paid forever").
+ */
 export function getEffectiveClientPlan(
   plan: string | undefined,
   planExpiresAt?: string | null
 ): SubscriptionPlan {
   let p: SubscriptionPlan = "free";
   if (plan === "basic" || plan === "pro" || plan === "lifetime") p = plan;
-  if (p !== "free" && p !== "lifetime" && planExpiresAt && new Date(planExpiresAt) < new Date()) {
+  if (
+    p !== "free" &&
+    p !== "lifetime" &&
+    (!planExpiresAt || new Date(planExpiresAt) < new Date())
+  ) {
     return "free";
   }
   return p;
@@ -63,6 +69,17 @@ export async function assertCanCreateTask(
 ): Promise<void> {
   const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
 
+  if (!data.isRepeating && features.historyDays != null) {
+    const cutoff = getHistoryCutoff(plan, planExpiresAt);
+    if (cutoff && data.date < cutoff) {
+      throw new PlanLimitError(
+        "HISTORY_LIMIT",
+        features.historyDays,
+        `Your plan only keeps ${features.historyDays} days of history. Upgrade to add older tasks.`
+      );
+    }
+  }
+
   if (data.isRepeating && data.repeatDays.length > 0 && features.maxRepeatTasks != null) {
     const repeats = await getRepeatTasksByUser(userId);
     if (repeats.length >= features.maxRepeatTasks) {
@@ -75,13 +92,27 @@ export async function assertCanCreateTask(
   }
 
   if (features.maxDailyTasks != null) {
-    const existing = await getTasksForDate(userId, data.date);
-    if (existing.length >= features.maxDailyTasks) {
-      throw new PlanLimitError(
-        "MAX_DAILY_TASKS",
-        features.maxDailyTasks,
-        `Your plan allows up to ${features.maxDailyTasks} tasks on a day. Upgrade to add more.`
+    if (data.isRepeating && data.repeatDays.length > 0) {
+      await assertCanExpandRepeatDays(
+        userId,
+        plan,
+        "", // new task — no id to exclude yet
+        data.date,
+        undefined,
+        data.repeatDays,
+        false,
+        [],
+        planExpiresAt
       );
+    } else if (!data.isRepeating) {
+      const existing = await getTasksForDate(userId, data.date);
+      if (existing.length >= features.maxDailyTasks) {
+        throw new PlanLimitError(
+          "MAX_DAILY_TASKS",
+          features.maxDailyTasks,
+          `Your plan allows up to ${features.maxDailyTasks} tasks on a day. Upgrade to add more.`
+        );
+      }
     }
   }
 }
