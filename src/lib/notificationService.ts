@@ -5,9 +5,11 @@ import {
   markNotificationFired,
   getTask,
   deleteNotificationsByTask,
+  getUser,
 } from "./db";
 import { v4 as uuidv4 } from "./uuid";
 import { format, addDays } from "date-fns";
+import { playNotificationSound } from "./notificationSound";
 
 let notificationTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
@@ -56,6 +58,9 @@ export async function scheduleTaskNotifications(task: Task): Promise<void> {
   if (task.type === "daily") return;
   // One-time tasks that are already done should not get reminders
   if (!task.isRepeating && task.status === "completed") return;
+
+  const user = await getUser(task.userId);
+  if (user && user.taskNotificationsEnabled === false) return;
 
   const now = new Date();
   const occurrenceDates = getOccurrenceDates(task);
@@ -153,6 +158,12 @@ function scheduleLocalTimer(notif: ScheduledNotification, task: Task): void {
 }
 
 async function fireNotification(notif: ScheduledNotification, task: Task): Promise<void> {
+  const user = await getUser(task.userId);
+  if (user && user.taskNotificationsEnabled === false) {
+    await markNotificationFired(notif.id);
+    return;
+  }
+
   if (Notification.permission !== "granted") return;
 
   let title = task.title;
@@ -169,6 +180,9 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
     body = task.endTime ? `Ending at ${task.endTime}` : "Ending now";
   }
 
+  const useCustomAudio =
+    user?.notificationSoundMode === "ringtone" || user?.notificationSoundMode === "custom";
+
   try {
     new Notification(title, {
       body,
@@ -176,9 +190,19 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
       badge: ICON,
       tag: notif.id,
       requireInteraction: false,
+      silent: useCustomAudio,
     });
   } catch {
     // Notification may fail in some environments
+  }
+
+  try {
+    await playNotificationSound({
+      mode: user?.notificationSoundMode ?? "normal",
+      customSoundUrl: user?.customSoundUrl,
+    });
+  } catch {
+    // Sound is best-effort
   }
 
   await markNotificationFired(notif.id);

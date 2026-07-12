@@ -1,6 +1,7 @@
 import type { User, AuthSession } from "../types/todo";
 import { saveUser, getUser, saveSession, getAnySession, deleteSession } from "./db";
 import { getApiBase } from "./apiBase";
+import { mapUserFromApi } from "./mapUserFromApi";
 
 const API_BASE = getApiBase();
 
@@ -43,9 +44,10 @@ export async function register(
         throw new Error("Invalid registration response");
       }
       await clearLocalAuthState();
-      await saveUser(data.user);
+      const mappedUser = mapUserFromApi(data.user as unknown as Record<string, unknown>);
+      await saveUser(mappedUser);
       await saveSession(data.session);
-      return data;
+      return { user: mappedUser, session: data.session };
     }
     const errBody = await res.json().catch(() => ({}));
     throw new Error(errBody.error || "Registration failed");
@@ -79,9 +81,10 @@ export async function login(
         throw new Error("Invalid login response");
       }
       await clearLocalAuthState();
-      await saveUser(data.user);
+      const mappedUser = mapUserFromApi(data.user as unknown as Record<string, unknown>);
+      await saveUser(mappedUser);
       await saveSession(data.session);
-      return data;
+      return { user: mappedUser, session: data.session };
     }
     const errBody = await res.json().catch(() => ({ error: "" }));
     throw new Error(errBody.error || "Invalid email or password");
@@ -234,9 +237,10 @@ export async function refreshSession(): Promise<{ user: User; session: AuthSessi
     if (!res.ok) return null;
     const data = await res.json();
     if (!isValidAuthPayload(data)) return null;
-    await saveUser(data.user);
+    const mappedUser = mapUserFromApi(data.user as unknown as Record<string, unknown>);
+    await saveUser(mappedUser);
     await saveSession(data.session);
-    return { user: data.user, session: data.session };
+    return { user: mappedUser, session: data.session };
   } catch {
     return null;
   }
@@ -289,15 +293,23 @@ export async function updateProfile(userId: string, updates: Partial<User>): Pro
       Authorization: `Bearer ${session.accessToken}`,
     },
     body: JSON.stringify(updates),
-    signal: AbortSignal.timeout(5000),
+    // Sound/avatar data URLs need more time to upload to R2
+    signal: AbortSignal.timeout(
+      typeof updates.customSoundUrl === "string" && updates.customSoundUrl.startsWith("data:")
+        ? 60000
+        : typeof updates.avatarUrl === "string" && updates.avatarUrl.startsWith("data:")
+          ? 30000
+          : 5000
+    ),
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
     throw new Error(errBody.error || "Could not update profile");
   }
   const serverUser = await res.json();
-  await saveUser(serverUser);
-  return serverUser;
+  const mapped = mapUserFromApi(serverUser);
+  await saveUser(mapped);
+  return mapped;
 }
 
 // ─── Request email change (sends verification link to new email) ───────────────

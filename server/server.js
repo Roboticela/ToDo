@@ -46,7 +46,7 @@ app.use(
 app.use(cookieParser());
 // Paddle webhook must receive raw body for signature verification; mount before json parser
 app.post("/api/paddle/webhook", express.raw({ type: "application/json" }), handlePaddleWebhook);
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "6mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // API routes

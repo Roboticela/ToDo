@@ -76,10 +76,18 @@ export interface User {
   planExpiresAt?: string;
   emailVerifiedAt?: string;
   subscribedToReminders?: boolean;
+  /** Master toggle for local task reminders */
+  taskNotificationsEnabled?: boolean;
+  /** How task reminders sound: silent OS notice, built-in ringtone, or custom upload */
+  notificationSoundMode?: NotificationSoundMode;
+  /** Public R2 URL for a custom notification sound (when mode is custom) */
+  customSoundUrl?: string;
   /** False for Google-only accounts with no password set */
   hasPassword?: boolean;
   createdAt: string;
 }
+
+export type NotificationSoundMode = "normal" | "ringtone" | "custom";
 
 export interface AuthSession {
   accessToken: string;

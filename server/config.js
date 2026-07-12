@@ -38,6 +38,11 @@ export const config = {
   paddle: {
     apiKey: process.env.PADDLE_API_KEY || "",
     webhookSecret: process.env.PADDLE_WEBHOOK_SECRET || "",
+    /** true → sandbox-api.paddle.com (also inferred from test_ API keys) */
+    sandbox:
+      process.env.PADDLE_SANDBOX === "true" ||
+      process.env.PADDLE_ENV === "sandbox" ||
+      (process.env.PADDLE_API_KEY || "").includes("_test_"),
     priceIdBasicMonthly: process.env.PADDLE_PRICE_ID_BASIC_MONTHLY || "",
     priceIdBasicYearly: process.env.PADDLE_PRICE_ID_BASIC_YEARLY || "",
     priceIdProMonthly: process.env.PADDLE_PRICE_ID_PRO_MONTHLY || "",

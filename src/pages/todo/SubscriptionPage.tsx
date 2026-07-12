@@ -4,11 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Crown, Check, Zap, Infinity, ChevronDown, HelpCircle, ExternalLink } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
-import { type SubscriptionPlan, type User } from "../../types/todo";
+import { type SubscriptionPlan } from "../../types/todo";
 import { openLink } from "../../lib/tauri";
 import { isTauri } from "../../lib/tauri";
 import { getApiBase } from "../../lib/apiBase";
 import { saveUser } from "../../lib/db";
+import { mapUserFromApi } from "../../lib/mapUserFromApi";
+import { getEffectiveClientPlan } from "../../lib/planLimits";
 
 export type BillingInterval = "monthly" | "yearly";
 
@@ -179,18 +181,7 @@ export default function SubscriptionPage() {
       });
       if (res.ok) {
         const userData = await res.json();
-        const updatedUser: User = {
-          id: userData.id,
-          name: userData.name,
-          email: userData.email,
-          avatarUrl: userData.avatarUrl,
-          plan: userData.plan,
-          planExpiresAt: userData.planExpiresAt,
-          emailVerifiedAt: userData.emailVerifiedAt,
-          subscribedToReminders: userData.subscribedToReminders ?? true,
-          hasPassword: userData.hasPassword,
-          createdAt: userData.createdAt,
-        };
+        const updatedUser = mapUserFromApi(userData);
         await saveUser(updatedUser);
         updateUser(updatedUser);
       }
@@ -229,18 +220,7 @@ export default function SubscriptionPage() {
       if (data.plan !== "free") {
         throw new Error("Cancel your paid subscription in Manage Subscription to switch to Free.");
       }
-      const updatedUser: User = {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        avatarUrl: data.avatarUrl,
-        plan: data.plan,
-        planExpiresAt: data.planExpiresAt,
-        emailVerifiedAt: data.emailVerifiedAt,
-        subscribedToReminders: data.subscribedToReminders ?? true,
-        hasPassword: data.hasPassword,
-        createdAt: data.createdAt,
-      };
+      const updatedUser = mapUserFromApi(data);
       await saveUser(updatedUser);
       updateUser(updatedUser);
       navigate("/todo", { replace: true });
@@ -273,7 +253,8 @@ export default function SubscriptionPage() {
   }
 
   async function handleManageSubscription() {
-    if (!session?.accessToken || (user?.plan !== "basic" && user?.plan !== "pro")) return;
+    const effective = getEffectiveClientPlan(user?.plan, user?.planExpiresAt);
+    if (!session?.accessToken || (effective !== "basic" && effective !== "pro")) return;
     setError(null);
     setPortalLoading(true);
     try {
@@ -290,7 +271,12 @@ export default function SubscriptionPage() {
     }
   }
 
-  const canManageSubscription = user?.plan === "basic" || user?.plan === "pro";
+  const effectivePlan =
+    user?.plan === "pending"
+      ? ("pending" as const)
+      : getEffectiveClientPlan(user?.plan, user?.planExpiresAt);
+  const canManageSubscription =
+    effectivePlan === "basic" || effectivePlan === "pro";
   const isPaidPlan = (p: SubscriptionPlan) => p === "basic" || p === "pro" || p === "lifetime";
 
   return (
@@ -369,7 +355,10 @@ export default function SubscriptionPage() {
         {/* Plan cards */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch flex-wrap justify-center">
         {PLAN_META.map((plan, i) => {
-          const isCurrentPlan = user?.plan === plan.id;
+          const isCurrentPlan =
+            user?.plan === "pending"
+              ? false
+              : effectivePlan === plan.id;
           const isPendingSelectFree = plan.id === "free" && user?.plan === "pending";
           const isUpgrade = isPaidPlan(plan.id) && !isCurrentPlan;
           const isLoading = loadingPlan === plan.id;

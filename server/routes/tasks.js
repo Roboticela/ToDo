@@ -100,7 +100,8 @@ async function wouldExceedDailyCapForRepeatDays(
   today.setHours(12, 0, 0, 0);
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const fromStr = startDate && startDate > todayStr ? startDate : todayStr;
-  const WEEKS = 4;
+  // Sample enough weeks to catch dense calendars; still bounded for performance
+  const WEEKS = 8;
 
   for (const dow of repeatDays) {
     if (typeof dow !== "number") continue;
@@ -312,6 +313,10 @@ router.patch("/:id", requireAuth, async (req, res) => {
     data.repeatDays !== undefined &&
     JSON.stringify([...(data.repeatDays || [])].sort()) !==
       JSON.stringify([...(existing.repeatDays || [])].sort());
+  const endDateExtended =
+    data.endDate !== undefined &&
+    existing.endDate != null &&
+    (data.endDate == null || data.endDate > existing.endDate);
   const minDateStr = getHistoryMinDateStr(limits.historyDays);
 
   // Block moving a non-repeating task outside the history window (soft-delete still allowed)
@@ -337,7 +342,7 @@ router.patch("/:id", requireAuth, async (req, res) => {
   if (
     limits.maxDailyTasks != null &&
     nextRepeating &&
-    (enablingRepeat || repeatDaysChanged || dateChanged)
+    (enablingRepeat || repeatDaysChanged || dateChanged || endDateExtended)
   ) {
     if (
       await wouldExceedDailyCapForRepeatDays(
@@ -486,6 +491,10 @@ router.post("/sync", requireAuth, async (req, res) => {
       existing &&
       JSON.stringify([...clientRepeatDays].sort()) !==
         JSON.stringify([...(existing.repeatDays || [])].sort());
+    const endDateExtended =
+      existing &&
+      existing.endDate != null &&
+      (t.endDate == null || t.endDate > existing.endDate);
     const minDateStr = getHistoryMinDateStr(limits.historyDays);
 
     if (
@@ -525,7 +534,7 @@ router.post("/sync", requireAuth, async (req, res) => {
       limits.maxDailyTasks != null &&
       willBeRepeating &&
       !isSoftDelete &&
-      (isNew || enablingRepeat || dateChanged || repeatDaysChanged)
+      (isNew || enablingRepeat || dateChanged || repeatDaysChanged || endDateExtended)
     ) {
       if (
         await wouldExceedDailyCapForRepeatDays(

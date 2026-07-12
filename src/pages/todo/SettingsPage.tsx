@@ -18,6 +18,9 @@ import {
   Download,
   Upload,
   Bell,
+  Volume2,
+  Music,
+  Play,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../lib/utils";
@@ -28,10 +31,21 @@ import { useSync } from "../../contexts/SyncContext";
 import { updateProfile, changePassword, deleteAccount, requestEmailChange } from "../../lib/authService";
 import { saveUser } from "../../lib/db";
 import { getApiBase } from "../../lib/apiBase";
-import type { User as UserType } from "../../types/todo";
+import type { NotificationSoundMode } from "../../types/todo";
 import { getExportData, importTasksFromData } from "../../lib/taskService";
 import { PLAN_FEATURES } from "../../types/todo";
 import { getEffectiveClientPlan } from "../../lib/planLimits";
+import { mapUserFromApi } from "../../lib/mapUserFromApi";
+import {
+  isNotificationSupported,
+  requestNotificationPermission,
+  rebuildNotificationsForUser,
+} from "../../lib/notificationService";
+import {
+  playNotificationSound,
+  prefetchCustomSound,
+  clearCustomSoundCache,
+} from "../../lib/notificationSound";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
@@ -50,6 +64,14 @@ export default function SettingsPage() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const [newsletterUpdating, setNewsletterUpdating] = useState(false);
   const [emailChangedSuccess, setEmailChangedSuccess] = useState(false);
+  const [notifUpdating, setNotifUpdating] = useState(false);
+  const [soundUploading, setSoundUploading] = useState(false);
+  const [soundError, setSoundError] = useState<string | null>(null);
+  const [permission, setPermission] = useState<NotificationPermission | "unsupported">(() => {
+    if (typeof window === "undefined" || !isNotificationSupported()) return "unsupported";
+    return Notification.permission;
+  });
+  const soundInputRef = useRef<HTMLInputElement>(null);
 
   // After email change confirmation (redirect from link), refetch user and clear param
   useEffect(() => {
@@ -61,18 +83,7 @@ export default function SettingsPage() {
         });
         if (res.ok) {
           const userData = await res.json();
-          const updatedUser: UserType = {
-            id: userData.id,
-            name: userData.name,
-            email: userData.email,
-            avatarUrl: userData.avatarUrl,
-            plan: userData.plan,
-            planExpiresAt: userData.planExpiresAt,
-            emailVerifiedAt: userData.emailVerifiedAt,
-            subscribedToReminders: userData.subscribedToReminders ?? true,
-            hasPassword: userData.hasPassword,
-            createdAt: userData.createdAt,
-          };
+          const updatedUser = mapUserFromApi(userData);
           await saveUser(updatedUser);
           updateUser(updatedUser);
           setEmailChangedSuccess(true);
@@ -88,8 +99,17 @@ export default function SettingsPage() {
     })();
   }, [searchParams, session, updateUser, setSearchParams]);
 
+  // Keep custom ringtone cached locally for offline playback
+  useEffect(() => {
+    if (user?.customSoundUrl) {
+      void prefetchCustomSound(user.customSoundUrl);
+    }
+  }, [user?.customSoundUrl]);
+
   if (!user) return null;
   const currentUser = user;
+  const soundMode: NotificationSoundMode = currentUser.notificationSoundMode ?? "normal";
+  const taskNotifsOn = currentUser.taskNotificationsEnabled !== false;
 
   async function handleNewsletterToggle() {
     const next = !(currentUser.subscribedToReminders ?? true);
@@ -99,6 +119,126 @@ export default function SettingsPage() {
       updateUser(updated);
     } finally {
       setNewsletterUpdating(false);
+    }
+  }
+
+  async function handleTaskNotifsToggle() {
+    const next = !taskNotifsOn;
+    setNotifUpdating(true);
+    setSoundError(null);
+    try {
+      const updated = await updateProfile(currentUser.id, { taskNotificationsEnabled: next });
+      updateUser(updated);
+      if (next) {
+        const granted = await requestNotificationPermission();
+        setPermission(isNotificationSupported() ? Notification.permission : "unsupported");
+        if (granted) await rebuildNotificationsForUser(currentUser.id);
+      } else {
+        await rebuildNotificationsForUser(currentUser.id);
+      }
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : "Could not update notifications.");
+    } finally {
+      setNotifUpdating(false);
+    }
+  }
+
+  async function handleEnablePermission() {
+    const granted = await requestNotificationPermission();
+    setPermission(isNotificationSupported() ? Notification.permission : "unsupported");
+    if (granted && taskNotifsOn) {
+      await rebuildNotificationsForUser(currentUser.id);
+    }
+  }
+
+  async function handleSoundModeChange(mode: NotificationSoundMode) {
+    if (mode === soundMode) return;
+    if (mode === "custom" && !currentUser.customSoundUrl) {
+      soundInputRef.current?.click();
+      return;
+    }
+    setNotifUpdating(true);
+    setSoundError(null);
+    try {
+      const updated = await updateProfile(currentUser.id, { notificationSoundMode: mode });
+      updateUser(updated);
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : "Could not update sound.");
+    } finally {
+      setNotifUpdating(false);
+    }
+  }
+
+  async function handleSoundFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("audio/")) {
+      setSoundError("Please choose an audio file (MP3, WAV, OGG, or M4A).");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setSoundError("Sound must be under 2MB.");
+      return;
+    }
+    setSoundUploading(true);
+    setSoundError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Could not read file"));
+        reader.readAsDataURL(file);
+      });
+      const previousUrl = currentUser.customSoundUrl;
+      const updated = await updateProfile(currentUser.id, {
+        customSoundUrl: dataUrl,
+        notificationSoundMode: "custom",
+      });
+      updateUser(updated);
+      if (previousUrl && previousUrl !== updated.customSoundUrl) {
+        await clearCustomSoundCache(previousUrl);
+      }
+      if (updated.customSoundUrl) {
+        await prefetchCustomSound(updated.customSoundUrl);
+      }
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : "Sound upload failed.");
+    } finally {
+      setSoundUploading(false);
+    }
+  }
+
+  async function handleRemoveCustomSound() {
+    setSoundUploading(true);
+    setSoundError(null);
+    try {
+      const previousUrl = currentUser.customSoundUrl;
+      const updated = await updateProfile(currentUser.id, {
+        customSoundUrl: "",
+        notificationSoundMode: soundMode === "custom" ? "normal" : soundMode,
+      });
+      updateUser(updated);
+      if (previousUrl) await clearCustomSoundCache(previousUrl);
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : "Could not remove sound.");
+    } finally {
+      setSoundUploading(false);
+    }
+  }
+
+  async function handlePreviewSound() {
+    setSoundError(null);
+    try {
+      await playNotificationSound({
+        mode: soundMode === "normal" ? "ringtone" : soundMode,
+        customSoundUrl: currentUser.customSoundUrl,
+      });
+      if (soundMode === "normal") {
+        // Preview uses ringtone since "normal" has no app-owned tone
+      }
+    } catch {
+      setSoundError("Could not play preview.");
     }
   }
 
@@ -272,12 +412,164 @@ export default function SettingsPage() {
           )}
         </Section>
 
+        {/* Task notifications */}
+        <Section label="Notifications">
+          <input
+            ref={soundInputRef}
+            type="file"
+            accept="audio/mpeg,audio/mp3,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/aac,audio/x-m4a,audio/webm,.mp3,.wav,.ogg,.m4a"
+            className="hidden"
+            onChange={handleSoundFile}
+          />
+          <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="shrink-0">
+                <Bell className="w-4 h-4 text-primary/70" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Task reminders</p>
+                <p className="text-xs text-foreground/50 mt-0.5">
+                  {taskNotifsOn
+                    ? "Notify you when timed tasks start or end."
+                    : "Task reminders are off."}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={taskNotifsOn}
+              disabled={notifUpdating}
+              onClick={handleTaskNotifsToggle}
+              className={cn(
+                "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-background",
+                taskNotifsOn ? "bg-primary/20" : "bg-foreground/10",
+                notifUpdating && "opacity-70 cursor-not-allowed"
+              )}
+            >
+              <motion.div
+                animate={{ x: taskNotifsOn ? 20 : 2 }}
+                transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                className={cn(
+                  "absolute top-1 w-4 h-4 rounded-full shadow-sm transition-colors duration-200",
+                  taskNotifsOn ? "bg-primary" : "bg-foreground"
+                )}
+              />
+            </button>
+          </div>
+
+          {taskNotifsOn && (
+            <>
+              {permission !== "granted" && permission !== "unsupported" && (
+                <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between gap-3">
+                  <p className="text-xs text-foreground/60 min-w-0">
+                    {permission === "denied"
+                      ? "Browser blocked notifications. Enable them in site settings."
+                      : "Allow notifications so reminders can appear."}
+                  </p>
+                  {permission !== "denied" && (
+                    <button
+                      type="button"
+                      onClick={handleEnablePermission}
+                      className="shrink-0 text-xs font-semibold text-primary hover:text-primary/80"
+                    >
+                      Allow
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="px-4 py-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Volume2 className="w-4 h-4 text-primary/70 shrink-0" />
+                  <p className="text-sm font-medium text-foreground">Alert sound</p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { id: "normal" as const, label: "Normal", hint: "System" },
+                      { id: "ringtone" as const, label: "Ringtone", hint: "Built-in" },
+                      { id: "custom" as const, label: "Custom", hint: "Your file" },
+                    ] as const
+                  ).map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      disabled={notifUpdating || soundUploading}
+                      onClick={() => handleSoundModeChange(opt.id)}
+                      className={cn(
+                        "rounded-xl border px-2 py-2.5 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                        soundMode === opt.id
+                          ? "border-primary/50 bg-primary/10 text-foreground"
+                          : "border-border bg-accent/10 text-foreground/70 hover:bg-accent/25"
+                      )}
+                    >
+                      <p className="text-xs font-semibold">{opt.label}</p>
+                      <p className="text-[10px] text-foreground/45 mt-0.5">{opt.hint}</p>
+                    </button>
+                  ))}
+                </div>
+
+                {soundMode === "custom" && (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs text-foreground/50">
+                      {currentUser.customSoundUrl
+                        ? "Custom sound saved to the cloud and cached on this device."
+                        : "Upload an MP3, WAV, OGG, or M4A (max 2MB)."}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <motion.button
+                        type="button"
+                        whileTap={{ scale: 0.97 }}
+                        disabled={soundUploading}
+                        onClick={() => soundInputRef.current?.click()}
+                        className="h-9 px-3 rounded-xl border border-border text-xs font-medium text-foreground/80 hover:bg-accent/30 transition-colors inline-flex items-center gap-1.5"
+                      >
+                        <Music className="w-3.5 h-3.5" />
+                        {soundUploading
+                          ? "Uploading…"
+                          : currentUser.customSoundUrl
+                            ? "Replace sound"
+                            : "Upload sound"}
+                      </motion.button>
+                      {currentUser.customSoundUrl && (
+                        <button
+                          type="button"
+                          disabled={soundUploading}
+                          onClick={handleRemoveCustomSound}
+                          className="h-9 px-3 rounded-xl border border-red-500/30 text-red-400 text-xs font-medium hover:bg-red-500/10 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={handlePreviewSound}
+                  disabled={soundMode === "custom" && !currentUser.customSoundUrl}
+                  className="h-9 px-3 rounded-xl border border-border text-xs font-medium text-foreground/80 hover:bg-accent/30 transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  {soundMode === "normal" ? "Preview ringtone" : "Preview sound"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {soundError && (
+            <p className="px-4 py-2 text-xs text-red-400 border-t border-border/50">{soundError}</p>
+          )}
+        </Section>
+
         {/* Newsletter / Email preferences */}
         <Section label="Newsletter">
           <div className="flex items-center justify-between gap-3 px-4 py-3.5">
             <div className="flex items-center gap-3 min-w-0">
               <div className="shrink-0">
-                <Bell className="w-4 h-4 text-primary/70" />
+                <Mail className="w-4 h-4 text-primary/70" />
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">Subscription reminders & tips</p>

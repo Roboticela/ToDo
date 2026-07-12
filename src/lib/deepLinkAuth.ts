@@ -1,6 +1,7 @@
 import { saveUser, saveSession } from "./db";
 import { getApiBase } from "./apiBase";
 import { clearLocalAuthState, isValidAuthPayload } from "./authService";
+import { mapUserFromApi } from "./mapUserFromApi";
 import type { User, AuthSession } from "../types/todo";
 
 /**
@@ -45,18 +46,7 @@ export async function completeDesktopAuthWithCode(
   if (!meRes.ok) return false;
   const userData = await meRes.json();
   if (!userData?.id) return false;
-  const me: User = {
-    id: userData.id,
-    name: userData.name,
-    email: userData.email,
-    avatarUrl: userData.avatarUrl,
-    plan: userData.plan,
-    planExpiresAt: userData.planExpiresAt,
-    emailVerifiedAt: userData.emailVerifiedAt,
-    subscribedToReminders: userData.subscribedToReminders ?? true,
-    hasPassword: userData.hasPassword,
-    createdAt: userData.createdAt,
-  };
+  const me = mapUserFromApi(userData);
   const session: AuthSession = {
     accessToken,
     refreshToken: refreshToken || "",

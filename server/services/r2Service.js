@@ -171,6 +171,93 @@ export async function deleteAvatarByUrl(avatarUrl) {
   }
 }
 
+const SOUND_MIME_EXT = {
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+  "audio/wave": "wav",
+  "audio/ogg": "ogg",
+  "audio/webm": "webm",
+  "audio/mp4": "m4a",
+  "audio/aac": "aac",
+  "audio/x-m4a": "m4a",
+};
+
+const MAX_SOUND_BYTES = 2 * 1024 * 1024; // 2MB
+
+/**
+ * Upload a custom notification sound from a data URL.
+ * @param {string} dataUrl - data:audio/...;base64,...
+ * @param {string} userId
+ * @returns {string|null} Public URL or null.
+ */
+export async function uploadSoundFromDataUrl(dataUrl, userId) {
+  const client = getClient();
+  if (!client) return null;
+  if (!buildPublicObjectUrl("sounds/_probe")) return null;
+
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) return null;
+  const contentType = match[1].trim().toLowerCase();
+  const ext = SOUND_MIME_EXT[contentType];
+  if (!ext) return null;
+  const buffer = Buffer.from(match[2], "base64");
+  if (buffer.length === 0 || buffer.length > MAX_SOUND_BYTES) return null;
+
+  try {
+    const key = `sounds/${userId}/${uuidv4()}.${ext}`;
+    const { bucket } = config.r2;
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+      })
+    );
+    return buildPublicObjectUrl(key);
+  } catch (e) {
+    console.error("[r2] uploadSoundFromDataUrl", e);
+    return null;
+  }
+}
+
+/**
+ * Delete a sound object from R2 by its public URL (only if it's our R2 bucket).
+ * No-op if R2 not configured or URL is not from our publicUrl. Does not throw.
+ */
+export async function deleteSoundByUrl(soundUrl) {
+  if (!soundUrl || typeof soundUrl !== "string") return;
+  const client = getClient();
+  const { bucket, publicUrl } = config.r2;
+  if (!client || !bucket || !publicUrl) return;
+
+  if (isR2ApiEndpointUrl(soundUrl)) {
+    try {
+      const u = new URL(soundUrl);
+      const parts = u.pathname.replace(/^\//, "").split("/");
+      const key = parts[0] === bucket ? parts.slice(1).join("/") : parts.join("/");
+      if (key.startsWith("sounds/")) {
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+      }
+    } catch (e) {
+      console.warn("[r2] deleteSoundByUrl (api-endpoint)", e?.message || e);
+    }
+    return;
+  }
+
+  const base = publicUrl.replace(/\/$/, "");
+  if (!soundUrl.startsWith(base + "/")) return;
+  const key = soundUrl.slice(base.length + 1);
+  if (!key.startsWith("sounds/")) return;
+  try {
+    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+  } catch (e) {
+    console.warn("[r2] deleteSoundByUrl", key, e?.message || e);
+  }
+}
+
 export function isR2Configured() {
   const { accountId, accessKeyId, secretAccessKey, bucket, publicUrl } = config.r2;
   return !!(

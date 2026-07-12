@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "taskNotificationsEnabled" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "notificationSoundMode" TEXT NOT NULL DEFAULT 'normal';
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "customSoundUrl" TEXT;

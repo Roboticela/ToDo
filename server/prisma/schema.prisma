@@ -34,6 +34,11 @@ model User {
   subscribedToReminders    Boolean   @default(true)
   lastSubscriptionReminderAt DateTime?
 
+  // Local task notification preferences (synced across devices)
+  taskNotificationsEnabled Boolean  @default(true)
+  notificationSoundMode    String   @default("normal") // normal | ringtone | custom
+  customSoundUrl           String?
+
   sessions           Session[]
   passwordResetTokens PasswordResetToken[]
   tasks               Task[]

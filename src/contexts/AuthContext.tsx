@@ -4,6 +4,7 @@ import type { User, AuthSession } from "../types/todo";
 import { getAnySession, getUser, saveSession, saveUser } from "../lib/db";
 import { logout as authLogout, refreshSession } from "../lib/authService";
 import { getApiBase } from "../lib/apiBase";
+import { mapUserFromApi } from "../lib/mapUserFromApi";
 
 interface AuthContextType {
   user: User | null;
@@ -76,18 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               });
               if (res.ok) {
                 const userData = await res.json();
-                const updatedUser: User = {
-                  id: userData.id,
-                  name: userData.name,
-                  email: userData.email,
-                  avatarUrl: userData.avatarUrl,
-                  plan: userData.plan,
-                  planExpiresAt: userData.planExpiresAt,
-                  emailVerifiedAt: userData.emailVerifiedAt,
-                  subscribedToReminders: userData.subscribedToReminders ?? true,
-                  hasPassword: userData.hasPassword,
-                  createdAt: userData.createdAt,
-                };
+                const updatedUser = mapUserFromApi(userData);
                 await saveUser(updatedUser);
                 applySession(updatedUser, savedSession);
               }
@@ -145,36 +135,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           });
           if (!retry.ok) return;
           const userData = await retry.json();
-          const updatedUser: User = {
-            id: userData.id,
-            name: userData.name,
-            email: userData.email,
-            avatarUrl: userData.avatarUrl,
-            plan: userData.plan,
-            planExpiresAt: userData.planExpiresAt,
-            emailVerifiedAt: userData.emailVerifiedAt,
-            subscribedToReminders: userData.subscribedToReminders ?? true,
-            hasPassword: userData.hasPassword,
-            createdAt: userData.createdAt,
-          };
+          const updatedUser = mapUserFromApi(userData);
           await saveUser(updatedUser);
           setUser(updatedUser);
           return;
         }
         if (!res.ok) return;
         const userData = await res.json();
-        const updatedUser: User = {
-          id: userData.id,
-          name: userData.name,
-          email: userData.email,
-          avatarUrl: userData.avatarUrl,
-          plan: userData.plan,
-          planExpiresAt: userData.planExpiresAt,
-          emailVerifiedAt: userData.emailVerifiedAt,
-          subscribedToReminders: userData.subscribedToReminders ?? true,
-          hasPassword: userData.hasPassword,
-          createdAt: userData.createdAt,
-        };
+        const updatedUser = mapUserFromApi(userData);
         await saveUser(updatedUser);
         setUser(updatedUser);
       } catch {

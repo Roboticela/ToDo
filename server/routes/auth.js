@@ -59,6 +59,7 @@ const googleClient = config.google.clientId && config.google.clientSecret
 
 function toUserResponse(user) {
   const effective = getEffectivePlan(user);
+  const soundMode = user.notificationSoundMode;
   return {
     id: user.id,
     name: user.name,
@@ -68,6 +69,10 @@ function toUserResponse(user) {
     planExpiresAt: effective.planExpiresAt ? effective.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
+    taskNotificationsEnabled: user.taskNotificationsEnabled ?? true,
+    notificationSoundMode:
+      soundMode === "ringtone" || soundMode === "custom" ? soundMode : "normal",
+    customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),
   };

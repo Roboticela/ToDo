@@ -6,7 +6,12 @@ import { requireAuth } from "../middleware/auth.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
 
 const router = Router();
-const PADDLE_API_BASE = "https://api.paddle.com";
+
+function paddleApiBase() {
+  return config.paddle.sandbox
+    ? "https://sandbox-api.paddle.com"
+    : "https://api.paddle.com";
+}
 
 /** Fallback expiry when Paddle omits billing period end (≈1 billing month). */
 function fallbackPeriodEnd(existingEnd) {
@@ -142,7 +147,7 @@ async function applyPaidPeriodOrFree(userId, plan, periodEndDate) {
 }
 
 async function paddleRequest(method, path, body = null) {
-  const url = `${PADDLE_API_BASE}${path}`;
+  const url = `${paddleApiBase()}${path}`;
   const opts = {
     method,
     headers: {
@@ -269,14 +274,19 @@ export async function handlePaddleWebhook(req, res) {
     return res.status(400).end();
   }
 
-  const parts = signature.split(";").reduce((acc, p) => {
-    const [k, v] = p.split("=");
-    if (k && v) acc[k] = v;
-    return acc;
-  }, {});
-  const ts = parts.ts;
-  const h1 = parts.h1;
-  if (!ts || !h1) {
+  // Paddle may send multiple h1 values during secret rotation (ts=…;h1=…;h1=…)
+  let ts = null;
+  const h1Values = [];
+  for (const part of String(signature).split(";")) {
+    const eq = part.indexOf("=");
+    if (eq <= 0) continue;
+    const k = part.slice(0, eq).trim();
+    const v = part.slice(eq + 1).trim();
+    if (!v) continue;
+    if (k === "ts") ts = v;
+    else if (k === "h1") h1Values.push(v);
+  }
+  if (!ts || h1Values.length === 0) {
     return res.status(400).end();
   }
 
@@ -295,14 +305,19 @@ export async function handlePaddleWebhook(req, res) {
     .digest("hex");
   try {
     const expectedBuf = Buffer.from(expected, "hex");
-    const h1Buf = Buffer.from(h1, "hex");
-    if (
-      expectedBuf.length === 0 ||
-      expectedBuf.length !== h1Buf.length ||
-      !crypto.timingSafeEqual(expectedBuf, h1Buf)
-    ) {
-      return res.status(401).end();
-    }
+    if (expectedBuf.length === 0) return res.status(401).end();
+    const matched = h1Values.some((h1) => {
+      try {
+        const h1Buf = Buffer.from(h1, "hex");
+        return (
+          expectedBuf.length === h1Buf.length &&
+          crypto.timingSafeEqual(expectedBuf, h1Buf)
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (!matched) return res.status(401).end();
   } catch {
     return res.status(401).end();
   }
@@ -326,8 +341,14 @@ export async function handlePaddleWebhook(req, res) {
       if (userId && planFromData === "lifetime") {
         const isOneTime = !tx.subscription_id;
         if (isOneTime) {
-          // Stop recurring billing so lifetime buyers are not charged again
-          await cancelActiveSubscriptionsForUser(userId);
+          // Stop recurring billing so lifetime buyers are not charged again.
+          // Fail the webhook (Paddle retries) if cancel fails — otherwise they keep billing.
+          const cancelResult = await cancelActiveSubscriptionsForUser(userId);
+          if (!cancelResult.ok && cancelResult.attempted > 0) {
+            throw new Error(
+              `Failed to cancel ${cancelResult.failed}/${cancelResult.attempted} subscription(s) before granting lifetime`
+            );
+          }
           await prisma.user.update({
             where: { id: userId },
             data: { plan: "lifetime", planExpiresAt: null },
@@ -340,11 +361,17 @@ export async function handlePaddleWebhook(req, res) {
       ) {
         // Link subscription early from transaction custom_data (often missing on sub webhooks).
         // Do not overwrite a real period end already set by subscription.created/activated.
+        // Do not revive cancelled/paused rows from a late/retried transaction.completed.
         const existingSub = await prisma.subscription.findFirst({
           where: {
             OR: [{ id: tx.subscription_id }, { paddleSubscriptionId: tx.subscription_id }],
           },
         });
+        const existingStatus = existingSub
+          ? normalizeSubStatus(existingSub.status)
+          : null;
+        const isTerminalSub =
+          existingStatus === "cancelled" || existingStatus === "paused";
         const periodEndDate = resolvePeriodEndDate(
           tx.billing_period?.ends_at || existingSub?.currentPeriodEnd,
           null,
@@ -365,7 +392,7 @@ export async function handlePaddleWebhook(req, res) {
             userId,
             paddleCustomerId: tx.customer_id || undefined,
             plan: planFromData,
-            status: "active",
+            ...(isTerminalSub ? {} : { status: "active" }),
             // leave currentPeriodEnd untouched if subscription.* already set the real ends_at
             ...(existingSub?.currentPeriodEnd
               ? {}
@@ -373,7 +400,7 @@ export async function handlePaddleWebhook(req, res) {
           },
         });
         const userRow = await prisma.user.findUnique({ where: { id: userId } });
-        if (userRow?.plan !== "lifetime") {
+        if (userRow?.plan !== "lifetime" && !isTerminalSub) {
           const planExpiresAt =
             existingSub?.currentPeriodEnd ||
             (userRow?.planExpiresAt && userRow.planExpiresAt > periodEndDate

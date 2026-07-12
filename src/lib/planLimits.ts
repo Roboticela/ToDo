@@ -5,8 +5,8 @@ import {
   getRepeatTasksByUser,
   getTasksByUserAndDate,
 } from "./db";
-import { getTodayString } from "./taskService";
-import { format, subDays } from "date-fns";
+import { getTasksForDate, getTodayString } from "./taskService";
+import { format } from "date-fns";
 
 export class PlanLimitError extends Error {
   code: "MAX_REPEAT_TASKS" | "MAX_DAILY_TASKS" | "HISTORY_LIMIT";
@@ -39,13 +39,26 @@ export function getEffectiveClientPlan(
   return p;
 }
 
+/** UTC YYYY-MM-DD — matches server getHistoryMinDateStr. */
+function utcYmdDaysAgo(daysAgoInclusive: number): string {
+  const now = new Date();
+  const d = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
+  d.setUTCDate(d.getUTCDate() - (daysAgoInclusive - 1));
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function getHistoryCutoff(
   plan: string | undefined,
   planExpiresAt?: string | null
 ): string | null {
   const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.historyDays == null) return null;
-  return format(subDays(new Date(), features.historyDays - 1), "yyyy-MM-dd");
+  return utcYmdDaysAgo(features.historyDays);
 }
 
 /** Clamp a browsable date to the plan's history window (past only). */
@@ -87,7 +100,7 @@ async function countTasksOnDateForLimits(
 }
 
 /** Sample the next few occurrences of each weekday (aligned with server). */
-const REPEAT_CAP_WEEKS = 4;
+const REPEAT_CAP_WEEKS = 8;
 
 function sampleDatesForWeekday(
   from: string,
@@ -105,6 +118,17 @@ function sampleDatesForWeekday(
     sample.setDate(sample.getDate() + 7);
   }
   return out;
+}
+
+function isEndDateExtended(
+  previousEndDate: string | null | undefined,
+  nextEndDate: string | null | undefined
+): boolean {
+  // Already unlimited — nothing to extend into
+  if (previousEndDate == null) return false;
+  // Cleared end date → unlimited
+  if (nextEndDate == null) return true;
+  return nextEndDate > previousEndDate;
 }
 
 export async function assertCanCreateTask(
@@ -144,11 +168,12 @@ export async function assertCanCreateTask(
         plan,
         "", // new task — no id to exclude yet
         data.date,
-        undefined,
+        data.endDate,
         data.repeatDays,
         false,
         [],
         planExpiresAt,
+        null,
         null
       );
     } else if (!data.isRepeating) {
@@ -219,7 +244,8 @@ export async function assertCanExpandRepeatDays(
   previouslyRepeating: boolean,
   previousRepeatDays: number[],
   planExpiresAt?: string | null,
-  previousStartDate?: string | null
+  previousStartDate?: string | null,
+  previousEndDate?: string | null
 ): Promise<void> {
   const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.maxDailyTasks == null) return;
@@ -229,9 +255,12 @@ export async function assertCanExpandRepeatDays(
   const added = nextRepeatDays.filter((d) => !prevSet.has(d));
   const startChanged =
     previousStartDate != null && previousStartDate !== startDate;
-  // New task, start-date change, or newly added weekdays — re-check those days
+  const endExtended = isEndDateExtended(previousEndDate, endDate);
+  // New task, start/end expansion, or newly added weekdays — re-check those days
   const daysToCheck =
-    previouslyRepeating && !startChanged ? added : nextRepeatDays;
+    previouslyRepeating && !startChanged && !endExtended
+      ? added
+      : nextRepeatDays;
   if (daysToCheck.length === 0) return;
 
   const today = getTodayString();
@@ -251,8 +280,9 @@ export async function assertCanExpandRepeatDays(
   }
 }
 
+/** Visible tasks on a date (excludes skipped repeats) — for UI, not plan limits. */
 export async function countVisibleTasksOnDate(userId: string, date: string): Promise<number> {
-  return countTasksOnDateForLimits(userId, date);
+  return (await getTasksForDate(userId, date)).length;
 }
 
 export async function countAllUserTasks(userId: string): Promise<number> {

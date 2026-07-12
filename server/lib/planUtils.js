@@ -32,15 +32,19 @@ export function getPlanLimits(plan) {
   return PLAN_LIMITS[plan] ?? PLAN_LIMITS.free;
 }
 
-/** YYYY-MM-DD for the oldest date still visible under historyDays (inclusive). */
+/** YYYY-MM-DD for the oldest date still visible under historyDays (inclusive).
+ *  Uses UTC calendar days so client and server agree regardless of server TZ.
+ */
 export function getHistoryMinDateStr(historyDays) {
   if (historyDays == null) return null;
-  const minDate = new Date();
-  minDate.setHours(0, 0, 0, 0);
-  minDate.setDate(minDate.getDate() - (historyDays - 1));
-  const y = minDate.getFullYear();
-  const m = String(minDate.getMonth() + 1).padStart(2, "0");
-  const d = String(minDate.getDate()).padStart(2, "0");
+  const now = new Date();
+  const minDate = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  );
+  minDate.setUTCDate(minDate.getUTCDate() - (historyDays - 1));
+  const y = minDate.getUTCFullYear();
+  const m = String(minDate.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(minDate.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
 

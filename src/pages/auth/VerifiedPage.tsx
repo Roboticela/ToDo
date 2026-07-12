@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveUser } from "../../lib/db";
 import { getApiBase } from "../../lib/apiBase";
-import type { User } from "../../types/todo";
+import { mapUserFromApi } from "../../lib/mapUserFromApi";
 
 /**
  * Landed after clicking the email verification link.
@@ -33,18 +33,7 @@ export default function VerifiedPage() {
           return;
         }
         const userData = await res.json();
-        const user: User = {
-          id: userData.id,
-          name: userData.name,
-          email: userData.email,
-          avatarUrl: userData.avatarUrl,
-          plan: userData.plan,
-          planExpiresAt: userData.planExpiresAt,
-          emailVerifiedAt: userData.emailVerifiedAt,
-          subscribedToReminders: userData.subscribedToReminders ?? true,
-          hasPassword: userData.hasPassword,
-          createdAt: userData.createdAt,
-        };
+        const user = mapUserFromApi(userData);
         await saveUser(user);
         updateUser(user);
         if (!cancelled) {

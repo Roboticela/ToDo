@@ -1,12 +1,19 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { requireAuth } from "../middleware/auth.js";
-import { uploadAvatarFromDataUrl, deleteAvatarByUrl } from "../services/r2Service.js";
+import {
+  uploadAvatarFromDataUrl,
+  deleteAvatarByUrl,
+  uploadSoundFromDataUrl,
+  deleteSoundByUrl,
+} from "../services/r2Service.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
 import { config } from "../config.js";
 import { cancelActiveSubscriptionsForUser } from "./paddle.js";
 
 const router = Router();
+
+const SOUND_MODES = new Set(["normal", "ringtone", "custom"]);
 
 function toUserResponse(user) {
   const effective = getEffectivePlan(user);
@@ -19,6 +26,11 @@ function toUserResponse(user) {
     planExpiresAt: effective.planExpiresAt ? effective.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
+    taskNotificationsEnabled: user.taskNotificationsEnabled ?? true,
+    notificationSoundMode: SOUND_MODES.has(user.notificationSoundMode)
+      ? user.notificationSoundMode
+      : "normal",
+    customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),
   };
@@ -32,7 +44,15 @@ router.patch("/:userId", requireAuth, async (req, res) => {
   if (req.params.userId !== req.user.id) {
     return res.status(403).json({ error: "Forbidden" });
   }
-  const { name, avatarUrl, subscribedToReminders, plan } = req.body;
+  const {
+    name,
+    avatarUrl,
+    subscribedToReminders,
+    plan,
+    taskNotificationsEnabled,
+    notificationSoundMode,
+    customSoundUrl,
+  } = req.body;
   // Email cannot be changed via PATCH; use request-email-change + confirm-email-change flow
   const updates = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
@@ -83,6 +103,49 @@ router.patch("/:userId", requireAuth, async (req, res) => {
     }
   }
   if (typeof subscribedToReminders === "boolean") updates.subscribedToReminders = subscribedToReminders;
+  if (typeof taskNotificationsEnabled === "boolean") {
+    updates.taskNotificationsEnabled = taskNotificationsEnabled;
+  }
+  if (typeof notificationSoundMode === "string") {
+    if (!SOUND_MODES.has(notificationSoundMode)) {
+      return res.status(400).json({ error: "Invalid notification sound mode" });
+    }
+    updates.notificationSoundMode = notificationSoundMode;
+  }
+  if (customSoundUrl !== undefined) {
+    if (typeof customSoundUrl === "string" && customSoundUrl.trim()) {
+      if (customSoundUrl.startsWith("data:")) {
+        const r2Url = await uploadSoundFromDataUrl(customSoundUrl, req.user.id);
+        if (!r2Url) {
+          return res.status(502).json({
+            error: "Sound upload failed. Use MP3, WAV, OGG, or M4A under 2MB.",
+          });
+        }
+        const previous = req.user.customSoundUrl;
+        updates.customSoundUrl = r2Url;
+        updates.notificationSoundMode = "custom";
+        if (previous && previous !== r2Url) {
+          await deleteSoundByUrl(previous);
+        }
+      } else {
+        const publicBase = (config.r2?.publicUrl || "").replace(/\/$/, "");
+        const trimmed = customSoundUrl.trim();
+        if (publicBase && trimmed.startsWith(publicBase + "/")) {
+          updates.customSoundUrl = trimmed;
+        } else {
+          return res.status(400).json({ error: "Sound must be uploaded as an audio file" });
+        }
+      }
+    } else {
+      if (req.user.customSoundUrl) {
+        await deleteSoundByUrl(req.user.customSoundUrl);
+      }
+      updates.customSoundUrl = null;
+      if (req.user.notificationSoundMode === "custom" && notificationSoundMode === undefined) {
+        updates.notificationSoundMode = "normal";
+      }
+    }
+  }
   if (Object.keys(updates).length === 0) {
     return res.json(toUserResponse(req.user));
   }
@@ -106,6 +169,9 @@ router.delete("/:userId", requireAuth, async (req, res) => {
   }
   if (req.user.avatarUrl) {
     await deleteAvatarByUrl(req.user.avatarUrl);
+  }
+  if (req.user.customSoundUrl) {
+    await deleteSoundByUrl(req.user.customSoundUrl);
   }
   await prisma.user.delete({ where: { id: req.user.id } });
   res.status(204).end();
