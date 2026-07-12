@@ -51,7 +51,7 @@ on:
 # If none are provided a self-signed keystore is generated automatically.
 
 env:
-  APP_NAME: "Roboticela DevKit"
+  APP_NAME: "ToDo"
   NDK_VERSION: "27.0.12077973"
   NODE_VERSION: "24"
 

@@ -1,7 +1,7 @@
 {
-  "name": "roboticela-devkit",
+  "name": "roboticela-todo",
   "private": true,
-  "version": "1.0.0",
+  "version": "0.1.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -41,15 +41,23 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
+    "@tauri-apps/api": "^2.10.1",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "framer-motion": "^12.23.12",
+    "idb": "^8.0.3",
+    "lucide-react": "^0.539.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.1",
+    "recharts": "^3.1.2",
+    "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.2.1"
   },
   "devDependencies": {
-    "@types/node": "^22.15.21",
     "@eslint/js": "^9.29.0",
     "@tauri-apps/cli": "^2.10.1",
+    "@types/node": "^22.15.21",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.5.2",
