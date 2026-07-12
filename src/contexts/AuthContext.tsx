@@ -66,6 +66,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (savedUser) {
             applySession(savedUser, savedSession);
           }
+          // Refresh profile from server so plan / hasPassword aren't stale
+          if (!savedSession.accessToken.startsWith("local_")) {
+            try {
+              const res = await fetch(`${getApiBase()}/api/users/me`, {
+                headers: { Authorization: `Bearer ${savedSession.accessToken}` },
+              });
+              if (res.ok) {
+                const userData = await res.json();
+                const updatedUser: User = {
+                  id: userData.id,
+                  name: userData.name,
+                  email: userData.email,
+                  avatarUrl: userData.avatarUrl,
+                  plan: userData.plan,
+                  planExpiresAt: userData.planExpiresAt,
+                  emailVerifiedAt: userData.emailVerifiedAt,
+                  subscribedToReminders: userData.subscribedToReminders ?? true,
+                  hasPassword: userData.hasPassword,
+                  createdAt: userData.createdAt,
+                };
+                await saveUser(updatedUser);
+                applySession(updatedUser, savedSession);
+              }
+            } catch {
+              // keep cached user
+            }
+          }
           setIsLoading(false);
           return;
         }

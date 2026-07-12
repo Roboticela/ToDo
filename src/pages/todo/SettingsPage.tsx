@@ -165,6 +165,7 @@ export default function SettingsPage() {
       );
       await refreshTasks();
       scheduleSync();
+      window.dispatchEvent(new CustomEvent("tasks-changed"));
       if (result.errors.length > 0) {
         setImportMessage(`Imported ${result.imported} task(s). ${result.errors.length} error(s): ${result.errors.slice(0, 3).join("; ")}${result.errors.length > 3 ? "…" : ""}`);
       } else {

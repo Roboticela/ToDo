@@ -248,6 +248,8 @@ export async function handlePaddleWebhook(req, res) {
     }
   } catch (e) {
     console.error("[paddle] webhook", eventType, e);
+    // Non-2xx so Paddle retries; otherwise plan updates can be lost permanently
+    return res.status(500).end();
   }
 
   res.status(200).end();

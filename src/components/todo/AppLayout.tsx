@@ -7,7 +7,7 @@ import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
 import TodoHeader from "./TodoHeader";
 import VerificationBanner from "./VerificationBanner";
-import { initNotificationScheduler, requestNotificationPermission, clearAllTimers } from "../../lib/notificationService";
+import { initNotificationScheduler, requestNotificationPermission, clearAllTimers, rebuildNotificationsForUser } from "../../lib/notificationService";
 
 // Opacity-only transition to avoid layout/scroll jump when changing pages quickly
 const pageVariants = {
@@ -33,7 +33,7 @@ const ROUTE_TITLES: Record<string, string> = {
 };
 
 export default function AppLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const mainScrollRef = useRef<HTMLDivElement>(null);
@@ -75,14 +75,13 @@ export default function AppLayout() {
 
   // Rebuild reminder schedule after sync (completions/times may have changed on another device)
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || !user) return;
     const rebuild = () => {
-      clearAllTimers();
-      void initNotificationScheduler();
+      void rebuildNotificationsForUser(user.id);
     };
     window.addEventListener("tasks-synced", rebuild);
     return () => window.removeEventListener("tasks-synced", rebuild);
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   if (isLoading) {
     return (

@@ -534,15 +534,26 @@ export async function importTasksFromData(
       const newTaskId = idMap.get(c.taskId);
       if (!newTaskId) continue;
       try {
-        await saveCompletion({
-          id: uuidv4(),
-          taskId: newTaskId,
-          userId,
-          date: c.date,
-          status: c.status as "completed" | "missed" | "skipped",
-          completedAt: c.completedAt || new Date().toISOString(),
-          syncStatus: "pending",
-        });
+        const existing = await getCompletionsByTask(newTaskId);
+        const match = existing.find((e) => e.date === c.date);
+        if (match) {
+          await saveCompletion({
+            ...match,
+            status: c.status as "completed" | "missed" | "skipped",
+            completedAt: c.completedAt || match.completedAt || new Date().toISOString(),
+            syncStatus: "pending",
+          });
+        } else {
+          await saveCompletion({
+            id: uuidv4(),
+            taskId: newTaskId,
+            userId,
+            date: c.date,
+            status: c.status as "completed" | "missed" | "skipped",
+            completedAt: c.completedAt || new Date().toISOString(),
+            syncStatus: "pending",
+          });
+        }
       } catch {
         // skip bad completion rows
       }

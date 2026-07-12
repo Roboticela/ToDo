@@ -18,6 +18,18 @@ interface SyncContextType {
 
 const SyncContext = createContext<SyncContextType | undefined>(undefined);
 
+async function countPendingLocal(userId: string): Promise<number> {
+  const { getAllTasksByUserForSync, getAllCompletionsByUser } = await import("../lib/db");
+  const [tasks, comps] = await Promise.all([
+    getAllTasksByUserForSync(userId),
+    getAllCompletionsByUser(userId),
+  ]);
+  return (
+    tasks.filter((t) => t.syncStatus === "pending").length +
+    comps.filter((c) => c.syncStatus === "pending").length
+  );
+}
+
 export function SyncProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -27,6 +39,18 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const scheduleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInProgressRef = useRef(false);
+
+  const refreshPendingCount = useCallback(async () => {
+    if (!user) {
+      setPendingCount(0);
+      return;
+    }
+    try {
+      setPendingCount(await countPendingLocal(user.id));
+    } catch {
+      // ignore
+    }
+  }, [user]);
 
   const triggerSync = useCallback(async () => {
     if (!navigator.onLine) return;
@@ -50,16 +74,14 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           setSyncError(result.message || "Sync failed");
         }
       }
-      const { getSyncQueue } = await import("../lib/db");
-      const queue = await getSyncQueue();
-      setPendingCount(queue.length);
+      await refreshPendingCount();
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : "Sync failed");
     } finally {
       syncInProgressRef.current = false;
       setIsSyncing(false);
     }
-  }, [user]);
+  }, [user, refreshPendingCount]);
 
   const scheduleSync = useCallback(() => {
     if (scheduleRef.current) clearTimeout(scheduleRef.current);
@@ -67,7 +89,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
       scheduleRef.current = null;
       triggerSync();
     }, SCHEDULED_SYNC_DEBOUNCE_MS);
-  }, [triggerSync]);
+    // Optimistic pending bump while waiting for debounce
+    void refreshPendingCount();
+  }, [triggerSync, refreshPendingCount]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -104,19 +128,21 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    async function checkPending() {
-      try {
-        const { getSyncQueue } = await import("../lib/db");
-        const queue = await getSyncQueue();
-        setPendingCount(queue.length);
-      } catch {
-        // ignore
-      }
-    }
-    checkPending();
-    const interval = setInterval(checkPending, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    void refreshPendingCount();
+    const onChanged = () => {
+      void refreshPendingCount();
+    };
+    window.addEventListener("tasks-changed", onChanged);
+    window.addEventListener("tasks-synced", onChanged);
+    const interval = setInterval(() => {
+      void refreshPendingCount();
+    }, 30000);
+    return () => {
+      window.removeEventListener("tasks-changed", onChanged);
+      window.removeEventListener("tasks-synced", onChanged);
+      clearInterval(interval);
+    };
+  }, [refreshPendingCount]);
 
   return (
     <SyncContext.Provider value={{ isOnline, isSyncing, lastSyncAt, syncError, pendingCount, triggerSync, scheduleSync }}>

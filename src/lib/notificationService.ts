@@ -4,6 +4,7 @@ import {
   getPendingNotifications,
   markNotificationFired,
   getTask,
+  deleteNotificationsByTask,
 } from "./db";
 import { v4 as uuidv4 } from "./uuid";
 import { format, addDays } from "date-fns";
@@ -189,38 +190,33 @@ export async function initNotificationScheduler(): Promise<void> {
 
   for (const notif of pending) {
     const scheduledAt = new Date(notif.scheduledAt);
-    if (scheduledAt > now) {
-      const task = await getTask(notif.taskId);
-      if (task) {
-        scheduleLocalTimer(notif, task);
-      } else {
-        // Keep a generic wake-up even if task lookup fails (chained if far out)
-        const delay = scheduledAt.getTime() - now.getTime();
-        const MAX_DELAY = 7 * 24 * 60 * 60 * 1000;
-        const wait = Math.min(delay, MAX_DELAY);
-        const timerId = setTimeout(async () => {
-          if (delay > MAX_DELAY) {
-            notificationTimers.delete(notif.id);
-            await initNotificationScheduler();
-            return;
-          }
-          if (Notification.permission === "granted") {
-            try {
-              new Notification("Roboticela ToDo", {
-                body: "You have a scheduled task reminder",
-                icon: ICON,
-                tag: notif.id,
-              });
-            } catch {
-              // ignore
-            }
-          }
-          await markNotificationFired(notif.id);
-          notificationTimers.delete(notif.id);
-        }, wait);
-        notificationTimers.set(notif.id, timerId);
-      }
+    if (scheduledAt <= now) continue;
+
+    const task = await getTask(notif.taskId);
+    if (!task) {
+      // Orphan reminder (task deleted remotely) — drop it
+      await markNotificationFired(notif.id);
+      continue;
     }
+    scheduleLocalTimer(notif, task);
+  }
+}
+
+/**
+ * Wipe pending notification rows/timers and reschedule from current local tasks.
+ * Call after sync so reminders match cross-device changes and orphans are gone.
+ */
+export async function rebuildNotificationsForUser(userId: string): Promise<void> {
+  clearAllTimers();
+  const pending = await getPendingNotifications();
+  const taskIds = new Set(pending.map((n) => n.taskId));
+  for (const taskId of taskIds) {
+    await deleteNotificationsByTask(taskId);
+  }
+  const { getAllTasksByUser } = await import("./db");
+  const tasks = await getAllTasksByUser(userId);
+  for (const task of tasks) {
+    await scheduleTaskNotifications(task);
   }
 }
 

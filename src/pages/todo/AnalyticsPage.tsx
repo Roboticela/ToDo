@@ -28,7 +28,7 @@ import {
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { getAnalyticsForDateRange, getEarliestTaskDate } from "../../lib/taskService";
-import { getHistoryCutoff } from "../../lib/planLimits";
+import { getHistoryCutoff, getEffectiveClientPlan } from "../../lib/planLimits";
 import DatePicker from "../../components/todo/DatePicker";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -142,8 +142,9 @@ export default function AnalyticsPage() {
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [effectiveTo, setEffectiveTo] = useState("");
 
-  // Free plan: analytics is a paid feature — show upgrade prompt instead of full charts
-  const isFreePlan = !user?.plan || user.plan === "free" || user.plan === "pending";
+  // Free plan: analytics is a paid feature — honour planExpiresAt like the rest of the app
+  const isFreePlan =
+    !user || getEffectiveClientPlan(user.plan, user.planExpiresAt) === "free";
 
   // Load earliest date once
   useEffect(() => {
@@ -187,10 +188,37 @@ export default function AnalyticsPage() {
       setEffectiveFrom(startDate);
     }
 
+    let cancelled = false;
     getAnalyticsForDateRange(user.id, startDate, endDate)
-      .then(setStats)
-      .finally(() => setIsLoading(false));
+      .then((s) => {
+        if (!cancelled) setStats(s);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user, range, customFrom, customTo, earliestDate, isFreePlan]);
+
+  // Refresh analytics after local edits or sync
+  useEffect(() => {
+    if (!user || isFreePlan) return;
+    const reload = () => {
+      const today = format(new Date(), "yyyy-MM-dd");
+      let startDate = effectiveFrom || format(subDays(new Date(), 6), "yyyy-MM-dd");
+      const endDate = effectiveTo || today;
+      const cutoff = getHistoryCutoff(user.plan, user.planExpiresAt);
+      if (cutoff && startDate < cutoff) startDate = cutoff;
+      getAnalyticsForDateRange(user.id, startDate, endDate).then(setStats);
+    };
+    window.addEventListener("tasks-synced", reload);
+    window.addEventListener("tasks-changed", reload);
+    return () => {
+      window.removeEventListener("tasks-synced", reload);
+      window.removeEventListener("tasks-changed", reload);
+    };
+  }, [user, isFreePlan, effectiveFrom, effectiveTo]);
 
   // Build X-axis date format based on range span
   const daySpan = effectiveFrom && effectiveTo
