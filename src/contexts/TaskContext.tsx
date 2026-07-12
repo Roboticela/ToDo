@@ -124,7 +124,8 @@ export function TaskProvider({ children }: { children: ReactNode }) {
           nextDays,
           task.isRepeating,
           task.repeatDays ?? [],
-          user.planExpiresAt
+          user.planExpiresAt,
+          task.date
         );
       }
       const updated = await svcUpdate(task, data);

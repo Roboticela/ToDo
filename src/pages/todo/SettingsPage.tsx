@@ -31,6 +31,7 @@ import { getApiBase } from "../../lib/apiBase";
 import type { User as UserType } from "../../types/todo";
 import { getExportData, importTasksFromData } from "../../lib/taskService";
 import { PLAN_FEATURES } from "../../types/todo";
+import { getEffectiveClientPlan } from "../../lib/planLimits";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
@@ -101,14 +102,17 @@ export default function SettingsPage() {
     }
   }
 
-  const planKey = currentUser.plan === "pending" ? "free" : currentUser.plan;
-  const plan = PLAN_FEATURES[planKey];
+  const effectivePlan =
+    currentUser.plan === "pending"
+      ? "free"
+      : getEffectiveClientPlan(currentUser.plan, currentUser.planExpiresAt);
+  const plan = PLAN_FEATURES[effectivePlan];
   const planLabel =
-    currentUser.plan === "free"
+    effectivePlan === "free"
       ? "Free"
-      : currentUser.plan === "basic"
+      : effectivePlan === "basic"
         ? "$5/mo"
-        : currentUser.plan === "pro"
+        : effectivePlan === "pro"
           ? "$8/mo"
           : "Lifetime";
 
@@ -224,24 +228,24 @@ export default function SettingsPage() {
             onClick={() => navigate("/todo/subscription")}
             className={cn(
               "flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-semibold transition-all hover:scale-105",
-              currentUser.plan === "free"
+              effectivePlan === "free"
                 ? "bg-accent/30 border-border text-foreground/60"
-                : currentUser.plan === "basic"
+                : effectivePlan === "basic"
                   ? "bg-blue-500/10 border-blue-500/30 text-blue-400"
-                  : currentUser.plan === "lifetime"
+                  : effectivePlan === "lifetime"
                     ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
                     : "bg-amber-500/10 border-amber-500/30 text-amber-400"
             )}
           >
             <Crown className="w-3.5 h-3.5" />
-            {currentUser.plan === "free"
+            {effectivePlan === "free"
               ? "Free Plan"
-              : currentUser.plan === "basic"
+              : effectivePlan === "basic"
                 ? "Basic Plan"
-                : currentUser.plan === "lifetime"
+                : effectivePlan === "lifetime"
                   ? "Lifetime Plan"
                   : "Pro Plan"}
-            {currentUser.plan === "free" && <span className="text-xs text-primary/70 ml-1">Upgrade →</span>}
+            {effectivePlan === "free" && <span className="text-xs text-primary/70 ml-1">Upgrade →</span>}
           </button>
         </motion.div>
 
@@ -359,7 +363,7 @@ export default function SettingsPage() {
                 {plan.maxDailyTasks === null ? "Unlimited" : `Max ${plan.maxDailyTasks}/day`}
               </span>
             </div>
-            {currentUser.plan !== "pro" && currentUser.plan !== "lifetime" && (
+            {effectivePlan !== "pro" && effectivePlan !== "lifetime" && (
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.97 }}

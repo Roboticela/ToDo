@@ -100,13 +100,23 @@ async function wouldExceedDailyCapForRepeatDays(
   today.setHours(12, 0, 0, 0);
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const fromStr = startDate && startDate > todayStr ? startDate : todayStr;
+  const WEEKS = 4;
 
   for (const dow of repeatDays) {
     if (typeof dow !== "number") continue;
-    const sample = nextDateOnWeekday(fromStr, dow);
-    if (endDate && sample > endDate) continue;
-    const count = await countTasksOnDate(userId, sample, excludeId);
-    if (count >= maxDailyTasks) return true;
+    let sample = nextDateOnWeekday(fromStr, dow);
+    for (let w = 0; w < WEEKS; w++) {
+      if (endDate && sample > endDate) break;
+      const count = await countTasksOnDate(userId, sample, excludeId);
+      if (count >= maxDailyTasks) return true;
+      // advance one week
+      const d = new Date(sample + "T12:00:00");
+      d.setDate(d.getDate() + 7);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      sample = `${y}-${m}-${day}`;
+    }
   }
   return false;
 }

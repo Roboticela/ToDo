@@ -142,7 +142,7 @@ const PLAN_META: {
 const FAQ_ITEMS = [
   {
     q: "Can I change or cancel my plan anytime?",
-    a: "Yes. You can upgrade, downgrade, or cancel your subscription at any time. Changes take effect at the end of your current billing period.",
+    a: "Yes. Use Manage Subscription to change or cancel a Basic/Pro plan (changes apply at the end of the billing period). You can buy Lifetime anytime — it cancels any active recurring subscription.",
   },
   {
     q: "What payment methods do you accept?",

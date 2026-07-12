@@ -1,10 +1,11 @@
-import type { SubscriptionPlan, TaskFormData } from "../types/todo";
+import type { RepeatDay, SubscriptionPlan, TaskFormData } from "../types/todo";
 import { PLAN_FEATURES } from "../types/todo";
 import {
   getAllTasksByUser,
   getRepeatTasksByUser,
+  getTasksByUserAndDate,
 } from "./db";
-import { getTasksForDate, getTodayString } from "./taskService";
+import { getTodayString } from "./taskService";
 import { format, subDays } from "date-fns";
 
 export class PlanLimitError extends Error {
@@ -61,6 +62,51 @@ export function clampDateToHistory(
   return { date, clamped: false };
 }
 
+/**
+ * Count tasks on a date for plan limits — matches server (includes skipped repeats).
+ */
+async function countTasksOnDateForLimits(
+  userId: string,
+  date: string,
+  excludeId?: string
+): Promise<number> {
+  const dayOfWeek = new Date(date + "T12:00:00").getDay() as RepeatDay;
+  const direct = (await getTasksByUserAndDate(userId, date)).filter(
+    (t) => !t.isRepeating && t.id !== excludeId
+  );
+  const repeats = await getRepeatTasksByUser(userId);
+  const matching = repeats.filter(
+    (t) =>
+      t.id !== excludeId &&
+      Array.isArray(t.repeatDays) &&
+      t.repeatDays.includes(dayOfWeek) &&
+      date >= t.date &&
+      (!t.endDate || date <= t.endDate)
+  );
+  return direct.length + matching.length;
+}
+
+/** Sample the next few occurrences of each weekday (aligned with server). */
+const REPEAT_CAP_WEEKS = 4;
+
+function sampleDatesForWeekday(
+  from: string,
+  dow: number,
+  endDate: string | null | undefined
+): string[] {
+  const out: string[] = [];
+  const sample = new Date(from + "T12:00:00");
+  const delta = (dow - sample.getDay() + 7) % 7;
+  sample.setDate(sample.getDate() + delta);
+  for (let w = 0; w < REPEAT_CAP_WEEKS; w++) {
+    const sampleStr = format(sample, "yyyy-MM-dd");
+    if (endDate && sampleStr > endDate) break;
+    out.push(sampleStr);
+    sample.setDate(sample.getDate() + 7);
+  }
+  return out;
+}
+
 export async function assertCanCreateTask(
   userId: string,
   plan: string | undefined,
@@ -102,11 +148,12 @@ export async function assertCanCreateTask(
         data.repeatDays,
         false,
         [],
-        planExpiresAt
+        planExpiresAt,
+        null
       );
     } else if (!data.isRepeating) {
-      const existing = await getTasksForDate(userId, data.date);
-      if (existing.length >= features.maxDailyTasks) {
+      const count = await countTasksOnDateForLimits(userId, data.date);
+      if (count >= features.maxDailyTasks) {
         throw new PlanLimitError(
           "MAX_DAILY_TASKS",
           features.maxDailyTasks,
@@ -151,9 +198,8 @@ export async function assertCanMoveTaskToDate(
   if (isRepeating || fromDate === toDate) return;
   const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.maxDailyTasks == null) return;
-  const existing = await getTasksForDate(userId, toDate);
-  const others = existing.filter((t) => t.id !== taskId);
-  if (others.length >= features.maxDailyTasks) {
+  const count = await countTasksOnDateForLimits(userId, toDate, taskId);
+  if (count >= features.maxDailyTasks) {
     throw new PlanLimitError(
       "MAX_DAILY_TASKS",
       features.maxDailyTasks,
@@ -172,7 +218,8 @@ export async function assertCanExpandRepeatDays(
   nextRepeatDays: number[],
   previouslyRepeating: boolean,
   previousRepeatDays: number[],
-  planExpiresAt?: string | null
+  planExpiresAt?: string | null,
+  previousStartDate?: string | null
 ): Promise<void> {
   const features = PLAN_FEATURES[getEffectiveClientPlan(plan, planExpiresAt)];
   if (features.maxDailyTasks == null) return;
@@ -180,33 +227,32 @@ export async function assertCanExpandRepeatDays(
 
   const prevSet = new Set(previouslyRepeating ? previousRepeatDays : []);
   const added = nextRepeatDays.filter((d) => !prevSet.has(d));
-  // New repeating task: check all days. Existing: only newly added weekdays.
-  const daysToCheck = previouslyRepeating ? added : nextRepeatDays;
+  const startChanged =
+    previousStartDate != null && previousStartDate !== startDate;
+  // New task, start-date change, or newly added weekdays — re-check those days
+  const daysToCheck =
+    previouslyRepeating && !startChanged ? added : nextRepeatDays;
   if (daysToCheck.length === 0) return;
 
   const today = getTodayString();
   const from = startDate > today ? startDate : today;
 
   for (const dow of daysToCheck) {
-    const sample = new Date(from + "T12:00:00");
-    const delta = (dow - sample.getDay() + 7) % 7;
-    sample.setDate(sample.getDate() + delta);
-    const sampleStr = format(sample, "yyyy-MM-dd");
-    if (endDate && sampleStr > endDate) continue;
-    const existing = await getTasksForDate(userId, sampleStr);
-    const others = existing.filter((t) => t.id !== taskId);
-    if (others.length >= features.maxDailyTasks) {
-      throw new PlanLimitError(
-        "MAX_DAILY_TASKS",
-        features.maxDailyTasks,
-        `Your plan allows up to ${features.maxDailyTasks} tasks on a day. Upgrade to add more.`
-      );
+    for (const sampleStr of sampleDatesForWeekday(from, dow, endDate)) {
+      const count = await countTasksOnDateForLimits(userId, sampleStr, taskId || undefined);
+      if (count >= features.maxDailyTasks) {
+        throw new PlanLimitError(
+          "MAX_DAILY_TASKS",
+          features.maxDailyTasks,
+          `Your plan allows up to ${features.maxDailyTasks} tasks on a day. Upgrade to add more.`
+        );
+      }
     }
   }
 }
 
 export async function countVisibleTasksOnDate(userId: string, date: string): Promise<number> {
-  return (await getTasksForDate(userId, date)).length;
+  return countTasksOnDateForLimits(userId, date);
 }
 
 export async function countAllUserTasks(userId: string): Promise<number> {

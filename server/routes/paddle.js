@@ -24,16 +24,46 @@ function normalizeSubStatus(raw) {
   return s || "active";
 }
 
+/** Match against configured Paddle price IDs only — never substring-match `pro_` product ids. */
+function configuredPricePlan(priceId) {
+  if (!priceId) return null;
+  const id = priceId.toString().toLowerCase();
+  const p = config.paddle;
+  const basic = [p.priceIdBasicMonthly, p.priceIdBasicYearly]
+    .filter(Boolean)
+    .map((x) => x.toLowerCase());
+  const pro = [p.priceIdProMonthly, p.priceIdProYearly]
+    .filter(Boolean)
+    .map((x) => x.toLowerCase());
+  if (pro.includes(id)) return "pro";
+  if (basic.includes(id)) return "basic";
+  return null;
+}
+
 function planFromPriceHints(sub, customData, fallbackPlan) {
   const planFromCustom =
     customData?.plan === "pro" || customData?.plan === "basic" ? customData.plan : null;
   if (planFromCustom) return planFromCustom;
-  const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
-  const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
-  if (priceId.includes("pro") || productId.includes("pro")) return "pro";
-  if (priceId.includes("basic") || productId.includes("basic")) return "basic";
+  const fromPrice = configuredPricePlan(sub.items?.[0]?.price?.id);
+  if (fromPrice) return fromPrice;
   if (fallbackPlan === "pro" || fallbackPlan === "basic") return fallbackPlan;
   return null;
+}
+
+async function userHasLifetime(userId) {
+  if (!userId) return false;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { plan: true },
+  });
+  return user?.plan === "lifetime";
+}
+
+/** Never downgrade or overwrite a lifetime plan from subscription webhooks. */
+async function setUserPlanUnlessLifetime(userId, data) {
+  if (await userHasLifetime(userId)) return false;
+  await prisma.user.update({ where: { id: userId }, data });
+  return true;
 }
 
 /**
@@ -54,12 +84,19 @@ async function resolveSubscriptionOwner(sub) {
   }
 
   if (sub.customer_id) {
-    const byCustomer = await prisma.subscription.findFirst({
+    const byCustomer = await prisma.subscription.findMany({
       where: { paddleCustomerId: sub.customer_id },
       orderBy: { updatedAt: "desc" },
     });
-    if (byCustomer?.userId) {
-      return { userId: byCustomer.userId, planHint: byCustomer.plan, customData, existing: byCustomer };
+    const userIds = [...new Set(byCustomer.map((s) => s.userId).filter(Boolean))];
+    // Only trust customer_id when it maps to exactly one of our users
+    if (userIds.length === 1 && byCustomer[0]) {
+      return {
+        userId: userIds[0],
+        planHint: byCustomer[0].plan,
+        customData,
+        existing: byCustomer[0],
+      };
     }
   }
 
@@ -89,6 +126,7 @@ async function resolveSubscriptionOwner(sub) {
 }
 
 async function applyPaidPeriodOrFree(userId, plan, periodEndDate) {
+  if (await userHasLifetime(userId)) return;
   const stillInPaidPeriod = periodEndDate && periodEndDate > new Date();
   if (stillInPaidPeriod) {
     await prisma.user.update({
@@ -139,10 +177,22 @@ function getPriceId(plan, interval = "yearly") {
   return null;
 }
 
+function isPaddleConfigured() {
+  const p = config.paddle;
+  return Boolean(
+    p.apiKey &&
+      (p.priceIdBasicMonthly ||
+        p.priceIdBasicYearly ||
+        p.priceIdProMonthly ||
+        p.priceIdProYearly ||
+        p.priceIdLifetime)
+  );
+}
+
 // Create checkout (transaction) for a plan. Returns checkout URL.
 // Body: { plan: "basic" | "pro" | "lifetime", interval?: "monthly" | "yearly" } (default interval: yearly)
 router.post("/create-checkout", requireAuth, async (req, res) => {
-  if (!config.paddle.apiKey || !config.paddle.priceIdBasicYearly) {
+  if (!isPaddleConfigured()) {
     return res.status(503).json({ error: "Subscriptions are not configured" });
   }
   const { plan, interval } = req.body;
@@ -160,26 +210,34 @@ router.post("/create-checkout", requireAuth, async (req, res) => {
     });
   }
 
-  const now = new Date();
-  const blockingSub = await prisma.subscription.findFirst({
-    where: {
-      userId: req.user.id,
-      OR: [
-        { status: { in: ["active", "past_due"] } },
-        { status: "cancelled", currentPeriodEnd: { gt: now } },
-      ],
-    },
-  });
-  if (blockingSub) {
-    return res.status(409).json({
-      error: "You already have a subscription. Use Manage Subscription to change or cancel it first.",
+  // Lifetime may be bought while a recurring sub exists — webhook cancels it.
+  // Basic/Pro still require managing the existing sub first (avoid double billing).
+  if (plan !== "lifetime") {
+    const now = new Date();
+    const blockingSub = await prisma.subscription.findFirst({
+      where: {
+        userId: req.user.id,
+        OR: [
+          { status: { in: ["active", "past_due"] } },
+          { status: "cancelled", currentPeriodEnd: { gt: now } },
+        ],
+      },
     });
+    if (blockingSub) {
+      return res.status(409).json({
+        error: "You already have a subscription. Use Manage Subscription to change or cancel it first.",
+      });
+    }
   }
 
   try {
     const tx = await paddleRequest("POST", "/transactions", {
       items: [{ price_id: priceId, quantity: 1 }],
-      custom_data: { user_id: req.user.id, plan: plan || "basic" },
+      custom_data: {
+        user_id: req.user.id,
+        plan: plan || "basic",
+        interval: plan === "lifetime" ? "lifetime" : billingInterval,
+      },
       customer_ip: req.ip || undefined,
     });
     const checkoutUrl = tx.data?.checkout?.url;
@@ -192,6 +250,14 @@ router.post("/create-checkout", requireAuth, async (req, res) => {
     res.status(502).json({ error: e.message || "Checkout creation failed" });
   }
 });
+
+/** Prefer Paddle billing_period; else existing DB end; else interval-aware fallback. */
+function resolvePeriodEndDate(endsAt, existingEnd, intervalHint) {
+  if (endsAt) return new Date(endsAt);
+  if (existingEnd) return new Date(existingEnd);
+  const days = intervalHint === "yearly" ? 370 : 35;
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
 
 /**
  * Paddle webhook handler. Must be mounted with express.raw({ type: "application/json" })
@@ -241,7 +307,13 @@ export async function handlePaddleWebhook(req, res) {
     return res.status(401).end();
   }
 
-  const payload = typeof raw === "object" && !Buffer.isBuffer(raw) ? raw : JSON.parse(bodyStr);
+  let payload;
+  try {
+    payload =
+      typeof raw === "object" && !Buffer.isBuffer(raw) ? raw : JSON.parse(bodyStr);
+  } catch {
+    return res.status(400).end();
+  }
   const eventType = payload.event_type;
   const data = payload.data || {};
 
@@ -273,7 +345,11 @@ export async function handlePaddleWebhook(req, res) {
             OR: [{ id: tx.subscription_id }, { paddleSubscriptionId: tx.subscription_id }],
           },
         });
-        const periodEndDate = existingSub?.currentPeriodEnd ?? fallbackPeriodEnd(null);
+        const periodEndDate = resolvePeriodEndDate(
+          tx.billing_period?.ends_at || existingSub?.currentPeriodEnd,
+          null,
+          customData.interval
+        );
         await prisma.subscription.upsert({
           where: { id: tx.subscription_id },
           create: {
@@ -291,18 +367,23 @@ export async function handlePaddleWebhook(req, res) {
             plan: planFromData,
             status: "active",
             // leave currentPeriodEnd untouched if subscription.* already set the real ends_at
+            ...(existingSub?.currentPeriodEnd
+              ? {}
+              : { currentPeriodEnd: periodEndDate }),
           },
         });
         const userRow = await prisma.user.findUnique({ where: { id: userId } });
-        const planExpiresAt =
-          existingSub?.currentPeriodEnd ||
-          (userRow?.planExpiresAt && userRow.planExpiresAt > periodEndDate
-            ? userRow.planExpiresAt
-            : periodEndDate);
-        await prisma.user.update({
-          where: { id: userId },
-          data: { plan: planFromData, planExpiresAt },
-        });
+        if (userRow?.plan !== "lifetime") {
+          const planExpiresAt =
+            existingSub?.currentPeriodEnd ||
+            (userRow?.planExpiresAt && userRow.planExpiresAt > periodEndDate
+              ? userRow.planExpiresAt
+              : periodEndDate);
+          await prisma.user.update({
+            where: { id: userId },
+            data: { plan: planFromData, planExpiresAt },
+          });
+        }
       }
     } else if (eventType === "subscription.created" || eventType === "subscription.activated") {
       const sub = data;
@@ -314,7 +395,9 @@ export async function handlePaddleWebhook(req, res) {
           console.error("[paddle] subscription event missing plan hint", eventType, sub.id);
         } else {
           const periodEnd = sub.current_billing_period?.ends_at;
-          const periodEndDate = periodEnd ? new Date(periodEnd) : fallbackPeriodEnd(null);
+          const periodEndDate = periodEnd
+            ? new Date(periodEnd)
+            : resolvePeriodEndDate(null, null, resolved.customData?.interval);
           await prisma.subscription.upsert({
             where: { id: sub.id },
             create: {
@@ -334,12 +417,9 @@ export async function handlePaddleWebhook(req, res) {
               paddleCustomerId: sub.customer_id || undefined,
             },
           });
-          await prisma.user.update({
-            where: { id: userId },
-            data: {
-              plan,
-              planExpiresAt: periodEndDate,
-            },
+          await setUserPlanUnlessLifetime(userId, {
+            plan,
+            planExpiresAt: periodEndDate,
           });
         }
       } else if (sub.id) {
@@ -360,7 +440,7 @@ export async function handlePaddleWebhook(req, res) {
         const periodEnd = sub.current_billing_period?.ends_at;
         const periodEndDate = periodEnd
           ? new Date(periodEnd)
-          : fallbackPeriodEnd(existing?.currentPeriodEnd);
+          : resolvePeriodEndDate(null, existing?.currentPeriodEnd, resolved.customData?.interval);
         const ownerId = existing?.userId || resolved.userId;
         const status = normalizeSubStatus(sub.status || existing?.status);
 
@@ -385,15 +465,12 @@ export async function handlePaddleWebhook(req, res) {
           });
 
           if (status === "active" || status === "past_due" || status === "trialing") {
-            await prisma.user.update({
-              where: { id: ownerId },
-              data: {
-                plan,
-                planExpiresAt: periodEndDate,
-              },
+            await setUserPlanUnlessLifetime(ownerId, {
+              plan,
+              planExpiresAt: periodEndDate,
             });
           } else {
-            // paused, cancelled, inactive, etc. — honor paid period then free
+            // paused, cancelled, inactive, etc. — honor paid period then free (skips lifetime)
             await applyPaidPeriodOrFree(ownerId, existing?.plan || plan, periodEndDate);
           }
         }
@@ -419,12 +496,9 @@ export async function handlePaddleWebhook(req, res) {
         });
 
         if (eventType === "subscription.past_due") {
-          await prisma.user.update({
-            where: { id: existing.userId },
-            data: {
-              plan: existing.plan,
-              planExpiresAt: periodEndDate || fallbackPeriodEnd(existing.currentPeriodEnd),
-            },
+          await setUserPlanUnlessLifetime(existing.userId, {
+            plan: existing.plan,
+            planExpiresAt: periodEndDate || fallbackPeriodEnd(existing.currentPeriodEnd),
           });
         } else {
           await applyPaidPeriodOrFree(existing.userId, existing.plan, periodEndDate);
