@@ -57,6 +57,7 @@ function toUserResponse(user) {
     planExpiresAt: effective.planExpiresAt ? effective.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
+    hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -294,6 +295,7 @@ router.post("/reset-password", async (req, res) => {
         where: { id: reset.id },
         data: { usedAt: new Date() },
       }),
+      prisma.session.deleteMany({ where: { userId: reset.userId } }),
     ]);
 
     res.json({ message: "Password updated. You can now sign in." });

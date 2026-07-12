@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, User, CheckSquare } from "lucide-react";
@@ -25,7 +25,6 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
-  const pollingRef = useRef(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,13 +70,11 @@ export default function RegisterPage() {
 
   // Desktop: poll backend for code after user signs up with Google in browser
   useEffect(() => {
-    if (!isTauri() || !pendingRequestId || pollingRef.current) return;
-    pollingRef.current = true;
+    if (!isTauri() || !pendingRequestId) return;
     let cancelled = false;
     (async () => {
       const code = await pollDesktopPending(pendingRequestId);
       if (cancelled) return;
-      pollingRef.current = false;
       setPendingRequestId(null);
       if (code) {
         const ok = await completeDesktopAuthWithCode(code, setAuthData);
@@ -90,7 +87,7 @@ export default function RegisterPage() {
     return () => {
       cancelled = true;
     };
-  }, [isTauri(), pendingRequestId, setAuthData, navigate]);
+  }, [pendingRequestId, setAuthData, navigate]);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">

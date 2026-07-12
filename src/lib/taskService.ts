@@ -390,30 +390,48 @@ export interface ExportData {
   exportedAt: string;
   app: string;
   tasks: Task[];
+  completions?: Array<{
+    id: string;
+    taskId: string;
+    userId: string;
+    date: string;
+    status: string;
+    completedAt: string;
+  }>;
 }
 
-const EXPORT_VERSION = 1;
+const EXPORT_VERSION = 2;
 
 export async function getExportData(userId: string): Promise<ExportData> {
-  const tasks = await getAllTasksByUser(userId);
+  const [tasks, completions] = await Promise.all([
+    getAllTasksByUser(userId),
+    getAllCompletionsByUser(userId),
+  ]);
   return {
     version: EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
     app: "Roboticela ToDo",
     tasks,
+    completions,
   };
 }
 
 export async function importTasksFromData(
   userId: string,
-  data: unknown
+  data: unknown,
+  plan?: string
 ): Promise<{ imported: number; errors: string[] }> {
   const errors: string[] = [];
   const parsed = data as ExportData;
   if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.tasks)) {
     return { imported: 0, errors: ["Invalid export file: missing or invalid tasks array."] };
   }
+
+  const { assertCanCreateTask } = await import("./planLimits");
+  const { v4: uuidv4 } = await import("./uuid");
   let imported = 0;
+  const idMap = new Map<string, string>();
+
   for (let i = 0; i < parsed.tasks.length; i++) {
     const t = parsed.tasks[i];
     if (!t || typeof t.title !== "string" || !t.title.trim()) {
@@ -434,11 +452,46 @@ export async function importTasksFromData(
       repeatDays: Array.isArray(t.repeatDays) ? (t.repeatDays as RepeatDay[]) : [],
     };
     try {
-      await createTask(userId, formData);
+      await assertCanCreateTask(userId, plan, formData);
+      const created = await createTask(userId, formData);
+      if (t.id) idMap.set(t.id, created.id);
+      if (t.endDate || t.status === "completed" || t.completedAt) {
+        const patched: Task = {
+          ...created,
+          endDate: t.endDate,
+          status: t.status === "completed" ? "completed" : created.status,
+          completedAt: t.completedAt,
+          updatedAt: new Date().toISOString(),
+          syncStatus: "pending",
+        };
+        await saveTask(patched);
+      }
       imported++;
     } catch (err) {
       errors.push(`Row ${i + 1}: ${err instanceof Error ? err.message : "Failed to create task"}`);
     }
   }
+
+  if (Array.isArray(parsed.completions)) {
+    for (const c of parsed.completions) {
+      if (!c?.taskId || !c?.date || !c?.status) continue;
+      const newTaskId = idMap.get(c.taskId);
+      if (!newTaskId) continue;
+      try {
+        await saveCompletion({
+          id: uuidv4(),
+          taskId: newTaskId,
+          userId,
+          date: c.date,
+          status: c.status as "completed" | "missed" | "skipped",
+          completedAt: c.completedAt || new Date().toISOString(),
+          syncStatus: "pending",
+        });
+      } catch {
+        // skip bad completion rows
+      }
+    }
+  }
+
   return { imported, errors };
 }

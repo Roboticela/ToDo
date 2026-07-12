@@ -141,6 +141,7 @@ router.post("/", requireAuth, async (req, res) => {
       endTime: body.endTime ?? null,
       isRepeating: Boolean(body.isRepeating),
       repeatDays: Array.isArray(body.repeatDays) ? body.repeatDays : [],
+      endDate: body.endDate ?? null,
       status: body.status || "pending",
       completedAt: body.completedAt ? new Date(body.completedAt) : null,
     },
@@ -172,6 +173,25 @@ router.patch("/:id", requireAuth, async (req, res) => {
   if (body.status !== undefined) data.status = body.status;
   if (body.completedAt !== undefined) data.completedAt = body.completedAt ? new Date(body.completedAt) : null;
   if (body.deletedAt !== undefined) data.deletedAt = body.deletedAt ? new Date(body.deletedAt) : null;
+
+  const enablingRepeat =
+    data.isRepeating === true && !existing.isRepeating;
+  if (enablingRepeat) {
+    const effective = getEffectivePlan(req.user);
+    const limits = getPlanLimits(effective.plan);
+    if (limits.maxRepeatTasks != null) {
+      const repeatCount = await prisma.task.count({
+        where: { userId: req.user.id, deletedAt: null, isRepeating: true },
+      });
+      if (repeatCount >= limits.maxRepeatTasks) {
+        return res.status(403).json({
+          error: "Plan limit reached",
+          code: "MAX_REPEAT_TASKS",
+          limit: limits.maxRepeatTasks,
+        });
+      }
+    }
+  }
 
   const task = await prisma.task.update({
     where: { id: req.params.id },
@@ -230,6 +250,10 @@ router.post("/:taskId/completions", requireAuth, async (req, res) => {
 router.post("/sync", requireAuth, async (req, res) => {
   const { tasks = [], completions = [] } = req.body;
   const userId = req.user.id;
+  const effective = getEffectivePlan(req.user);
+  const limits = getPlanLimits(effective.plan);
+
+  const clientTaskIds = [];
 
   for (const t of tasks) {
     if (!t.id || !t.title || !t.type || !t.category || !t.date) continue;
@@ -240,6 +264,54 @@ router.post("/sync", requireAuth, async (req, res) => {
       continue;
     }
 
+    // Last-write-wins: skip stale client updates
+    if (existing && t.updatedAt && existing.updatedAt) {
+      const clientTs = new Date(t.updatedAt).getTime();
+      const serverTs = new Date(existing.updatedAt).getTime();
+      if (!Number.isNaN(clientTs) && clientTs < serverTs) {
+        clientTaskIds.push(t.id);
+        continue;
+      }
+    }
+
+    const willBeRepeating = Boolean(t.isRepeating);
+    const isNew = !existing;
+    const enablingRepeat = willBeRepeating && (!existing || !existing.isRepeating);
+
+    if ((isNew && willBeRepeating) || enablingRepeat) {
+      if (limits.maxRepeatTasks != null) {
+        const repeatCount = await prisma.task.count({
+          where: { userId, deletedAt: null, isRepeating: true },
+        });
+        // Count existing row toward limit only if already repeating
+        const alreadyCounted = existing?.isRepeating ? 1 : 0;
+        if (repeatCount - alreadyCounted >= limits.maxRepeatTasks) {
+          continue;
+        }
+      }
+    }
+
+    if (isNew && limits.maxDailyTasks != null && !willBeRepeating) {
+      const dayOfWeek = new Date(t.date + "T12:00:00").getDay();
+      const oneTimeCount = await prisma.task.count({
+        where: { userId, deletedAt: null, date: t.date, isRepeating: false },
+      });
+      const repeatingOnDay = await prisma.task.count({
+        where: {
+          userId,
+          deletedAt: null,
+          isRepeating: true,
+          date: { lte: t.date },
+          OR: [{ endDate: null }, { endDate: { gte: t.date } }],
+          repeatDays: { has: dayOfWeek },
+        },
+      });
+      if (oneTimeCount + repeatingOnDay >= limits.maxDailyTasks) {
+        continue;
+      }
+    }
+
+    clientTaskIds.push(t.id);
     await prisma.task.upsert({
       where: { id: t.id },
       create: {
@@ -254,7 +326,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         time: t.time ?? null,
         startTime: t.startTime ?? null,
         endTime: t.endTime ?? null,
-        isRepeating: Boolean(t.isRepeating),
+        isRepeating: willBeRepeating,
         repeatDays: Array.isArray(t.repeatDays) ? t.repeatDays : [],
         endDate: t.endDate ?? null,
         status: t.status || "pending",
@@ -271,7 +343,7 @@ router.post("/sync", requireAuth, async (req, res) => {
         time: t.time ?? null,
         startTime: t.startTime ?? null,
         endTime: t.endTime ?? null,
-        isRepeating: Boolean(t.isRepeating),
+        isRepeating: willBeRepeating,
         repeatDays: Array.isArray(t.repeatDays) ? t.repeatDays : [],
         endDate: t.endDate ?? null,
         status: t.status || "pending",
@@ -311,11 +383,13 @@ router.post("/sync", requireAuth, async (req, res) => {
     });
   }
 
-  // Drop completions removed locally (e.g. uncomplete) so they don't resurrect
-  if (Array.isArray(completions)) {
+  // Prune completions only for tasks the client actually sent.
+  // Empty local DB (fresh device) sends no tasks → skip delete → server data is returned intact.
+  if (clientTaskIds.length > 0) {
     await prisma.taskCompletion.deleteMany({
       where: {
         userId,
+        taskId: { in: clientTaskIds },
         ...(clientCompletionIds.length > 0
           ? { id: { notIn: clientCompletionIds } }
           : {}),
@@ -323,13 +397,30 @@ router.post("/sync", requireAuth, async (req, res) => {
     });
   }
 
-  const allTasks = await prisma.task.findMany({
+  let allTasks = await prisma.task.findMany({
     where: { userId, deletedAt: null },
     orderBy: [{ date: "asc" }, { time: "asc" }],
   });
-  const allCompletions = await prisma.taskCompletion.findMany({
+  let allCompletions = await prisma.taskCompletion.findMany({
     where: { userId },
   });
+
+  // Clamp history for free/basic plans in the sync response (and thus local store)
+  if (limits.historyDays != null) {
+    const minDate = new Date();
+    minDate.setHours(0, 0, 0, 0);
+    minDate.setDate(minDate.getDate() - (limits.historyDays - 1));
+    const y = minDate.getFullYear();
+    const m = String(minDate.getMonth() + 1).padStart(2, "0");
+    const d = String(minDate.getDate()).padStart(2, "0");
+    const minDateStr = `${y}-${m}-${d}`;
+    allTasks = allTasks.filter((t) => t.isRepeating || t.date >= minDateStr);
+    const keptIds = new Set(allTasks.map((t) => t.id));
+    allCompletions = allCompletions.filter(
+      (c) => c.date >= minDateStr && keptIds.has(c.taskId)
+    );
+  }
+
   res.json({
     tasks: allTasks.map(taskToJson),
     completions: allCompletions.map(completionToJson),

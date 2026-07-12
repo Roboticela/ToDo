@@ -156,7 +156,7 @@ export default function SettingsPage() {
       if (!window.confirm(`Import ${count} task${count === 1 ? "" : "s"}? They will be added to your account.`)) {
         return;
       }
-      const result = await importTasksFromData(currentUser.id, data);
+      const result = await importTasksFromData(currentUser.id, data, currentUser.plan);
       await refreshTasks();
       scheduleSync();
       if (result.errors.length > 0) {
@@ -252,11 +252,13 @@ export default function SettingsPage() {
             value={currentUser.email}
             onClick={() => setActiveModal("edit-email")}
           />
-          <SettingsRow
-            icon={<Lock className="w-4 h-4 text-primary/70" />}
-            label="Change Password"
-            onClick={() => setActiveModal("change-password")}
-          />
+          {currentUser.hasPassword !== false && (
+            <SettingsRow
+              icon={<Lock className="w-4 h-4 text-primary/70" />}
+              label="Change Password"
+              onClick={() => setActiveModal("change-password")}
+            />
+          )}
         </Section>
 
         {/* Newsletter / Email preferences */}

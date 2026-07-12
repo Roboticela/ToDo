@@ -8,7 +8,6 @@ import type { User, AuthSession } from "../../types/todo";
 /**
  * Handles OAuth callback from backend redirect.
  * Web uses a one-time `code` query param (exchanged via API — tokens never appear in the URL).
- * Legacy token query/hash is still accepted briefly for older redirects.
  */
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
@@ -20,38 +19,6 @@ export default function AuthCallbackPage() {
     const code = searchParams.get("code");
     if (code) {
       exchangeCode(code);
-      return;
-    }
-
-    const hash = window.location.hash.slice(1);
-    const tokenFromQuery = searchParams.get("token");
-    const refreshFromQuery = searchParams.get("refresh");
-    const userIdFromQuery = searchParams.get("userId");
-    const expiresAtFromQuery = searchParams.get("expiresAt");
-
-    if (hash) {
-      try {
-        const decoded = JSON.parse(atob(hash));
-        const { accessToken, refreshToken, expiresAt, userId } = decoded;
-        if (!accessToken || !userId) {
-          setError("Invalid callback data");
-          return;
-        }
-        finishLogin(accessToken, refreshToken, expiresAt, userId);
-        return;
-      } catch {
-        setError("Invalid callback data");
-        return;
-      }
-    }
-
-    if (tokenFromQuery && userIdFromQuery) {
-      finishLogin(
-        tokenFromQuery,
-        refreshFromQuery || "",
-        expiresAtFromQuery || new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        userIdFromQuery
-      );
       return;
     }
 
@@ -78,48 +45,6 @@ export default function AuthCallbackPage() {
       const data = await res.json();
       const user = data.user as User;
       const session = data.session as AuthSession;
-      await saveUser(user);
-      await saveSession(session);
-      setAuthData(user, session);
-      window.history.replaceState({}, "", "/auth/callback");
-      window.location.replace("/todo");
-    } catch {
-      setError("Something went wrong");
-    }
-  }
-
-  async function finishLogin(
-    accessToken: string,
-    refreshToken: string,
-    expiresAt: string,
-    userId: string
-  ) {
-    try {
-      const res = await fetch(`${getApiBase()}/api/users/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!res.ok) {
-        setError("Failed to load user");
-        return;
-      }
-      const userData = await res.json();
-      const user: User = {
-        id: userData.id,
-        name: userData.name,
-        email: userData.email,
-        avatarUrl: userData.avatarUrl,
-        plan: userData.plan,
-        planExpiresAt: userData.planExpiresAt,
-        emailVerifiedAt: userData.emailVerifiedAt,
-        subscribedToReminders: userData.subscribedToReminders ?? true,
-        createdAt: userData.createdAt,
-      };
-      const session: AuthSession = {
-        accessToken,
-        refreshToken,
-        expiresAt,
-        userId,
-      };
       await saveUser(user);
       await saveSession(session);
       setAuthData(user, session);

@@ -94,6 +94,12 @@ export default function CalendarPage() {
       setDayInfoMap(map);
     }
     loadMonthIndicators();
+
+    const reload = () => loadMonthIndicators();
+    window.addEventListener("tasks-synced", reload);
+    return () => window.removeEventListener("tasks-synced", reload);
+    // days is derived from currentMonth; including the array would re-run every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, currentMonth]);
 
   const loadDayTasks = useCallback(

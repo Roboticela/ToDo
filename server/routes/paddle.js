@@ -129,7 +129,13 @@ export async function handlePaddleWebhook(req, res) {
       const customData = sub.custom_data || {};
       const userId = customData.user_id;
       if (userId && sub.id) {
-        const plan = (sub.items?.[0]?.price?.product_id || "basic").toString().toLowerCase().includes("pro") ? "pro" : "basic";
+        const planFromCustom =
+          customData.plan === "pro" || customData.plan === "basic" ? customData.plan : null;
+        const priceId = (sub.items?.[0]?.price?.id || "").toString().toLowerCase();
+        const productId = (sub.items?.[0]?.price?.product_id || "").toString().toLowerCase();
+        const plan =
+          planFromCustom ||
+          (priceId.includes("pro") || productId.includes("pro") ? "pro" : "basic");
         const periodEnd = sub.current_billing_period?.ends_at;
         await prisma.subscription.upsert({
           where: { id: sub.id },

@@ -17,6 +17,7 @@ function toUserResponse(user) {
     planExpiresAt: effective.planExpiresAt ? effective.planExpiresAt.toISOString() : undefined,
     emailVerifiedAt: user.emailVerifiedAt ? user.emailVerifiedAt.toISOString() : undefined,
     subscribedToReminders: user.subscribedToReminders ?? true,
+    hasPassword: Boolean(user.passwordHash),
     createdAt: user.createdAt.toISOString(),
   };
 }
@@ -33,10 +34,16 @@ router.patch("/:userId", requireAuth, async (req, res) => {
   // Email cannot be changed via PATCH; use request-email-change + confirm-email-change flow
   const updates = {};
   if (typeof name === "string" && name.trim()) updates.name = name.trim();
-  // Only allow setting plan to "free" when current plan is "pending" (new signup must choose plan)
-  if (plan === "free" && req.user.plan === "pending") {
-    updates.plan = "free";
-    updates.planExpiresAt = null;
+  // Select Free: only from pending (new signup). Paid users must cancel via Paddle portal.
+  if (plan === "free") {
+    if (req.user.plan === "pending") {
+      updates.plan = "free";
+      updates.planExpiresAt = null;
+    } else if (req.user.plan !== "free") {
+      return res.status(400).json({
+        error: "Cancel your paid subscription in Manage Subscription to switch to Free.",
+      });
+    }
   }
   if (avatarUrl !== undefined) {
     if (req.user.avatarUrl) {

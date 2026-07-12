@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { User, AuthSession } from "../types/todo";
 import { getAnySession, getUser, saveSession, saveUser } from "../lib/db";
 import { logout as authLogout, refreshSession } from "../lib/authService";
+import { getApiBase } from "../lib/apiBase";
 
 interface AuthContextType {
   user: User | null;
@@ -94,6 +95,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
   }, [session, ensureFreshSession]);
+
+  // Refetch profile (plan, etc.) when window regains focus — picks up Paddle webhooks
+  useEffect(() => {
+    if (!session || session.accessToken.startsWith("local_")) return;
+
+    async function refetchProfile() {
+      const current = sessionRef.current;
+      if (!current?.accessToken || current.accessToken.startsWith("local_")) return;
+      try {
+        const res = await fetch(`${getApiBase()}/api/users/me`, {
+          headers: { Authorization: `Bearer ${current.accessToken}` },
+        });
+        if (!res.ok) return;
+        const userData = await res.json();
+        const updatedUser: User = {
+          id: userData.id,
+          name: userData.name,
+          email: userData.email,
+          avatarUrl: userData.avatarUrl,
+          plan: userData.plan,
+          planExpiresAt: userData.planExpiresAt,
+          emailVerifiedAt: userData.emailVerifiedAt,
+          subscribedToReminders: userData.subscribedToReminders ?? true,
+          hasPassword: userData.hasPassword,
+          createdAt: userData.createdAt,
+        };
+        await saveUser(updatedUser);
+        setUser(updatedUser);
+      } catch {
+        // ignore
+      }
+    }
+
+    const onFocus = () => {
+      void refetchProfile();
+    };
+    const onVis = () => {
+      if (document.visibilityState === "visible") void refetchProfile();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [session]);
 
   const setAuthData = useCallback(
     (newUser: User, newSession: AuthSession) => {

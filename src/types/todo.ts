@@ -76,6 +76,8 @@ export interface User {
   planExpiresAt?: string;
   emailVerifiedAt?: string;
   subscribedToReminders?: boolean;
+  /** False for Google-only accounts with no password set */
+  hasPassword?: boolean;
   createdAt: string;
 }
 

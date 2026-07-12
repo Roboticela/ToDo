@@ -13,7 +13,7 @@ import {
   getTasksForDate,
   getTodayString,
 } from "../lib/taskService";
-import { assertCanCreateTask, clampDateToHistory } from "../lib/planLimits";
+import { assertCanCreateTask, assertCanEnableRepeating, clampDateToHistory } from "../lib/planLimits";
 import { useAuth } from "./AuthContext";
 import { useSync } from "./SyncContext";
 
@@ -92,12 +92,18 @@ export function TaskProvider({ children }: { children: ReactNode }) {
 
   const updateTask = useCallback(
     async (task: Task, data: Partial<TaskFormData>): Promise<Task> => {
+      if (!user) throw new Error("Not authenticated");
+      const willRepeat =
+        data.isRepeating !== undefined
+          ? Boolean(data.isRepeating && (data.repeatDays ?? task.repeatDays).length > 0)
+          : task.isRepeating;
+      await assertCanEnableRepeating(user.id, user.plan, task.isRepeating, willRepeat);
       const updated = await svcUpdate(task, data);
       await refreshTasks();
       scheduleSync();
       return updated;
     },
-    [refreshTasks, scheduleSync]
+    [user, refreshTasks, scheduleSync]
   );
 
   const deleteTask = useCallback(

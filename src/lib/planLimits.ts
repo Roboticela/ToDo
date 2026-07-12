@@ -75,6 +75,26 @@ export async function assertCanCreateTask(
   }
 }
 
+/** When turning a one-off task into a repeating one via edit. */
+export async function assertCanEnableRepeating(
+  userId: string,
+  plan: string | undefined,
+  currentlyRepeating: boolean,
+  willBeRepeating: boolean
+): Promise<void> {
+  if (currentlyRepeating || !willBeRepeating) return;
+  const features = PLAN_FEATURES[normalizePlan(plan)];
+  if (features.maxRepeatTasks == null) return;
+  const repeats = await getRepeatTasksByUser(userId);
+  if (repeats.length >= features.maxRepeatTasks) {
+    throw new PlanLimitError(
+      "MAX_REPEAT_TASKS",
+      features.maxRepeatTasks,
+      `Your plan allows up to ${features.maxRepeatTasks} repeating tasks. Upgrade to add more.`
+    );
+  }
+}
+
 export async function countVisibleTasksOnDate(userId: string, date: string): Promise<number> {
   return (await getTasksForDate(userId, date)).length;
 }

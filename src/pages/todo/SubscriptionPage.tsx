@@ -188,6 +188,7 @@ export default function SubscriptionPage() {
           planExpiresAt: userData.planExpiresAt,
           emailVerifiedAt: userData.emailVerifiedAt,
           subscribedToReminders: userData.subscribedToReminders ?? true,
+          hasPassword: userData.hasPassword,
           createdAt: userData.createdAt,
         };
         await saveUser(updatedUser);
@@ -221,11 +222,27 @@ export default function SubscriptionPage() {
         },
         body: JSON.stringify({ plan: "free" }),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Could not select Free plan");
       }
-      await refetchUser();
+      if (data.plan !== "free") {
+        throw new Error("Cancel your paid subscription in Manage Subscription to switch to Free.");
+      }
+      const updatedUser: User = {
+        id: data.id,
+        name: data.name,
+        email: data.email,
+        avatarUrl: data.avatarUrl,
+        plan: data.plan,
+        planExpiresAt: data.planExpiresAt,
+        emailVerifiedAt: data.emailVerifiedAt,
+        subscribedToReminders: data.subscribedToReminders ?? true,
+        hasPassword: data.hasPassword,
+        createdAt: data.createdAt,
+      };
+      await saveUser(updatedUser);
+      updateUser(updatedUser);
       navigate("/todo", { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not select Free plan");

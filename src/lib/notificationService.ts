@@ -115,7 +115,18 @@ export async function scheduleTaskNotifications(task: Task): Promise<void> {
 
 function scheduleLocalTimer(notif: ScheduledNotification, task: Task): void {
   const delay = new Date(notif.scheduledAt).getTime() - Date.now();
-  if (delay < 0 || delay > 7 * 24 * 60 * 60 * 1000) return;
+  if (delay < 0) return;
+
+  // Browsers clamp setTimeout; chain wake-ups for reminders further out
+  const MAX_DELAY = 7 * 24 * 60 * 60 * 1000;
+  if (delay > MAX_DELAY) {
+    const timerId = setTimeout(() => {
+      notificationTimers.delete(notif.id);
+      scheduleLocalTimer(notif, task);
+    }, MAX_DELAY);
+    notificationTimers.set(notif.id, timerId);
+    return;
+  }
 
   const timerId = setTimeout(async () => {
     await fireNotification(notif, task);
@@ -164,30 +175,34 @@ export async function initNotificationScheduler(): Promise<void> {
   for (const notif of pending) {
     const scheduledAt = new Date(notif.scheduledAt);
     if (scheduledAt > now) {
-      const delay = scheduledAt.getTime() - now.getTime();
-      if (delay < 7 * 24 * 60 * 60 * 1000) {
+      const task = await getTask(notif.taskId);
+      if (task) {
+        scheduleLocalTimer(notif, task);
+      } else {
+        // Keep a generic wake-up even if task lookup fails (chained if far out)
+        const delay = scheduledAt.getTime() - now.getTime();
+        const MAX_DELAY = 7 * 24 * 60 * 60 * 1000;
+        const wait = Math.min(delay, MAX_DELAY);
         const timerId = setTimeout(async () => {
+          if (delay > MAX_DELAY) {
+            notificationTimers.delete(notif.id);
+            await initNotificationScheduler();
+            return;
+          }
           if (Notification.permission === "granted") {
-            const task = await getTask(notif.taskId);
             try {
-              if (task) {
-                await fireNotification(notif, task);
-              } else {
-                new Notification("Roboticela ToDo", {
-                  body: "You have a scheduled task reminder",
-                  icon: ICON,
-                  tag: notif.id,
-                });
-                await markNotificationFired(notif.id);
-              }
+              new Notification("Roboticela ToDo", {
+                body: "You have a scheduled task reminder",
+                icon: ICON,
+                tag: notif.id,
+              });
             } catch {
               // ignore
             }
-          } else {
-            await markNotificationFired(notif.id);
           }
+          await markNotificationFired(notif.id);
           notificationTimers.delete(notif.id);
-        }, delay);
+        }, wait);
         notificationTimers.set(notif.id, timerId);
       }
     }
