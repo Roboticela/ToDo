@@ -32,7 +32,8 @@ base64 = "0.22"
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = "0.4"
 tauri-plugin-notification = "2.3.3"
-tauri-plugin-google-auth = "0.5"
+# Vendored 0.5.1 with Android SiWG fix (many Google accounts → NoCredentialException)
+tauri-plugin-google-auth = { path = "vendor/tauri-plugin-google-auth" }
 
 # Enable for local dev: cargo build --features devtools (opens devtools on startup)
 [features]

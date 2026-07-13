@@ -10,6 +10,7 @@ import { SyncProvider } from "./contexts/SyncContext";
 import { ThemeScript } from "./components/ThemeScript";
 import DeepLinkAuthSetup from "./components/DeepLinkAuthSetup";
 import { isTauri } from "./lib/tauri";
+import { getAppRuntime } from "./lib/platform";
 
 // Auth pages
 import LoginPage from "./pages/auth/LoginPage";
@@ -35,6 +36,12 @@ import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
 import AdminUsersPage from "./pages/admin/AdminUsersPage";
 import AdminUserDetailPage from "./pages/admin/AdminUserDetailPage";
 import AdminTablePage from "./pages/admin/AdminTablePage";
+
+// Android WebView rarely populates env(safe-area-inset-*). Mark early so CSS
+// fallbacks apply before first paint; the android-ui plugin then overrides with exact px.
+if (getAppRuntime() === "android") {
+  document.documentElement.setAttribute("data-tauri-android", "true");
+}
 
 if (isTauri()) {
   document.addEventListener("contextmenu", (e) => e.preventDefault());

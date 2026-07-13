@@ -132,25 +132,35 @@ body,
   --font-sans: var(--font-inter);
 }
 
-/* Safe area support for mobile notches / status bar */
+/* Safe area support for mobile notches / status bar / Android system bars.
+   On Android WebView, env(safe-area-inset-*) is often 0 — the android-ui plugin
+   injects exact --safe-area-inset-* values. html[data-tauri-android] provides
+   provisional fallbacks until that injection runs (and if the APK is stale). */
 :root {
-  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
-  /* BottomNav inner row is h-16; total height includes home-indicator inset */
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
+  /* BottomNav inner row is h-16; total height includes system-nav inset */
   --bottom-nav-height: 4rem;
-  --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+  --bottom-nav-offset: calc(var(--bottom-nav-height) + var(--safe-area-inset-bottom));
+}
+
+html[data-tauri-android="true"] {
+  --safe-area-inset-top: 28px;
+  --safe-area-inset-bottom: 48px;
 }
 
 .safe-area-top {
-  padding-top: max(0px, env(safe-area-inset-top));
+  padding-top: var(--safe-area-inset-top);
 }
 
 .safe-area-bottom {
-  padding-bottom: max(0px, env(safe-area-inset-bottom));
+  padding-bottom: var(--safe-area-inset-bottom);
 }
 
 .pb-safe {
-  padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(1rem + var(--safe-area-inset-bottom));
 }
 
 /* Clear fixed BottomNav (h-16 + safe area) */

@@ -13,6 +13,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="ToDo — your tasks, organized." />
     <title>ToDo</title>
+    <script>
+      (function () {
+        try {
+          var ua = (navigator.userAgent || "").toLowerCase();
+          if (
+            /android/.test(ua) &&
+            (window.__TAURI_INTERNALS__ ||
+              window.__TAURI_METADATA__ ||
+              window.__TAURI__)
+          ) {
+            document.documentElement.setAttribute("data-tauri-android", "true");
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

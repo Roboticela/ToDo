@@ -60,22 +60,22 @@ export default function SyncIndicator() {
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.96 }}
         transition={{ duration: 0.15 }}
-        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs font-medium leading-none min-w-[4.5rem]"
+        className="inline-flex items-center justify-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-full text-xs font-medium leading-none sm:min-w-[4.5rem]"
         style={style}
         title={lastSyncAt && status === "synced" ? `Last synced ${formatLastSync(lastSyncAt)}` : label}
       >
         {status === "offline" ? (
-          <WifiOff className="w-3 h-3 shrink-0" />
+          <WifiOff className="w-3.5 h-3.5 sm:w-3 sm:h-3 shrink-0" />
         ) : status === "error" ? (
-          <AlertCircle className="w-3 h-3 shrink-0" />
+          <AlertCircle className="w-3.5 h-3.5 sm:w-3 sm:h-3 shrink-0" />
         ) : status === "syncing" ? (
-          <RefreshCw className="w-3 h-3 shrink-0 animate-spin" />
+          <RefreshCw className="w-3.5 h-3.5 sm:w-3 sm:h-3 shrink-0 animate-spin" />
         ) : status === "pending" ? (
-          <Wifi className="w-3 h-3 shrink-0" />
+          <Wifi className="w-3.5 h-3.5 sm:w-3 sm:h-3 shrink-0" />
         ) : (
-          <CheckCircle className="w-3 h-3 shrink-0" />
+          <CheckCircle className="w-3.5 h-3.5 sm:w-3 sm:h-3 shrink-0" />
         )}
-        <span className="leading-none truncate max-w-[6rem]">{label}</span>
+        <span className="hidden sm:inline leading-none truncate max-w-[6rem]">{label}</span>
       </motion.div>
     </AnimatePresence>
   );

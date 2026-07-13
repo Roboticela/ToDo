@@ -124,7 +124,12 @@ function mapNativeGoogleError(raw: string): string {
   if (!msg) return "Google sign-in failed.";
   if (/cancel/i.test(msg)) return msg;
   if (/No Google account/i.test(msg)) {
-    return "No Google account found on this device. Add a Google account in system settings, then try again.";
+    return (
+      "Google could not offer an account for this app. Confirm a Google account is signed in " +
+      "on the device, then check Google Cloud Console: Android OAuth client for package " +
+      "com.roboticela.todo with this build’s SHA-1 (run npm run android:sha1), and use the " +
+      "Web client ID as VITE_GOOGLE_CLIENT_ID."
+    );
   }
   // Common Credential Manager / Play Services failures when Android OAuth client or SHA-1 is missing
   if (
