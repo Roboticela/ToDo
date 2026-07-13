@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "timeFormat" TEXT NOT NULL DEFAULT '12h';

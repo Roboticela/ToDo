@@ -39,6 +39,7 @@ model User {
   notificationSoundMode    String   @default("preset") // normal | ringtone | preset | custom
   notificationSoundId      String?  @default("notify-correct") // curated library sound id when mode is preset
   customSoundUrl           String?
+  timeFormat               String   @default("12h") // 12h | 24h
 
   sessions           Session[]
   passwordResetTokens PasswordResetToken[]

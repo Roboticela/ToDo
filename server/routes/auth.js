@@ -104,6 +104,7 @@ function toUserResponse(user) {
         ? user.notificationSoundId || "notify-correct"
         : user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
+    timeFormat: user.timeFormat === "24h" ? "24h" : "12h",
     hasPassword: Boolean(user.passwordHash),
     isAdmin: isAdminEmail(user.email),
     createdAt: user.createdAt.toISOString(),

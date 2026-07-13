@@ -6,7 +6,9 @@ import { cn } from "../../lib/utils";
 import { useIsDesktop } from "../../hooks/useIsDesktop";
 import type { Task, TaskFormData, TaskType, TaskCategory, TaskPriority, RepeatDay } from "../../types/todo";
 import { useTasks } from "../../contexts/TaskContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { getTodayString } from "../../lib/taskService";
+import { uses24h } from "../../lib/timeFormat";
 import DatePicker from "./DatePicker";
 import TimePicker from "./TimePicker";
 
@@ -29,7 +31,9 @@ interface TaskFormProps {
 
 export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: TaskFormProps) {
   const isDesktop = useIsDesktop();
+  const { user } = useAuth();
   const { createTask, updateTask } = useTasks();
+  const use24hClock = uses24h(user?.timeFormat);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [type, setType] = useState<TaskType>("daily");
@@ -344,6 +348,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
                       value={time}
                       onChange={setTime}
                       error={errors.time}
+                      use24h={use24hClock}
                     />
                   </motion.div>
                 )}
@@ -360,12 +365,14 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
                       value={startTime}
                       onChange={setStartTime}
                       error={errors.startTime}
+                      use24h={use24hClock}
                     />
                     <TimePicker
                       label="End Time *"
                       value={endTime}
                       onChange={setEndTime}
                       error={errors.endTime}
+                      use24h={use24hClock}
                     />
                   </motion.div>
                 )}

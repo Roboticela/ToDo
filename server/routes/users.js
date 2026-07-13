@@ -41,6 +41,7 @@ function toUserResponse(user) {
         ? user.notificationSoundId || "notify-correct"
         : user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
+    timeFormat: user.timeFormat === "24h" ? "24h" : "12h",
     hasPassword: Boolean(user.passwordHash),
     isAdmin: isAdminEmail(user.email),
     createdAt: user.createdAt.toISOString(),
@@ -64,6 +65,7 @@ router.patch("/:userId", requireAuth, async (req, res) => {
     notificationSoundMode,
     notificationSoundId,
     customSoundUrl,
+    timeFormat,
   } = req.body;
   // Email cannot be changed via PATCH; use request-email-change + confirm-email-change flow
   const updates = {};
@@ -115,6 +117,9 @@ router.patch("/:userId", requireAuth, async (req, res) => {
     }
   }
   if (typeof subscribedToReminders === "boolean") updates.subscribedToReminders = subscribedToReminders;
+  if (timeFormat === "12h" || timeFormat === "24h") {
+    updates.timeFormat = timeFormat;
+  }
   if (typeof taskNotificationsEnabled === "boolean") {
     updates.taskNotificationsEnabled = taskNotificationsEnabled;
   }

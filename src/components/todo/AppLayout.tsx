@@ -7,7 +7,7 @@ import BottomNav from "./BottomNav";
 import SideNav from "./SideNav";
 import TodoHeader from "./TodoHeader";
 import VerificationBanner from "./VerificationBanner";
-import { initNotificationScheduler, requestNotificationPermission, clearAllTimers, rebuildNotificationsForUser } from "../../lib/notificationService";
+import { initNotificationScheduler, requestNotificationPermission, clearAllTimers, reconcileNotificationsForUser } from "../../lib/notificationService";
 
 // Opacity-only transition to avoid layout/scroll jump when changing pages quickly
 const pageVariants = {
@@ -107,14 +107,14 @@ export default function AppLayout() {
     };
   }, [isAuthenticated, user]);
 
-  // Rebuild reminder schedule after sync (completions/times may have changed on another device)
+  // Soft-reconcile reminders after sync (do not wipe timers — that was skipping fires)
   useEffect(() => {
     if (!isAuthenticated || !user) return;
-    const rebuild = () => {
-      void rebuildNotificationsForUser(user.id);
+    const reconcile = () => {
+      void reconcileNotificationsForUser(user.id);
     };
-    window.addEventListener("tasks-synced", rebuild);
-    return () => window.removeEventListener("tasks-synced", rebuild);
+    window.addEventListener("tasks-synced", reconcile);
+    return () => window.removeEventListener("tasks-synced", reconcile);
   }, [isAuthenticated, user]);
 
   if (isLoading) {

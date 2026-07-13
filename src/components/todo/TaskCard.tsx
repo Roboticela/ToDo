@@ -17,7 +17,10 @@ import {
 import { cn } from "../../lib/utils";
 import type { Task } from "../../types/todo";
 import { useTasks } from "../../contexts/TaskContext";
+import { useAuth } from "../../contexts/AuthContext";
 import { getTaskCompletionForDate } from "../../lib/taskService";
+import { formatTime, formatTimeRange } from "../../lib/timeFormat";
+import { getTaskTimeLeft } from "../../lib/taskTimeLeft";
 import DeleteConfirmDialog, { type DeleteChoice } from "./DeleteConfirmDialog";
 
 interface TaskCardProps {
@@ -31,11 +34,16 @@ interface TaskCardProps {
 }
 
 export default function TaskCard({ task, date, onEdit, onCompletionChange, staggerDelay = 0 }: TaskCardProps) {
+  const { user } = useAuth();
   const { completeTask, uncompleteTask, deleteTask, skipTaskForDate, endRepeatingSeriesFromDate } = useTasks();
   const [isCompleted, setIsCompleted] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  const timeFormat = user?.timeFormat === "24h" ? "24h" : "12h";
+  const showCountdown = !isCompleted && (task.type === "time-based" || task.type === "duration");
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +58,13 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
     // Intentionally narrow deps so background sync (new object refs / syncStatus) does not flicker.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- task fields listed below
   }, [task.id, task.status, task.updatedAt, task.completedAt, date]);
+
+  useEffect(() => {
+    if (!showCountdown) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, [showCountdown, task.id, task.time, task.startTime, task.endTime, date]);
 
   async function handleToggle() {
     if (isCompleted) {
@@ -88,11 +103,15 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   const isDoCategory = task.category === "do";
 
   const timeLabel = () => {
-    if (task.type === "time-based" && task.time) return task.time;
+    if (task.type === "time-based" && task.time) return formatTime(task.time, timeFormat);
     if (task.type === "duration" && task.startTime && task.endTime)
-      return `${task.startTime} – ${task.endTime}`;
+      return formatTimeRange(task.startTime, task.endTime, timeFormat);
     return null;
   };
+
+  const timeLeft = showCountdown
+    ? getTaskTimeLeft(task, date, new Date(now))
+    : null;
 
   const TypeIcon =
     task.type === "time-based" ? Clock : task.type === "duration" ? Timer : CalendarDays;
@@ -113,7 +132,6 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
-          {/* Completion toggle */}
           <motion.button
             type="button"
             onClick={handleToggle}
@@ -145,7 +163,6 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
             )}
           </motion.button>
 
-          {/* Content */}
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
@@ -159,13 +176,26 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                 </p>
 
                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                  {/* Type badge */}
                   <span className="inline-flex items-center gap-1 text-xs text-foreground/50">
                     <TypeIcon className="w-3 h-3" />
                     {timeLabel() || (task.type === "daily" ? "All day" : task.type)}
                   </span>
 
-                  {/* Category badge */}
+                  {timeLeft && (
+                    <span
+                      className={cn(
+                        "inline-flex items-center text-xs font-medium px-1.5 py-0.5 rounded-full",
+                        timeLeft.kind === "ends_in" ||
+                          timeLeft.kind === "in" ||
+                          timeLeft.kind === "starts_in"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-foreground/5 text-foreground/45"
+                      )}
+                    >
+                      {timeLeft.label}
+                    </span>
+                  )}
+
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full",
@@ -187,7 +217,6 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                     )}
                   </span>
 
-                  {/* Priority badge */}
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 text-xs font-medium px-1.5 py-0.5 rounded-full",
@@ -197,10 +226,10 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                     )}
                   >
                     <Flag className="w-3 h-3" />
-                    {(task.priority ?? "medium").charAt(0).toUpperCase() + (task.priority ?? "medium").slice(1)}
+                    {(task.priority ?? "medium").charAt(0).toUpperCase() +
+                      (task.priority ?? "medium").slice(1)}
                   </span>
 
-                  {/* Repeat badge */}
                   {task.isRepeating && (
                     <span className="inline-flex items-center gap-1 text-xs text-primary/60 bg-primary/10 px-1.5 py-0.5 rounded-full">
                       <Repeat className="w-3 h-3" />
@@ -210,7 +239,6 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="flex items-center gap-1 flex-shrink-0">
                 <motion.button
                   type="button"
@@ -245,7 +273,6 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
           </div>
         </div>
 
-        {/* Description expand */}
         <AnimatePresence>
           {expanded && task.description && (
             <motion.div

@@ -7,6 +7,8 @@ export type TaskStatus = "pending" | "completed" | "missed" | "skipped";
 export type RepeatDay = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0=Sun, 1=Mon, ..., 6=Sat
 export type SyncStatus = "synced" | "pending" | "failed";
 export type SubscriptionPlan = "free" | "basic" | "pro" | "lifetime";
+export type NotificationSoundMode = "normal" | "ringtone" | "preset" | "custom";
+export type TimeFormat = "12h" | "24h";
 
 export interface Task {
   id: string;
@@ -84,14 +86,14 @@ export interface User {
   notificationSoundId?: string;
   /** Public R2 URL for a custom notification sound (when mode is custom) */
   customSoundUrl?: string;
+  /** Display times as 12-hour or 24-hour clock (default: 12h) */
+  timeFormat?: TimeFormat;
   /** False for Google-only accounts with no password set */
   hasPassword?: boolean;
   /** True when email is in server ADMIN_EMAILS allowlist */
   isAdmin?: boolean;
   createdAt: string;
 }
-
-export type NotificationSoundMode = "normal" | "ringtone" | "preset" | "custom";
 
 export interface AuthSession {
   accessToken: string;

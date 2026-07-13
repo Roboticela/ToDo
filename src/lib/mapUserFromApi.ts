@@ -1,4 +1,4 @@
-import type { NotificationSoundMode, User } from "../types/todo";
+import type { NotificationSoundMode, TimeFormat, User } from "../types/todo";
 import { DEFAULT_LIBRARY_SOUND_ID } from "./soundCatalog";
 
 /** Map a `/api/users/me` (or auth) JSON payload into the client User shape. */
@@ -11,6 +11,8 @@ export function mapUserFromApi(userData: Record<string, unknown>): User {
 
   const rawId =
     typeof userData.notificationSoundId === "string" ? userData.notificationSoundId : undefined;
+
+  const timeFormat: TimeFormat = userData.timeFormat === "24h" ? "24h" : "12h";
 
   return {
     id: String(userData.id),
@@ -29,6 +31,7 @@ export function mapUserFromApi(userData: Record<string, unknown>): User {
       notificationSoundMode === "preset" ? rawId || DEFAULT_LIBRARY_SOUND_ID : rawId,
     customSoundUrl:
       typeof userData.customSoundUrl === "string" ? userData.customSoundUrl : undefined,
+    timeFormat,
     hasPassword: userData.hasPassword === true,
     isAdmin: userData.isAdmin === true,
     createdAt: String(userData.createdAt ?? new Date().toISOString()),

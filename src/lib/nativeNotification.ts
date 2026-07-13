@@ -142,8 +142,12 @@ function buildSoundPayload(
 export async function showTaskNotification(opts: ShowTaskNotificationOpts): Promise<void> {
   const mode: NotificationSoundMode = opts.mode ?? "preset";
   const os = getOsKind();
-  const playAudio = shouldPlayAppAudio(mode, os) && !opts.scheduleAt;
-  const silentOsToast = playAudio;
+  const runtime = getAppRuntime();
+  const isMobile = runtime === "android" || runtime === "ios";
+  // Mobile: always use an audible OS notification (WebView audio is unreliable).
+  // Desktop/web: may silence OS toast when playing in-app catalog/custom sound.
+  const playInAppAudio = shouldPlayAppAudio(mode, os) && !opts.scheduleAt && !isMobile;
+  const silentOsToast = playInAppAudio;
 
   if (isTauri()) {
     await showNativeNotification(opts, mode, os, silentOsToast);
@@ -152,7 +156,7 @@ export async function showTaskNotification(opts: ShowTaskNotificationOpts): Prom
   }
 
   // Scheduled native notifications play OS/channel sound — skip in-app audio
-  if (opts.scheduleAt || !playAudio) return;
+  if (opts.scheduleAt || !playInAppAudio) return;
 
   if (mode === "custom" && opts.customSoundUrl) {
     await playCustomSound(opts.customSoundUrl);

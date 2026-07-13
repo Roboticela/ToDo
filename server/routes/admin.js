@@ -41,6 +41,7 @@ const TABLE_META = {
       { name: "notificationSoundMode", type: "string" },
       { name: "notificationSoundId", type: "string", nullable: true },
       { name: "customSoundUrl", type: "string", nullable: true },
+      { name: "timeFormat", type: "string" },
       { name: "createdAt", type: "datetime", readOnly: true },
       { name: "updatedAt", type: "datetime", readOnly: true },
     ],

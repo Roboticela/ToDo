@@ -22,9 +22,11 @@ import {
   Music,
   Play,
   Shield,
+  Clock,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../lib/utils";
+import { formatTime, nowLocalHhMm } from "../../lib/timeFormat";
 import { useIsDesktop } from "../../hooks/useIsDesktop";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
@@ -32,7 +34,7 @@ import { useSync } from "../../contexts/SyncContext";
 import { updateProfile, changePassword, deleteAccount, requestEmailChange } from "../../lib/authService";
 import { saveUser } from "../../lib/db";
 import { getApiBase } from "../../lib/apiBase";
-import type { NotificationSoundMode } from "../../types/todo";
+import type { NotificationSoundMode, TimeFormat } from "../../types/todo";
 import { getExportData, importTasksFromData } from "../../lib/taskService";
 import { PLAN_FEATURES } from "../../types/todo";
 import { getEffectiveClientPlan } from "../../lib/planLimits";
@@ -199,6 +201,18 @@ export default function SettingsPage() {
     (soundMode === "preset" ? "notify-correct" : undefined);
   const selectedCatalog = getCatalogSound(selectedSoundId);
   const taskNotifsOn = currentUser.taskNotificationsEnabled !== false;
+  const timeFormat: TimeFormat = currentUser.timeFormat === "24h" ? "24h" : "12h";
+
+  async function handleTimeFormatChange(next: TimeFormat) {
+    if (next === timeFormat) return;
+    setNotifUpdating(true);
+    try {
+      const updated = await updateProfile(currentUser.id, { timeFormat: next });
+      updateUser(updated);
+    } finally {
+      setNotifUpdating(false);
+    }
+  }
 
   async function handleNewsletterToggle() {
     const next = !(currentUser.subscribedToReminders ?? true);
@@ -549,6 +563,54 @@ export default function SettingsPage() {
             />
           </Section>
         )}
+
+        {/* Display preferences */}
+        <Section label="Display">
+          <div className="px-4 py-3.5 space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary/70 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Time format</p>
+                <p className="text-xs text-foreground/50 mt-0.5">
+                  How times appear on tasks and pickers
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  {
+                    id: "12h" as const,
+                    label: "12-hour",
+                    hint: formatTime(nowLocalHhMm(), "12h"),
+                  },
+                  {
+                    id: "24h" as const,
+                    label: "24-hour",
+                    hint: formatTime(nowLocalHhMm(), "24h"),
+                  },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  disabled={notifUpdating}
+                  onClick={() => handleTimeFormatChange(opt.id)}
+                  className={cn(
+                    "rounded-xl border px-2 py-2.5 text-center transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40",
+                    timeFormat === opt.id
+                      ? "border-primary/50 bg-primary/10 text-foreground"
+                      : "border-border bg-accent/10 text-foreground/70 hover:bg-accent/25",
+                    notifUpdating && "opacity-70 cursor-not-allowed"
+                  )}
+                >
+                  <p className="text-xs font-semibold">{opt.label}</p>
+                  <p className="text-[10px] text-foreground/45 mt-0.5">{opt.hint}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </Section>
 
         {/* Task notifications */}
         <Section label="Notifications">
