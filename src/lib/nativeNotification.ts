@@ -194,7 +194,7 @@ export async function scheduleNativeNotification(
   try {
     const { sendNotification, Schedule } = await import("@tauri-apps/plugin-notification");
     const allowWhileIdle = getAppRuntime() === "android" || getAppRuntime() === "ios";
-    sendNotification({
+    await sendNotification({
       id: notifIdFromTag(opts.tag),
       title: opts.title,
       body: opts.body,
@@ -204,7 +204,7 @@ export async function scheduleNativeNotification(
       schedule: Schedule.at(opts.scheduleAt, false, allowWhileIdle),
     });
   } catch {
-    // Plugin may not support schedule on this platform — JS timers remain
+    // Alarm limit / unsupported schedule — JS timers remain as fallback
   }
 }
 
@@ -261,7 +261,7 @@ async function showNativeNotification(
       payload.schedule = Schedule.at(opts.scheduleAt, false, allowWhileIdle);
     }
 
-    sendNotification(payload);
+    await sendNotification(payload);
   } catch {
     await showWebNotification(opts, silentOsToast);
   }

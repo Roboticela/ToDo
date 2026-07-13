@@ -22,10 +22,17 @@ import { isTauri } from "./tauri";
 
 let notificationTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-/** How many weeks ahead to schedule repeating timed reminders */
-const REPEAT_WEEKS_AHEAD = 8;
+/** How many weeks ahead to keep reminder rows / JS timers */
+const REPEAT_WEEKS_AHEAD = 4;
+/** Only register OS alarms within this window (Android caps ~500 alarms/app) */
+const NATIVE_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
+/** Stay under Android's 500 concurrent AlarmManager limit */
+const MAX_NATIVE_ALARMS = 400;
 /** Fire overdue reminders if missed by less than this (ms) instead of dropping them */
 const OVERDUE_GRACE_MS = 30 * 60 * 1000;
+
+let nativeSyncChain: Promise<void> = Promise.resolve();
+let nativeSyncQueued = false;
 
 export async function requestNotificationPermission(): Promise<boolean> {
   const granted = await requestNativeNotificationPermission();
@@ -62,19 +69,17 @@ function getOccurrenceDates(task: Task): string[] {
   return dates;
 }
 
-export async function scheduleTaskNotifications(task: Task): Promise<void> {
-  if (task.type === "daily") return;
-  // One-time tasks that are already done should not get reminders
-  if (!task.isRepeating && task.status === "completed") return;
+async function buildNotificationsForTask(task: Task): Promise<ScheduledNotification[]> {
+  if (task.type === "daily") return [];
+  if (!task.isRepeating && task.status === "completed") return [];
 
   const user = await getUser(task.userId);
-  if (user && user.taskNotificationsEnabled === false) return;
+  if (user && user.taskNotificationsEnabled === false) return [];
 
   const now = new Date();
   const occurrenceDates = getOccurrenceDates(task);
   const notifs: ScheduledNotification[] = [];
 
-  // Skip dates that already have a completion/skip record
   let doneDates = new Set<string>();
   if (task.isRepeating) {
     const { getCompletionsByTask } = await import("./db");
@@ -136,11 +141,16 @@ export async function scheduleTaskNotifications(task: Task): Promise<void> {
     }
   }
 
+  return notifs;
+}
+
+export async function scheduleTaskNotifications(task: Task): Promise<void> {
+  const notifs = await buildNotificationsForTask(task);
   for (const notif of notifs) {
     await saveNotification(notif);
     scheduleLocalTimer(notif, task);
-    await registerNativeBackup(notif, task);
   }
+  queueNativeAlarmSync(task.userId);
 }
 
 function notificationCopy(
@@ -162,23 +172,61 @@ function notificationCopy(
   return { title, body };
 }
 
-/** OS-level schedule so reminders fire when the WebView is backgrounded/killed. */
-async function registerNativeBackup(
-  notif: ScheduledNotification,
-  task: Task
-): Promise<void> {
+/**
+ * Cancel all OS alarms, then register only the soonest N within the native horizon.
+ * Debounced so rapid task edits / sync rebuilds don't thrash AlarmManager.
+ */
+function queueNativeAlarmSync(userId?: string): void {
   if (!isTauri()) return;
-  const user = await getUser(task.userId);
-  const { title, body } = notificationCopy(notif, task);
-  await scheduleNativeNotification({
-    title,
-    body,
-    tag: notif.id,
-    mode: user?.notificationSoundMode ?? "preset",
-    customSoundUrl: user?.customSoundUrl,
-    soundId: user?.notificationSoundId || "notify-correct",
-    scheduleAt: new Date(notif.scheduledAt),
-  });
+  nativeSyncQueued = true;
+  nativeSyncChain = nativeSyncChain
+    .then(async () => {
+      if (!nativeSyncQueued) return;
+      nativeSyncQueued = false;
+      await syncNativeAlarms(userId);
+      if (nativeSyncQueued) {
+        nativeSyncQueued = false;
+        await syncNativeAlarms(userId);
+      }
+    })
+    .catch(() => {
+      // ignore — next queue will retry
+    });
+}
+
+async function syncNativeAlarms(userId?: string): Promise<void> {
+  if (!isTauri()) return;
+
+  await cancelAllNativeNotifications().catch(() => {});
+
+  const pending = await getPendingNotifications(userId);
+  const now = Date.now();
+  const eligible = pending
+    .filter((n) => {
+      const t = new Date(n.scheduledAt).getTime();
+      return t > now && t - now <= NATIVE_HORIZON_MS;
+    })
+    .sort(
+      (a, b) =>
+        new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
+    )
+    .slice(0, MAX_NATIVE_ALARMS);
+
+  for (const notif of eligible) {
+    const task = await getTask(notif.taskId);
+    if (!task) continue;
+    const user = await getUser(task.userId);
+    const { title, body } = notificationCopy(notif, task);
+    await scheduleNativeNotification({
+      title,
+      body,
+      tag: notif.id,
+      mode: user?.notificationSoundMode ?? "preset",
+      customSoundUrl: user?.customSoundUrl,
+      soundId: user?.notificationSoundId || "notify-correct",
+      scheduleAt: new Date(notif.scheduledAt),
+    });
+  }
 }
 
 function scheduleLocalTimer(notif: ScheduledNotification, task: Task): void {
@@ -213,23 +261,10 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
 
   const permitted = await isNativePermissionGranted().catch(() => false);
   if (!permitted) {
-    // Still try web path if Notification.permission was granted outside plugin
     if (!("Notification" in window) || Notification.permission !== "granted") return;
   }
 
-  let title = task.title;
-  let body = "";
-
-  if (notif.type === "reminder") {
-    body = `Time for: ${task.title}`;
-    if (task.description) body += `\n${task.description}`;
-  } else if (notif.type === "start") {
-    title = `Starting: ${task.title}`;
-    body = task.startTime ? `Starting at ${task.startTime}` : "Starting now";
-  } else if (notif.type === "end") {
-    title = `Ending: ${task.title}`;
-    body = task.endTime ? `Ending at ${task.endTime}` : "Ending now";
-  }
+  const { title, body } = notificationCopy(notif, task);
 
   try {
     await showTaskNotification({
@@ -262,7 +297,6 @@ export async function initNotificationScheduler(userId?: string): Promise<void> 
     }
 
     if (scheduledAt <= now) {
-      // Fire recently missed reminders; drop ancient ones
       if (now - scheduledAt <= OVERDUE_GRACE_MS) {
         await fireNotification(notif, task);
       } else {
@@ -272,9 +306,16 @@ export async function initNotificationScheduler(userId?: string): Promise<void> 
       continue;
     }
 
+    // Avoid stacking duplicate JS timers on focus/resume
+    const existing = notificationTimers.get(notif.id);
+    if (existing) {
+      clearTimeout(existing);
+      notificationTimers.delete(notif.id);
+    }
     scheduleLocalTimer(notif, task);
-    await registerNativeBackup(notif, task);
   }
+
+  queueNativeAlarmSync(userId);
 }
 
 /**
@@ -292,8 +333,13 @@ export async function rebuildNotificationsForUser(userId: string): Promise<void>
   const { getAllTasksByUser } = await import("./db");
   const tasks = await getAllTasksByUser(userId);
   for (const task of tasks) {
-    await scheduleTaskNotifications(task);
+    const notifs = await buildNotificationsForTask(task);
+    for (const notif of notifs) {
+      await saveNotification(notif);
+      scheduleLocalTimer(notif, task);
+    }
   }
+  queueNativeAlarmSync(userId);
 }
 
 export function clearAllTimers(): void {
@@ -303,7 +349,7 @@ export function clearAllTimers(): void {
   notificationTimers.clear();
 }
 
-/** Clear in-memory timers for a task's pending notifications (call before deleting DB rows). */
+/** Clear in-memory timers + native alarms for a task's pending notifications. */
 export async function cancelTimersForTask(taskId: string): Promise<void> {
   const pending = await getPendingNotifications();
   for (const n of pending) {
@@ -313,5 +359,6 @@ export async function cancelTimersForTask(taskId: string): Promise<void> {
       clearTimeout(timer);
       notificationTimers.delete(n.id);
     }
+    await cancelNativeNotification(n.id).catch(() => {});
   }
 }

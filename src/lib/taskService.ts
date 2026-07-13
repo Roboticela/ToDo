@@ -69,6 +69,7 @@ export async function updateTask(task: Task, data: Partial<TaskFormData>): Promi
     syncStatus: "pending",
   };
   await saveTask(updated);
+  await cancelTimersForTask(task.id);
   await deleteNotificationsByTask(task.id);
   await scheduleTaskNotifications(updated);
   return updated;
@@ -77,6 +78,7 @@ export async function updateTask(task: Task, data: Partial<TaskFormData>): Promi
 // ─── Delete Task ───────────────────────────────────────────────────────────────
 
 export async function deleteTask(taskId: string): Promise<void> {
+  await cancelTimersForTask(taskId);
   await deleteNotificationsByTask(taskId);
   const task = await getTask(taskId);
   if (task) {
