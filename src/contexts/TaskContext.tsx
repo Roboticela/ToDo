@@ -14,6 +14,7 @@ import {
   getTodayString,
 } from "../lib/taskService";
 import { assertCanCreateTask, assertCanEnableRepeating, assertCanMoveTaskToDate, assertCanExpandRepeatDays, clampDateToHistory } from "../lib/planLimits";
+import { mergeTasksPreserveRefs } from "../lib/taskEquality";
 import { useAuth } from "./AuthContext";
 import { useSync } from "./SyncContext";
 
@@ -53,7 +54,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     if (!silent) setIsLoading(true);
     try {
       const fetched = await getTasksForDate(user.id, selectedDate);
-      setTasks(fetched);
+      setTasks((prev) => mergeTasksPreserveRefs(prev, fetched));
     } finally {
       if (!silent) setIsLoading(false);
     }
@@ -83,7 +84,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
       if (!user) throw new Error("Not authenticated");
       await assertCanCreateTask(user.id, user.plan, data, user.planExpiresAt);
       const task = await svcCreate(user.id, data);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
       return task;
@@ -130,7 +131,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
         );
       }
       const updated = await svcUpdate(task, data);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
       return updated;
@@ -141,7 +142,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const deleteTask = useCallback(
     async (taskId: string): Promise<void> => {
       await svcDelete(taskId);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
@@ -151,7 +152,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const skipTaskForDate = useCallback(
     async (task: Task, date: string): Promise<void> => {
       await svcSkipTaskForDate(task, date);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
@@ -161,7 +162,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const setTaskEndDate = useCallback(
     async (task: Task, endDate: string): Promise<Task> => {
       const updated = await svcSetTaskEndDate(task, endDate);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
       return updated;
@@ -172,7 +173,7 @@ export function TaskProvider({ children }: { children: ReactNode }) {
   const endRepeatingSeriesFromDate = useCallback(
     async (task: Task, fromDate: string): Promise<Task> => {
       const updated = await svcEndSeries(task, fromDate);
-      await refreshTasks();
+      await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
       return updated;

@@ -27,6 +27,7 @@ import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
 import { getTasksForDate, getTaskCompletionForDate } from "../../lib/taskService";
+import { mergeTasksPreserveRefs } from "../../lib/taskEquality";
 import { clampDateToHistory, getHistoryCutoff } from "../../lib/planLimits";
 import TaskForm from "../../components/todo/TaskForm";
 import TaskCard from "../../components/todo/TaskCard";
@@ -110,13 +111,14 @@ export default function CalendarPage() {
   }, [user, currentMonth]);
 
   const loadDayTasks = useCallback(
-    async (dateStr: string) => {
+    async (dateStr: string, options?: { silent?: boolean }) => {
       if (!user) return;
+      const silent = options?.silent === true;
       const { date: clamped } = clampDateToHistory(dateStr, user.plan, user.planExpiresAt);
-      setLoadingDay(true);
+      if (!silent) setLoadingDay(true);
       try {
         const tasks = await getTasksForDate(user.id, clamped);
-        setDayTasks(tasks);
+        setDayTasks((prev) => mergeTasksPreserveRefs(prev, tasks));
         let done = 0;
         for (const t of tasks) {
           const { isCompleted } = await getTaskCompletionForDate(t, clamped);
@@ -124,7 +126,7 @@ export default function CalendarPage() {
         }
         setCompletedCount(done);
       } finally {
-        setLoadingDay(false);
+        if (!silent) setLoadingDay(false);
       }
     },
     [user]
@@ -133,12 +135,13 @@ export default function CalendarPage() {
   // Reload selected day when tasks change (complete/skip/delete/sync)
   useEffect(() => {
     if (!selectedDay) return;
-    const reload = () => loadDayTasks(selectedDay);
-    window.addEventListener("tasks-synced", reload);
-    window.addEventListener("tasks-changed", reload);
+    const onSynced = () => loadDayTasks(selectedDay, { silent: true });
+    const onChanged = () => loadDayTasks(selectedDay, { silent: true });
+    window.addEventListener("tasks-synced", onSynced);
+    window.addEventListener("tasks-changed", onChanged);
     return () => {
-      window.removeEventListener("tasks-synced", reload);
-      window.removeEventListener("tasks-changed", reload);
+      window.removeEventListener("tasks-synced", onSynced);
+      window.removeEventListener("tasks-changed", onChanged);
     };
   }, [selectedDay, loadDayTasks]);
 
@@ -393,7 +396,7 @@ export default function CalendarPage() {
                       </span>
                     </div>
                   )}
-                  <AnimatePresence mode="popLayout">
+                  <AnimatePresence mode="sync" initial={false}>
                     {doTasks.map((task) => (
                       <TaskCard key={task.id} task={task} date={selectedDay!} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
                     ))}
@@ -411,7 +414,7 @@ export default function CalendarPage() {
                       </span>
                     </div>
                   )}
-                  <AnimatePresence mode="popLayout">
+                  <AnimatePresence mode="sync" initial={false}>
                     {dontTasks.map((task) => (
                       <TaskCard key={task.id} task={task} date={selectedDay!} onEdit={handleEdit} onCompletionChange={handleCompletionChange} />
                     ))}

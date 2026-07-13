@@ -38,10 +38,18 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     getTaskCompletionForDate(task, date).then(({ isCompleted: c }) => {
-      setIsCompleted(c);
+      if (!cancelled) {
+        setIsCompleted((prev) => (prev === c ? prev : c));
+      }
     });
-  }, [task, date]);
+    return () => {
+      cancelled = true;
+    };
+    // Intentionally narrow deps so background sync (new object refs / syncStatus) does not flicker.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- task fields listed below
+  }, [task.id, task.status, task.updatedAt, task.completedAt, date]);
 
   async function handleToggle() {
     if (isCompleted) {
@@ -92,7 +100,6 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   return (
     <>
     <motion.div
-      layout
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: isDeleting ? 0 : 1, y: 0, scale: isDeleting ? 0.95 : 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.95, transition: { duration: 0.2 } }}

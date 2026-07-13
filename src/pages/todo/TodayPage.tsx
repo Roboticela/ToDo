@@ -237,7 +237,7 @@ export default function TodayPage() {
                     </span>
                   </div>
                 )}
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence mode="sync" initial={false}>
                   {doTasks.map((task, i) => (
                     <TaskCard
                       key={task.id}
@@ -268,7 +268,7 @@ export default function TodayPage() {
                     </span>
                   </div>
                 )}
-                <AnimatePresence mode="popLayout">
+                <AnimatePresence mode="sync" initial={false}>
                   {dontTasks.map((task, i) => (
                     <TaskCard
                       key={task.id}
