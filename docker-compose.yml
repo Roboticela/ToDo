@@ -1,0 +1,14 @@
+# Frontend web app only. Build args bake VITE_* into the client.
+# Run from repo root: docker compose up -d --build
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_APP_URL: ${VITE_APP_URL:-http://localhost}
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    ports:
+      - "${WEB_PORT:-80}:80"
+    restart: unless-stopped

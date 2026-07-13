@@ -1,0 +1,25 @@
+# Dependencies & build output
+node_modules
+dist
+dist-ssr
+*.local
+
+# Never bake local secrets into the image (use build args / CI env instead)
+.env
+.env.*
+!.env.example
+
+# Native / backend / tooling not needed for the Vite web build
+src-tauri
+server
+.github
+.cursor
+.vscode
+.idea
+*.md
+LICENSE
+*.log
+.DS_Store
+coverage
+playwright-report
+test-results
