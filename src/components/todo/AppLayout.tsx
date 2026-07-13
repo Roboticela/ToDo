@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useOutlet } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../contexts/AuthContext";
 import { TaskProvider } from "../../contexts/TaskContext";
@@ -36,6 +36,7 @@ export default function AppLayout() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const outlet = useOutlet();
   const mainScrollRef = useRef<HTMLDivElement>(null);
 
   // Reset scroll to top when route changes so new page is visible (runs after DOM update and again after paint)
@@ -180,7 +181,7 @@ export default function AppLayout() {
                   transition={pageTransition}
                   className="min-h-full min-w-0 flex flex-col overflow-x-hidden"
                 >
-                  <Outlet />
+                  {outlet}
                 </motion.div>
               </AnimatePresence>
             </div>

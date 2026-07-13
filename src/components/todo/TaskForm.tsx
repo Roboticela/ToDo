@@ -88,8 +88,8 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
     }
     if (isRepeating && repeatDays.length === 0)
       newErrors.repeatDays = "Select at least one day";
-    // Ensure start date's weekday is included when repeating
-    if (isRepeating && repeatDays.length > 0) {
+    // Ensure start date's weekday is included when repeating (only for new tasks to avoid edit friction)
+    if (!editTask && isRepeating && repeatDays.length > 0) {
       const dow = new Date(date + "T12:00:00").getDay() as RepeatDay;
       if (!repeatDays.includes(dow)) {
         const dayLabel = DAYS.find((d) => d.value === dow)?.label;

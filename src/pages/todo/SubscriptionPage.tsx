@@ -277,7 +277,6 @@ export default function SubscriptionPage() {
       : getEffectiveClientPlan(user?.plan, user?.planExpiresAt);
   const canManageSubscription =
     effectivePlan === "basic" || effectivePlan === "pro";
-  const isPaidPlan = (p: SubscriptionPlan) => p === "basic" || p === "pro" || p === "lifetime";
 
   return (
     <div className="flex flex-col min-h-full">

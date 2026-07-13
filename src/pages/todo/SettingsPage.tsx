@@ -1246,6 +1246,7 @@ function EditNameModal({
 function EditEmailModal({
   currentEmail,
   userId: _userId,
+  onSave,
   onClose,
 }: {
   currentEmail: string;
@@ -1613,14 +1614,22 @@ function BottomSheet({
 }) {
   const isDesktop = useIsDesktop();
   return (
-    <div className="fixed inset-0 z-50 pointer-events-none lg:flex lg:items-center lg:justify-center lg:p-4">
+    <div className="fixed inset-0 z-50 lg:flex lg:items-center lg:justify-center lg:p-4">
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <motion.div
         initial={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
         animate={isDesktop ? { opacity: 1, scale: 1 } : { y: 0 }}
         exit={isDesktop ? { opacity: 0, scale: 0.96 } : { y: "100%" }}
         transition={isDesktop ? { duration: 0.2 } : { type: "spring", stiffness: 300, damping: 35 }}
         className={cn(
-          "pointer-events-auto w-full max-w-2xl bg-card border border-border p-5",
+          "w-full max-w-2xl bg-card border border-border p-5",
           "fixed bottom-0 left-0 right-0 mx-auto z-50 rounded-t-3xl border-t lg:relative lg:rounded-xl lg:max-h-[90vh] lg:overflow-y-auto"
         )}
       >

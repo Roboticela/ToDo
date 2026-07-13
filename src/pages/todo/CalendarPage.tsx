@@ -172,7 +172,8 @@ export default function CalendarPage() {
     const { date: dateStr } = clampDateToHistory(raw, user?.plan, user?.planExpiresAt);
     setSelectedDay(dateStr);
     setSelectedDate(dateStr);
-    loadDayTasks(dateStr);
+    // BUG-15: Removed explicit loadDayTasks(dateStr) call to prevent double fetching,
+    // as the useEffect above already responds to selectedDay changes.
   }
 
   function handleEdit(task: Task) {
