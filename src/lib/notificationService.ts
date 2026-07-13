@@ -22,10 +22,6 @@ import { isTauri } from "./tauri";
 
 let notificationTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
-/** How many weeks ahead to keep reminder rows / JS timers */
-const REPEAT_WEEKS_AHEAD = 4;
-/** Only register OS alarms within this window (Android caps ~500 alarms/app) */
-const NATIVE_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
 /** Stay under Android's 500 concurrent AlarmManager limit */
 const MAX_NATIVE_ALARMS = 400;
 /** Fire overdue reminders if missed by less than this (ms) instead of dropping them */
@@ -44,29 +40,19 @@ export function isNotificationSupported(): boolean {
   return "Notification" in window;
 }
 
-/** Occurrence dates to schedule for a task (one-time = [date]; repeating = matching weekdays). */
+/** Only schedule reminders for today (re-armed daily on app open / sync). */
 function getOccurrenceDates(task: Task): string[] {
-  if (!task.isRepeating || !task.repeatDays?.length) {
-    return [task.date];
-  }
-
   const today = format(new Date(), "yyyy-MM-dd");
-  const start = task.date > today ? task.date : today;
-  const horizon = format(addDays(new Date(), REPEAT_WEEKS_AHEAD * 7), "yyyy-MM-dd");
-  const end = task.endDate && task.endDate < horizon ? task.endDate : horizon;
 
-  const dates: string[] = [];
-  let cur = new Date(start + "T12:00:00");
-  const endDate = new Date(end + "T12:00:00");
-  while (cur <= endDate) {
-    const ymd = format(cur, "yyyy-MM-dd");
-    const dow = cur.getDay();
-    if (task.repeatDays.includes(dow as 0 | 1 | 2 | 3 | 4 | 5 | 6) && ymd >= task.date) {
-      dates.push(ymd);
-    }
-    cur = addDays(cur, 1);
+  if (!task.isRepeating || !task.repeatDays?.length) {
+    return task.date === today ? [today] : [];
   }
-  return dates;
+
+  if (task.date > today) return [];
+  if (task.endDate && task.endDate < today) return [];
+  const dow = new Date(today + "T12:00:00").getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+  if (!task.repeatDays.includes(dow)) return [];
+  return [today];
 }
 
 async function buildNotificationsForTask(task: Task): Promise<ScheduledNotification[]> {
@@ -202,10 +188,7 @@ async function syncNativeAlarms(userId?: string): Promise<void> {
   const pending = await getPendingNotifications(userId);
   const now = Date.now();
   const eligible = pending
-    .filter((n) => {
-      const t = new Date(n.scheduledAt).getTime();
-      return t > now && t - now <= NATIVE_HORIZON_MS;
-    })
+    .filter((n) => new Date(n.scheduledAt).getTime() > now)
     .sort(
       (a, b) =>
         new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime()
