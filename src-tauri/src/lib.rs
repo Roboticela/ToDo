@@ -9,7 +9,7 @@ use tauri::Manager;
 
 /// Set to `true` to open the WebView inspector (devtools) on app startup.
 #[allow(dead_code)]
-const ENABLE_INSPECTOR: bool = true;
+const ENABLE_INSPECTOR: bool = false;
 
 #[tauri::command]
 fn run_db_exec(

@@ -541,9 +541,21 @@ router.get("/google", (req, res) => {
   if (!googleClient) {
     return res.status(503).json({ error: "Google sign-in is not configured" });
   }
-  // web = browser app; desktop-device = link a desktop pending code after Google sign-in
-  const client = req.query.client === "desktop-device" ? "desktop-device" : "web";
-  const state = Buffer.from(JSON.stringify({ client })).toString("base64url");
+  // web = browser app; desktop = app opened browser with requestId (auto-link);
+  // desktop-device = optional manual link via userCode after Google sign-in
+  let client = "web";
+  if (req.query.client === "desktop" || req.query.client === "desktop-device") {
+    client = req.query.client;
+  }
+  const requestId =
+    typeof req.query.requestId === "string" && req.query.requestId.trim()
+      ? req.query.requestId.trim()
+      : undefined;
+  const statePayload = { client };
+  if (client === "desktop" && requestId) {
+    statePayload.requestId = requestId;
+  }
+  const state = Buffer.from(JSON.stringify(statePayload)).toString("base64url");
   const scope = "openid email profile";
   const url = googleClient.generateAuthUrl({
     access_type: "offline",
@@ -555,7 +567,7 @@ router.get("/google", (req, res) => {
   res.redirect(url);
 });
 
-// ─── Desktop: device-code flow (app shows userCode; browser opens fixed URL) ───
+// ─── Desktop: app opens Google directly; optional userCode backup for manual link ───
 
 router.post("/desktop-login-start", async (req, res) => {
   if (!googleClient) {
@@ -589,11 +601,15 @@ router.post("/desktop-login-start", async (req, res) => {
   if (!created) {
     return res.status(500).json({ error: "Could not start Google sign-in" });
   }
+  // Open Google OAuth immediately — no second "Continue with Google" in the browser.
+  const verificationUrl =
+    `${config.backendUrl}/api/auth/google?client=desktop` +
+    `&requestId=${encodeURIComponent(requestId)}`;
   res.json({
     requestId,
     pollSecret,
     userCode,
-    verificationUrl: `${config.frontendUrl}/auth/desktop-device`,
+    verificationUrl,
   });
 });
 
@@ -669,10 +685,14 @@ router.get("/google/callback", async (req, res) => {
     }
 
     let client = "web";
+    let requestId = null;
     if (state) {
       try {
         const decoded = JSON.parse(Buffer.from(state, "base64url").toString());
         client = decoded.client || "web";
+        if (typeof decoded.requestId === "string" && decoded.requestId.trim()) {
+          requestId = decoded.requestId.trim();
+        }
       } catch {
         // ignore
       }
@@ -769,11 +789,30 @@ router.get("/google/callback", async (req, res) => {
     // One-time code for both web and desktop — never put tokens in the browser URL
     const authCode = await createDesktopAuthCode(accessToken, refreshToken, user.id);
 
-    // Legacy desktop OAuth (requestId in state) was phishable — force device-code flow
+    // Desktop: auto-attach to the pending poll slot started by the app (no code typing).
     if (client === "desktop") {
-      return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
+      if (!requestId) {
+        return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
+      }
+      await sweepDesktopAuth();
+      const pending = await prisma.desktopPendingAuth.findUnique({ where: { requestId } });
+      if (!pending || new Date() > pending.expiresAt) {
+        return res.redirect(`${config.frontendUrl}/auth/login?error=desktop_restart_required`);
+      }
+      if (pending.code) {
+        return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
+      }
+      await prisma.desktopPendingAuth.update({
+        where: { requestId: pending.requestId },
+        data: {
+          code: authCode,
+          expiresAt: new Date(Date.now() + DESKTOP_CODE_TTL_MS),
+        },
+      });
+      return res.redirect(`${config.frontendUrl}/auth/desktop-success`);
     }
 
+    // Optional backup: manual userCode link page (if someone uses desktop-device client)
     if (client === "desktop-device") {
       return res.redirect(
         `${config.frontendUrl}/auth/desktop-device#code=${encodeURIComponent(authCode)}`

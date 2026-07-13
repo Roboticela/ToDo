@@ -1,19 +1,19 @@
 import { useEffect, useState } from "react";
-import { CheckSquare } from "lucide-react";
+import { motion } from "framer-motion";
+import { Check, CheckSquare, Loader2 } from "lucide-react";
 import { getApiBase } from "../../lib/apiBase";
 import { cn } from "../../lib/utils";
 
 /**
- * Desktop device-code linking page (opened in the system browser).
- * 1) User signs in with Google
- * 2) User types the code shown in the desktop app
- * 3) App polls and completes login
+ * Optional backup linking page.
+ * Primary desktop flow opens Google directly and auto-links via requestId.
+ * This page is only needed if automatic linking fails and the user enters the backup code.
  */
 export default function DesktopDevicePage() {
   const [authCode, setAuthCode] = useState<string | null>(null);
   const [userCode, setUserCode] = useState("");
-  const [status, setStatus] = useState<"need_google" | "need_code" | "linking" | "done" | "error">(
-    "need_google"
+  const [status, setStatus] = useState<"loading" | "need_code" | "linking" | "done" | "error">(
+    "loading"
   );
   const [error, setError] = useState("");
 
@@ -25,14 +25,18 @@ export default function DesktopDevicePage() {
     if (code) {
       setAuthCode(code);
       setStatus("need_code");
-      // Clear hash so the code isn't left in history/referrer
       window.history.replaceState(null, "", window.location.pathname);
+      return;
     }
+    // No auth code — redirect straight to Google (never show a second Google button).
+    const apiBase = getApiBase();
+    window.location.replace(`${apiBase}/api/auth/google?client=desktop-device`);
   }, []);
 
-  function startGoogle() {
-    const apiBase = getApiBase();
-    window.location.href = `${apiBase}/api/auth/google?client=desktop-device`;
+  function formatTypedCode(raw: string) {
+    const cleaned = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8);
+    if (cleaned.length <= 4) return cleaned;
+    return `${cleaned.slice(0, 4)}-${cleaned.slice(4)}`;
   }
 
   async function handleLink(e: React.FormEvent) {
@@ -66,74 +70,108 @@ export default function DesktopDevicePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="max-w-sm w-full bg-card border border-border rounded-2xl p-6 text-center">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent"
+      />
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="relative max-w-sm w-full bg-card border border-border rounded-2xl p-6 text-center shadow-sm"
+      >
         <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-          <CheckSquare className="w-8 h-8 text-primary" />
+          {status === "done" ? (
+            <Check className="w-8 h-8 text-primary" />
+          ) : status === "loading" ? (
+            <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          ) : (
+            <CheckSquare className="w-8 h-8 text-primary" />
+          )}
         </div>
-        <h1 className="text-xl font-bold text-foreground">Link desktop app</h1>
 
-        {status === "need_google" && (
-          <>
-            <p className="text-sm text-foreground/60 mt-2">
-              Sign in with Google, then enter the code shown in your ToDo app.
-            </p>
-            <button
-              type="button"
-              onClick={startGoogle}
-              className="mt-6 w-full h-11 rounded-xl border border-border bg-accent/20 hover:bg-accent/40 text-foreground font-medium text-sm flex items-center justify-center gap-3 transition-all"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" aria-hidden>
-                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-              </svg>
-              Continue with Google
-            </button>
-          </>
+        <h1 className="text-xl font-bold text-foreground">
+          {status === "done"
+            ? "You're all set"
+            : status === "loading"
+              ? "Continuing to Google…"
+              : "Link desktop app"}
+        </h1>
+
+        {status === "loading" && (
+          <p className="text-sm text-foreground/60 mt-2 leading-relaxed">
+            Redirecting to Google sign-in…
+          </p>
         )}
 
         {(status === "need_code" || status === "linking") && (
           <>
-            <p className="text-sm text-foreground/60 mt-2">
-              Enter the code displayed in your ToDo app to finish signing in.
+            <p className="text-sm text-foreground/60 mt-2 leading-relaxed">
+              Optional backup: enter the code from your ToDo app if automatic linking did not finish.
             </p>
             {error && (
-              <div className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-left">
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-left"
+              >
                 {error}
-              </div>
+              </motion.div>
             )}
-            <form onSubmit={handleLink} className="mt-4 space-y-3 text-left">
-              <label className="text-sm font-medium text-foreground/80 block">Device code</label>
-              <input
-                value={userCode}
-                onChange={(e) => setUserCode(e.target.value.toUpperCase())}
-                placeholder="XXXX-XXXX"
-                autoComplete="one-time-code"
-                spellCheck={false}
-                className="w-full h-11 px-4 rounded-xl border border-border bg-accent/30 text-foreground text-center tracking-[0.2em] font-mono text-lg placeholder:text-foreground/30 focus:outline-none focus:ring-2 focus:ring-primary/40"
-              />
+            <form onSubmit={handleLink} className="mt-5 space-y-4 text-left">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground/80 block">
+                  Device code (optional backup)
+                </label>
+                <input
+                  value={userCode}
+                  onChange={(e) => setUserCode(formatTypedCode(e.target.value))}
+                  placeholder="XXXX-XXXX"
+                  autoFocus
+                  autoComplete="one-time-code"
+                  spellCheck={false}
+                  disabled={status === "linking"}
+                  className="w-full h-14 px-4 rounded-2xl border border-primary/30 bg-primary/5 text-foreground text-center tracking-[0.28em] font-mono text-xl font-bold placeholder:text-foreground/25 placeholder:tracking-[0.28em] placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/60 transition-all"
+                />
+              </div>
               <button
                 type="submit"
-                disabled={status === "linking"}
+                disabled={status === "linking" || userCode.replace(/-/g, "").length < 8}
                 className={cn(
-                  "w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm",
-                  status === "linking" && "opacity-70 cursor-not-allowed"
+                  "w-full h-11 rounded-xl bg-primary text-primary-foreground font-semibold text-sm transition-all",
+                  (status === "linking" || userCode.replace(/-/g, "").length < 8) &&
+                    "opacity-70 cursor-not-allowed"
                 )}
               >
-                {status === "linking" ? "Linking…" : "Link and continue"}
+                {status === "linking" ? (
+                  <span className="inline-flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Linking…
+                  </span>
+                ) : (
+                  "Link and continue"
+                )}
               </button>
             </form>
           </>
         )}
 
         {status === "done" && (
-          <p className="text-sm text-foreground/60 mt-2">
-            Linked successfully. You can close this tab and return to the ToDo app.
-          </p>
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-3 space-y-4"
+          >
+            <p className="text-sm text-foreground/60 leading-relaxed">
+              Linked successfully. You can close this tab and return to the ToDo app.
+            </p>
+            <div className="rounded-xl border border-green-500/25 bg-green-500/10 px-4 py-3 text-sm text-green-700 dark:text-green-400">
+              Sign-in will finish automatically in the desktop app.
+            </div>
+          </motion.div>
         )}
-      </div>
+      </motion.div>
     </div>
   );
 }

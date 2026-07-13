@@ -113,7 +113,7 @@ export function loginWithGoogleRedirect(): void {
   window.location.href = getGoogleAuthUrl();
 }
 
-/** Desktop only: start device-code Google sign-in. App shows userCode, opens verificationUrl, then polls. */
+/** Desktop only: start Google sign-in. Opens Google directly; app polls until browser finishes. */
 export async function startDesktopGoogleLogin(): Promise<{
   requestId: string;
   pollSecret: string;
