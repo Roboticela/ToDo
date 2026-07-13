@@ -51,6 +51,8 @@ on:
 #   VITE_APP_URL   — frontend / deep-link base URL baked into the client
 #   VITE_API_URL   — backend API base URL baked into the client
 # Fallbacks also accepted: APP_URL / FRONTEND_URL, API_URL / BACKEND_URL
+# Optional (native Google Sign-In on Android/iOS):
+#   VITE_GOOGLE_CLIENT_ID or GOOGLE_CLIENT_ID — Web OAuth client ID (ID token audience)
 #
 # Optional Environment secrets for Android signing:
 #   ANDROID_KEYSTORE_BASE64   — base64-encoded .keystore file
@@ -151,8 +153,10 @@ jobs:
     env:
       VITE_APP_URL: ${{ vars.VITE_APP_URL || vars.APP_URL || vars.FRONTEND_URL }}
       VITE_API_URL: ${{ vars.VITE_API_URL || vars.API_URL || vars.BACKEND_URL }}
+      VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
       APP_URL: ${{ vars.APP_URL || vars.VITE_APP_URL || vars.FRONTEND_URL }}
       API_URL: ${{ vars.API_URL || vars.VITE_API_URL || vars.BACKEND_URL }}
+      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || vars.VITE_GOOGLE_CLIENT_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -278,8 +282,10 @@ jobs:
     env:
       VITE_APP_URL: ${{ vars.VITE_APP_URL || vars.APP_URL || vars.FRONTEND_URL }}
       VITE_API_URL: ${{ vars.VITE_API_URL || vars.API_URL || vars.BACKEND_URL }}
+      VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
       APP_URL: ${{ vars.APP_URL || vars.VITE_APP_URL || vars.FRONTEND_URL }}
       API_URL: ${{ vars.API_URL || vars.VITE_API_URL || vars.BACKEND_URL }}
+      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || vars.VITE_GOOGLE_CLIENT_ID }}
     strategy:
       fail-fast: false
       matrix:
@@ -357,8 +363,10 @@ jobs:
     env:
       VITE_APP_URL: ${{ vars.VITE_APP_URL || vars.APP_URL || vars.FRONTEND_URL }}
       VITE_API_URL: ${{ vars.VITE_API_URL || vars.API_URL || vars.BACKEND_URL }}
+      VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID }}
       APP_URL: ${{ vars.APP_URL || vars.VITE_APP_URL || vars.FRONTEND_URL }}
       API_URL: ${{ vars.API_URL || vars.VITE_API_URL || vars.BACKEND_URL }}
+      GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID || vars.VITE_GOOGLE_CLIENT_ID }}
     steps:
       - uses: actions/checkout@v4
 

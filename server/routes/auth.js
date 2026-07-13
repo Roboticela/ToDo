@@ -73,6 +73,11 @@ const googleClient = config.google.clientId && config.google.clientSecret
   ? new OAuth2Client(config.google.clientId, config.google.clientSecret, undefined)
   : null;
 
+/** Verifies Google ID tokens (web OAuth + native mobile). Needs client ID only. */
+const googleIdClient = config.google.clientId
+  ? new OAuth2Client(config.google.clientId)
+  : null;
+
 function toUserResponse(user) {
   const effective = getEffectivePlan(user);
   const soundMode = user.notificationSoundMode;
@@ -114,6 +119,100 @@ function toSessionResponse(user, accessToken, refreshToken) {
       userId: user.id,
     },
   };
+}
+
+/**
+ * Upsert user from a verified Google ID token payload, create app session.
+ * @returns {{ user, accessToken, refreshToken }}
+ * @throws {{ code: string }} redirect/API error codes used by OAuth callback + native
+ */
+async function completeGoogleSignInFromPayload(payload) {
+  const googleId = payload.sub;
+  const email = (payload.email || "").trim().toLowerCase();
+  if (!email) {
+    throw { code: "google_email_missing" };
+  }
+  const name = payload.name || email.split("@")[0] || "User";
+  const googlePictureUrl = payload.picture || null;
+
+  let user = await prisma.user.findFirst({
+    where: { OR: [{ googleId }, { email }] },
+  });
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        googleId,
+        plan: "pending",
+        emailVerifiedAt: new Date(),
+        taskNotificationsEnabled: true,
+        notificationSoundMode: "preset",
+        notificationSoundId: "notify-correct",
+      },
+    });
+  } else if (user.googleId && user.googleId !== googleId) {
+    throw { code: "email_linked_other_google" };
+  } else if (!user.googleId && user.email.toLowerCase() === email) {
+    if (payload.email_verified !== true) {
+      throw { code: "google_email_unverified" };
+    }
+    if (!user.emailVerifiedAt) {
+      throw { code: "verify_email_before_google" };
+    }
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { googleId },
+    });
+  } else {
+    const updateData = {};
+    if (!user.emailVerifiedAt) updateData.emailVerifiedAt = new Date();
+    if (Object.keys(updateData).length > 0) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: updateData,
+      });
+    }
+  }
+
+  const needsAvatar =
+    googlePictureUrl &&
+    (!user.avatarUrl || isR2ApiEndpointUrl(user.avatarUrl));
+  if (needsAvatar) {
+    const r2AvatarUrl = await uploadAvatarFromUrl(googlePictureUrl, user.id);
+    const avatarUrl = r2AvatarUrl || googlePictureUrl;
+    if (avatarUrl !== user.avatarUrl) {
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { avatarUrl },
+      });
+    }
+  }
+
+  const accessToken = signAccessToken({ userId: user.id });
+  const refreshToken = signRefreshToken({ userId: user.id });
+  await prisma.session.create({
+    data: {
+      id: uuidv4(),
+      userId: user.id,
+      accessToken,
+      refreshToken,
+      expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.refreshExpiry) * 1000),
+    },
+  });
+
+  return { user, accessToken, refreshToken };
+}
+
+async function verifyGoogleIdToken(idToken) {
+  if (!googleIdClient || !config.google.clientId) {
+    throw { code: "google_not_configured" };
+  }
+  const ticket = await googleIdClient.verifyIdToken({
+    idToken,
+    audience: config.google.clientId,
+  });
+  return ticket.getPayload();
 }
 
 // ─── Register ─────────────────────────────────────────────────────────────────
@@ -703,88 +802,23 @@ router.get("/google/callback", async (req, res) => {
     if (!tokens.id_token) {
       return res.redirect(`${config.frontendUrl}/auth/login?error=google_failed`);
     }
-    const ticket = await googleClient.verifyIdToken({
-      idToken: tokens.id_token,
-      audience: config.google.clientId,
-    });
-    const payload = ticket.getPayload();
-    const googleId = payload.sub;
-    const email = (payload.email || "").trim().toLowerCase();
-    if (!email) {
-      return res.redirect(`${config.frontendUrl}/auth/login?error=google_email_missing`);
-    }
-    const name = payload.name || email.split("@")[0] || "User";
-    const googlePictureUrl = payload.picture || null;
-
-    let user = await prisma.user.findFirst({
-      where: { OR: [{ googleId }, { email }] },
-    });
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name,
-          email,
-          googleId,
-          plan: "pending",
-          emailVerifiedAt: new Date(),
-          taskNotificationsEnabled: true,
-          notificationSoundMode: "preset",
-          notificationSoundId: "notify-correct",
-        },
-      });
-    } else if (user.googleId && user.googleId !== googleId) {
-      return res.redirect(`${config.frontendUrl}/auth/login?error=email_linked_other_google`);
-    } else if (!user.googleId && user.email.toLowerCase() === email) {
-      // Only auto-link when Google asserts the email is verified
-      if (payload.email_verified !== true) {
-        return res.redirect(`${config.frontendUrl}/auth/login?error=google_email_unverified`);
-      }
-      // Require our email verification first — otherwise an attacker can
-      // pre-register the victim's email+password and hijack the Google login.
-      if (!user.emailVerifiedAt) {
-        return res.redirect(`${config.frontendUrl}/auth/login?error=verify_email_before_google`);
-      }
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: { googleId },
-      });
-    } else {
-      const updateData = {};
-      if (!user.emailVerifiedAt) updateData.emailVerifiedAt = new Date();
-      if (Object.keys(updateData).length > 0) {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: updateData,
-        });
-      }
+    let payload;
+    try {
+      payload = await verifyGoogleIdToken(tokens.id_token);
+    } catch (err) {
+      const code = err?.code || "google_failed";
+      return res.redirect(`${config.frontendUrl}/auth/login?error=${code}`);
     }
 
-    // Upload Google photo to R2 when public access is configured; otherwise store Google URL.
-    const needsAvatar =
-      googlePictureUrl &&
-      (!user.avatarUrl || isR2ApiEndpointUrl(user.avatarUrl));
-    if (needsAvatar) {
-      const r2AvatarUrl = await uploadAvatarFromUrl(googlePictureUrl, user.id);
-      const avatarUrl = r2AvatarUrl || googlePictureUrl;
-      if (avatarUrl !== user.avatarUrl) {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { avatarUrl },
-        });
-      }
+    let user;
+    let accessToken;
+    let refreshToken;
+    try {
+      ({ user, accessToken, refreshToken } = await completeGoogleSignInFromPayload(payload));
+    } catch (err) {
+      const errCode = err?.code || "google_failed";
+      return res.redirect(`${config.frontendUrl}/auth/login?error=${errCode}`);
     }
-
-    const accessToken = signAccessToken({ userId: user.id });
-    const refreshToken = signRefreshToken({ userId: user.id });
-    await prisma.session.create({
-      data: {
-        id: uuidv4(),
-        userId: user.id,
-        accessToken,
-        refreshToken,
-        expiresAt: new Date(Date.now() + getExpirySeconds(config.jwt.refreshExpiry) * 1000),
-      },
-    });
 
     // One-time code for both web and desktop — never put tokens in the browser URL
     const authCode = await createDesktopAuthCode(accessToken, refreshToken, user.id);
@@ -824,6 +858,54 @@ router.get("/google/callback", async (req, res) => {
   } catch (e) {
     console.error("[auth] google/callback", e);
     return res.redirect(`${config.frontendUrl}/auth/login?error=google_failed`);
+  }
+});
+
+// ─── Native Google Sign-In (Android Credential Manager / iOS Google Sign-In) ───
+
+router.post("/google/native", async (req, res) => {
+  try {
+    if (!googleIdClient) {
+      return res.status(503).json({ error: "Google sign-in is not configured" });
+    }
+    const idToken = typeof req.body?.idToken === "string" ? req.body.idToken.trim() : "";
+    if (!idToken) {
+      return res.status(400).json({ error: "idToken is required" });
+    }
+
+    let payload;
+    try {
+      payload = await verifyGoogleIdToken(idToken);
+    } catch (err) {
+      if (err?.code === "google_not_configured") {
+        return res.status(503).json({ error: "Google sign-in is not configured" });
+      }
+      console.error("[auth] google/native verify", err);
+      return res.status(401).json({ error: "Invalid Google token" });
+    }
+
+    let result;
+    try {
+      result = await completeGoogleSignInFromPayload(payload);
+    } catch (err) {
+      const code = err?.code;
+      const messages = {
+        google_email_missing: "Google did not provide an email for this account.",
+        email_linked_other_google: "This email is already linked to a different Google account.",
+        google_email_unverified: "Google did not verify this email. Try another account.",
+        verify_email_before_google:
+          "Verify your email first, then try Google sign-in again.",
+      };
+      if (code && messages[code]) {
+        return res.status(400).json({ error: messages[code], code });
+      }
+      throw err;
+    }
+
+    res.json(toSessionResponse(result.user, result.accessToken, result.refreshToken));
+  } catch (e) {
+    console.error("[auth] google/native", e);
+    res.status(500).json({ error: "Google sign-in failed" });
   }
 });
 

@@ -41,9 +41,11 @@
     "sounds:download": "node scripts/download-sound-library.js"
   },
   "dependencies": {
+    "@choochmeque/tauri-plugin-google-auth-api": "^0.5.1",
     "@tailwindcss/vite": "^4.2.1",
     "@tauri-apps/api": "~2.10.1",
     "@tauri-apps/plugin-notification": "^2.3.3",
+    "@tauri-apps/plugin-opener": "^2.5.4",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "framer-motion": "^12.23.12",

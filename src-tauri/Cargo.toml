@@ -32,6 +32,7 @@ base64 = "0.22"
 rusqlite = { version = "0.32", features = ["bundled"] }
 chrono = "0.4"
 tauri-plugin-notification = "2.3.3"
+tauri-plugin-google-auth = "0.5"
 
 # Enable for local dev: cargo build --features devtools (opens devtools on startup)
 [features]

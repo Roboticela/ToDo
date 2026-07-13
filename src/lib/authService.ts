@@ -101,7 +101,8 @@ export async function login(
 
 // ─── Google Login ─────────────────────────────────────────────────────────────
 // Web: redirect to backend Google OAuth flow; callback redirects to /auth/callback with session.
-// Native (Tauri): app gets auth URL from backend, opens browser, polls backend for code, then exchanges code for tokens.
+// Desktop Tauri: open browser, poll backend for code, then exchange.
+// Android/iOS: native account picker (Credential Manager / Google Sign-In) → POST idToken.
 
 export function getGoogleAuthUrl(): string {
   // Always web. Desktop must use startDesktopGoogleLogin (needs requestId + pollSecret).
@@ -111,6 +112,51 @@ export function getGoogleAuthUrl(): string {
 /** Starts Google OAuth. For web: redirects. For native: use startDesktopGoogleLogin + poll instead. */
 export function loginWithGoogleRedirect(): void {
   window.location.href = getGoogleAuthUrl();
+}
+
+/** Web client ID used as ID-token audience for native Android/iOS Google Sign-In. */
+export function getGoogleWebClientId(): string {
+  return String(import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").trim();
+}
+
+/**
+ * Android / iOS: system Google account picker, then exchange ID token with the API.
+ */
+export async function loginWithNativeGoogle(): Promise<{ user: User; session: AuthSession }> {
+  const clientId = getGoogleWebClientId();
+  if (!clientId) {
+    throw new Error("Google Sign-In is not configured (missing VITE_GOOGLE_CLIENT_ID).");
+  }
+  const { signIn } = await import("@choochmeque/tauri-plugin-google-auth-api");
+  const { getAppRuntime } = await import("./platform");
+  const tokens = await signIn({
+    clientId,
+    scopes: ["openid", "email", "profile"],
+    ...(getAppRuntime() === "android" ? { flowType: "native" as const } : {}),
+  });
+  if (!tokens.idToken) {
+    throw new Error("Google did not return an ID token. Please try again.");
+  }
+
+  const res = await fetch(`${API_BASE}/api/auth/google/native`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken: tokens.idToken }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Google sign-in failed");
+  }
+  const data = await res.json();
+  if (!isValidAuthPayload(data)) {
+    throw new Error("Invalid Google sign-in response");
+  }
+  await clearLocalAuthState();
+  const mappedUser = mapUserFromApi(data.user as unknown as Record<string, unknown>);
+  await saveUser(mappedUser);
+  await saveSession(data.session);
+  return { user: mappedUser, session: data.session };
 }
 
 /** Desktop only: start Google sign-in. Opens Google directly; app polls until browser finishes. */
@@ -133,7 +179,7 @@ export async function startDesktopGoogleLogin(): Promise<{
   return res.json();
 }
 
-/** Desktop only: poll backend for one-time code (after user completed Google sign-in in browser). Returns code or null on timeout. */
+/** Native (desktop/mobile): poll backend for one-time code (after user completed Google sign-in in browser). Returns code or null on timeout. */
 export async function pollDesktopPending(
   requestId: string,
   options: { intervalMs?: number; timeoutMs?: number; pollSecret?: string } = {}
@@ -144,17 +190,21 @@ export async function pollDesktopPending(
   }
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const url = `${API_BASE}/api/auth/desktop-pending?requestId=${encodeURIComponent(requestId)}`;
-    const res = await fetch(url, {
-      headers: { "x-poll-secret": pollSecret },
-      signal: AbortSignal.timeout(intervalMs + 1000),
-    });
-    if (res.status === 200) {
-      const data = await res.json();
-      if (data?.code) return data.code;
-    }
-    if (res.status === 401) {
-      return null;
+    try {
+      const url = `${API_BASE}/api/auth/desktop-pending?requestId=${encodeURIComponent(requestId)}`;
+      const res = await fetch(url, {
+        headers: { "x-poll-secret": pollSecret },
+        signal: AbortSignal.timeout(intervalMs + 1000),
+      });
+      if (res.status === 200) {
+        const data = await res.json();
+        if (data?.code) return data.code;
+      }
+      if (res.status === 401) {
+        return null;
+      }
+    } catch {
+      // Transient errors are common while the app is backgrounded (Android/iOS); keep polling.
     }
     await new Promise((r) => setTimeout(r, intervalMs));
   }

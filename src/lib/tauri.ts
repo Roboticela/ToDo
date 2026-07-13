@@ -23,15 +23,28 @@ export interface OpenLinkOptions {
 
 /**
  * Open a link: in Tauri opens in the system default browser; in browser does normal navigation.
- * In production Tauri (e.g. Linux .deb/AppImage) we use a custom command that calls
- * /usr/bin/xdg-open so the browser opens even when PATH is minimal.
+ * Mobile (Android/iOS): uses tauri-plugin-opener (Custom Tabs / Safari).
+ * Desktop: custom open_url (xdg-open / open / rundll32) so Linux works with a minimal PATH.
  */
 export async function openLink(url: string, options: OpenLinkOptions = {}): Promise<void> {
   const { openInNewTab = false } = options;
 
   if (isTauri()) {
+    const { getAppRuntime } = await import("./platform");
+    const runtime = getAppRuntime();
+    if (runtime === "android" || runtime === "ios") {
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+      return;
+    }
     const { invoke } = await import("@tauri-apps/api/core");
-    await invoke("open_url", { url });
+    try {
+      await invoke("open_url", { url });
+    } catch {
+      // Fallback if the custom command fails (e.g. unexpected desktop host)
+      const { openUrl } = await import("@tauri-apps/plugin-opener");
+      await openUrl(url);
+    }
     return;
   }
 

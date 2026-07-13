@@ -37,6 +37,12 @@ class AndroidUiPlugin(private val activity: Activity) : Plugin(activity) {
 
   override fun load(webView: WebView) {
     this.webView = webView
+    // Init may call setMosaic before the WebView exists; re-apply once it is ready.
+    when (current) {
+      "cinematic" -> applyCinematic()
+      "contoured" -> applyContoured()
+      else -> applyStandard()
+    }
   }
 
   @Command

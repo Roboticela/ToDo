@@ -3,9 +3,10 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Mail, Lock, Eye, EyeOff, CheckSquare } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
-import { login, getGoogleAuthUrl, startDesktopGoogleLogin, pollDesktopPending } from "../../lib/authService";
+import { login, getGoogleAuthUrl, startDesktopGoogleLogin, pollDesktopPending, loginWithNativeGoogle } from "../../lib/authService";
 import { isTauri } from "../../lib/tauri";
 import { openLink } from "../../lib/tauri";
+import { getAppRuntime } from "../../lib/platform";
 import { cn } from "../../lib/utils";
 import { completeDesktopAuthWithCode } from "../../lib/deepLinkAuth";
 import DesktopDeviceCodePanel from "../../components/auth/DesktopDeviceCodePanel";
@@ -81,6 +82,23 @@ export default function LoginPage() {
 
   async function handleGoogle() {
     setError("");
+    const runtime = getAppRuntime();
+    if (runtime === "android" || runtime === "ios") {
+      setIsLoading(true);
+      try {
+        const { user, session } = await loginWithNativeGoogle();
+        setAuthData(user, session);
+        navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not start Google sign-in.";
+        if (!/cancel/i.test(msg)) {
+          setError(msg);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
     if (isTauri()) {
       try {
         const { requestId, pollSecret, userCode, verificationUrl } = await startDesktopGoogleLogin();
@@ -95,22 +113,28 @@ export default function LoginPage() {
     window.location.href = getGoogleAuthUrl();
   }
 
-  // Desktop: poll backend after user completes Google in the browser (auto-linked)
+  // Native (desktop/mobile): poll backend after user completes Google in the browser
   useEffect(() => {
     if (!isTauri() || !pendingDesktopAuth) return;
     let cancelled = false;
     (async () => {
-      const code = await pollDesktopPending(pendingDesktopAuth.requestId, {
-        pollSecret: pendingDesktopAuth.pollSecret,
-      });
-      if (cancelled) return;
-      setPendingDesktopAuth(null);
-      if (code) {
-        const user = await completeDesktopAuthWithCode(code, setAuthData);
-        if (user) navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
-        else setError("Login failed. Please try again.");
-      } else {
-        setError("Sign-in timed out. Please try again.");
+      try {
+        const code = await pollDesktopPending(pendingDesktopAuth.requestId, {
+          pollSecret: pendingDesktopAuth.pollSecret,
+        });
+        if (cancelled) return;
+        setPendingDesktopAuth(null);
+        if (code) {
+          const user = await completeDesktopAuthWithCode(code, setAuthData);
+          if (user) navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
+          else setError("Login failed. Please try again.");
+        } else {
+          setError("Sign-in timed out. Please try again.");
+        }
+      } catch (e) {
+        if (cancelled) return;
+        setPendingDesktopAuth(null);
+        setError(e instanceof Error ? e.message : "Sign-in failed. Please try again.");
       }
     })();
     return () => {

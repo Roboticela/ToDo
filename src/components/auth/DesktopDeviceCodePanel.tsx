@@ -39,14 +39,15 @@ export default function DesktopDeviceCodePanel({
         <div>
           <p className="text-base font-semibold text-foreground">Waiting for Google sign-in</p>
           <p className="mt-1 text-sm text-foreground/55 leading-relaxed">
-            Finish signing in with Google in the browser tab. This app will continue automatically.
+            Finish signing in with Google in your browser. This app will continue
+            automatically when you return.
           </p>
         </div>
       </div>
 
       <div className="rounded-xl border border-border/70 bg-accent/20 px-4 py-3">
         <p className="text-xs text-foreground/50 leading-relaxed">
-          Keep this window open. You only need to sign in once in the browser.
+          Keep this app open in the background while you finish Google sign-in.
         </p>
       </div>
 

@@ -42,10 +42,13 @@ app.use(
       "http://localhost:5173",
       "http://127.0.0.1:5173",
       "http://localhost:3000",
-      // Tauri 2 desktop webviews (fetch Origin differs from FRONTEND_URL)
+      // Tauri 2 webviews (desktop + Android; Origin differs from FRONTEND_URL)
       "http://tauri.localhost",
       "https://tauri.localhost",
       "tauri://localhost",
+      // iOS WKWebView custom protocol
+      "https://tauri.localhost/",
+      "http://tauri.localhost/",
     ].filter(Boolean),
     credentials: true,
   })
