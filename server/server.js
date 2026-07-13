@@ -42,6 +42,10 @@ app.use(
       "http://localhost:5173",
       "http://127.0.0.1:5173",
       "http://localhost:3000",
+      // Tauri 2 desktop webviews (fetch Origin differs from FRONTEND_URL)
+      "http://tauri.localhost",
+      "https://tauri.localhost",
+      "tauri://localhost",
     ].filter(Boolean),
     credentials: true,
   })
