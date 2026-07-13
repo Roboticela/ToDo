@@ -123,7 +123,7 @@ export default function AppLayout() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="min-h-screen bg-background flex items-center justify-center"
+        className="min-h-screen bg-background flex items-center justify-center safe-area-top"
       >
         <div className="flex flex-col items-center gap-4">
           <motion.div
@@ -152,7 +152,7 @@ export default function AppLayout() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.25 }}
-        className="h-screen min-h-screen overflow-hidden flex flex-col w-full bg-background"
+        className="h-dvh min-h-dvh overflow-hidden flex flex-col w-full bg-background safe-area-top"
       >
         <VerificationBanner />
         <div className="flex-1 flex min-h-0 lg:flex-row w-full overflow-hidden">
@@ -161,7 +161,7 @@ export default function AppLayout() {
             <TodoHeader title={headerTitle} />
           <div
             ref={mainScrollRef}
-            className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pb-16 lg:pb-0 w-full custom-scrollbar"
+            className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden pb-bottom-nav lg:pb-0 w-full custom-scrollbar"
           >
             <div className="min-h-full min-w-0 overflow-x-hidden">
               <AnimatePresence mode="popLayout" initial={false}>

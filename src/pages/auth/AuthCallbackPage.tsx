@@ -87,7 +87,7 @@ export default function AuthCallbackPage() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 safe-area-top">
         <div className="text-center">
           <p className="text-red-400 mb-4">{error}</p>
           <button
@@ -103,7 +103,7 @@ export default function AuthCallbackPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 safe-area-top">
       <div className="flex flex-col items-center gap-3">
         <span className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         <p className="text-sm text-foreground/60">Completing sign-in...</p>

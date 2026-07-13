@@ -170,7 +170,7 @@ export default function TodayPage() {
             className={cn(
               "relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors",
               activeFilter === key
-                ? "text-primary border border-primary/30"
+                ? "bg-primary/15 text-primary border border-primary/30"
                 : "bg-accent/30 text-foreground/50 border border-transparent hover:bg-accent/50"
             )}
           >
@@ -189,8 +189,8 @@ export default function TodayPage() {
         ))}
       </motion.div>
 
-      {/* Task List — one task height of space at bottom above FAB/nav */}
-      <div className="flex-1 px-4 md:px-6 lg:px-8 pb-24">
+      {/* Task List — space at bottom above FAB/nav */}
+      <div className="flex-1 px-4 md:px-6 lg:px-8 pb-above-fab lg:pb-8">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
@@ -293,7 +293,7 @@ export default function TodayPage() {
         onClick={() => { setEditTask(null); setShowForm(true); }}
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.92 }}
-        className="fixed bottom-20 right-4 md:right-6 lg:right-8 z-30 w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
+        className="fixed bottom-fab right-4 md:right-6 lg:bottom-8 lg:right-8 z-30 w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
         style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
       >
         <Plus className="w-6 h-6" strokeWidth={2.5} />

@@ -48,7 +48,7 @@ export default function ResetPasswordPage() {
 
   if (!token && !success) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 safe-area-top">
         <div className="max-w-sm w-full bg-card border border-border rounded-2xl p-6 text-center">
           <p className="text-foreground/80">Invalid or missing reset link.</p>
           <Link to="/auth/forgot-password" className="mt-4 inline-block text-primary hover:underline">
@@ -61,7 +61,7 @@ export default function ResetPasswordPage() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 safe-area-top">
         <motion.div
           className="max-w-sm w-full bg-card border border-border rounded-2xl p-6 text-center"
           initial={{ opacity: 0, y: 12 }}
@@ -81,7 +81,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 safe-area-top">
       <motion.div
         className="w-full max-w-sm"
         initial={{ opacity: 0, y: 24 }}

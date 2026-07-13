@@ -36,7 +36,7 @@ function BottomNav() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               className={cn(
-                "flex flex-col items-center justify-center flex-1 h-full gap-1 relative transition-colors",
+                "flex flex-col items-center justify-center flex-1 h-full gap-1 relative transition-colors bg-transparent",
                 isActive ? "text-primary" : "text-foreground/40 hover:text-foreground/70"
               )}
             >

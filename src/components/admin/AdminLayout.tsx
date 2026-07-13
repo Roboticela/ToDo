@@ -20,7 +20,7 @@ export default function AdminLayout() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center safe-area-top">
         <div className="w-8 h-8 border-2 border-border border-t-primary rounded-full animate-spin" />
       </div>
     );
@@ -35,7 +35,7 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-background text-foreground flex flex-col lg:flex-row safe-area-top">
       <aside className="lg:w-64 shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-card/40 lg:min-h-screen">
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between gap-2">

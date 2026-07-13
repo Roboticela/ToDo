@@ -4,8 +4,9 @@ import { Mail, X } from "lucide-react";
 // When banner is visible: move sidebar down so it starts below banner + header (so navbar doesn’t hide it)
 const BANNER_HEIGHT = "3.25rem";
 const HEADER_HEIGHT = "3.5rem"; // h-14
-const SIDEBAR_TOP_WITH_BANNER = `calc(${BANNER_HEIGHT} + ${HEADER_HEIGHT})`; // 6.75rem
-const SIDEBAR_TOP_DEFAULT = "3.5rem"; // align with header when no banner
+const SAFE_TOP = "env(safe-area-inset-top, 0px)";
+const SIDEBAR_TOP_WITH_BANNER = `calc(${BANNER_HEIGHT} + ${HEADER_HEIGHT} + ${SAFE_TOP})`;
+const SIDEBAR_TOP_DEFAULT = `calc(${HEADER_HEIGHT} + ${SAFE_TOP})`;
 import { useAuth } from "../../contexts/AuthContext";
 import { resendVerification } from "../../lib/authService";
 import { cn } from "../../lib/utils";

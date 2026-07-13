@@ -127,7 +127,7 @@ export default function RegisterPage() {
   }, [pendingDesktopAuth, setAuthData, navigate]);
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className="min-h-screen bg-background flex items-center justify-center p-4 safe-area-top">
       <motion.div
         className="w-full max-w-sm"
         initial={{ opacity: 0, y: 24 }}

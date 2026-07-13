@@ -76,10 +76,19 @@ class AndroidUiPlugin(private val activity: Activity) : Plugin(activity) {
     val wv = webView ?: return@runOnUiThread
     val window = activity.window
     wv.setOnApplyWindowInsetsListener(null)
-    wv.setPadding(0, 0, 0, 0)
-    wv.setBackgroundColor(Color.TRANSPARENT)
-    WindowCompat.setDecorFitsSystemWindows(window, true)
-    ViewCompat.setOnApplyWindowInsetsListener(wv) { v, insets -> ViewCompat.onApplyWindowInsets(v, insets) }
+
+    val bg = resolveColorBackground()
+    wv.setBackgroundColor(bg)
+    window.decorView.setBackgroundColor(bg)
+    window.statusBarColor = bg
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+      @Suppress("DEPRECATION")
+      window.navigationBarColor = bg
+    }
+
+    // Edge-to-edge + WebView padding keeps content clear of the notification area.
+    // Required on API 35+ where decorFitsSystemWindows(true) is ignored.
+    WindowCompat.setDecorFitsSystemWindows(window, false)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
       val lp = window.attributes
       lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
@@ -87,6 +96,36 @@ class AndroidUiPlugin(private val activity: Activity) : Plugin(activity) {
     }
     val c = WindowCompat.getInsetsController(window, wv)
     c.show(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+    c.isAppearanceLightStatusBars = isLightBackground(bg)
+    c.isAppearanceLightNavigationBars = isLightBackground(bg)
+
+    ViewCompat.setOnApplyWindowInsetsListener(wv) { v, insets ->
+      val bars = insets.getInsets(
+        WindowInsetsCompat.Type.statusBars() or
+          WindowInsetsCompat.Type.displayCutout(),
+      )
+      // Top/sides only — bottom inset stays with CSS `.safe-area-bottom` on the nav.
+      v.setPadding(bars.left, bars.top, bars.right, 0)
+      insets
+    }
+    ViewCompat.requestApplyInsets(wv)
+  }
+
+  private fun resolveColorBackground(): Int {
+    val tv = android.util.TypedValue()
+    return if (activity.theme.resolveAttribute(android.R.attr.colorBackground, tv, true)) {
+      tv.data
+    } else {
+      Color.BLACK
+    }
+  }
+
+  private fun isLightBackground(argb: Int): Boolean {
+    val r = (argb shr 16) and 0xFF
+    val g = (argb shr 8) and 0xFF
+    val b = argb and 0xFF
+    // Relative luminance threshold (sRGB approx)
+    return (0.299 * r + 0.587 * g + 0.114 * b) > 186
   }
 
   private fun applyCinematic() = activity.runOnUiThread {

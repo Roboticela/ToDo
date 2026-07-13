@@ -132,10 +132,17 @@ body,
   --font-sans: var(--font-inter);
 }
 
-/* Safe area support for mobile notches */
+/* Safe area support for mobile notches / status bar */
 :root {
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  /* BottomNav inner row is h-16; total height includes home-indicator inset */
+  --bottom-nav-height: 4rem;
+  --bottom-nav-offset: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+}
+
+.safe-area-top {
+  padding-top: max(0px, env(safe-area-inset-top));
 }
 
 .safe-area-bottom {
@@ -144,6 +151,34 @@ body,
 
 .pb-safe {
   padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+}
+
+/* Clear fixed BottomNav (h-16 + safe area) */
+.pb-bottom-nav {
+  padding-bottom: var(--bottom-nav-offset);
+}
+
+/* FAB sits 1rem above the BottomNav */
+.bottom-fab {
+  bottom: calc(var(--bottom-nav-offset) + 1rem);
+}
+
+/* Extra space so list content clears the FAB (nav clearance is on the scroll parent) */
+.pb-above-fab {
+  padding-bottom: 5.5rem;
+}
+
+/* Android WebView paints native gray/black button chrome unless reset */
+@layer base {
+  button,
+  [type="button"],
+  [type="submit"],
+  [type="reset"] {
+    -webkit-appearance: none;
+    appearance: none;
+    background-color: transparent;
+    -webkit-tap-highlight-color: transparent;
+  }
 }
 
 html {
