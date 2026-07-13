@@ -72,7 +72,7 @@ export default function AuthCallbackPage() {
         return;
       }
       await clearLocalAuthState();
-      const user = mapUserFromApi(data.user as Record<string, unknown>);
+      const user = mapUserFromApi(data.user as unknown as Record<string, unknown>);
       await saveUser(user);
       await saveSession(data.session);
       setAuthData(user, data.session);
