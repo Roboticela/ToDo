@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { ChevronDown, ChevronUp, Search, Trash2 } from "lucide-react";
+import { ChevronDown, ChevronUp, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   ADMIN_TABLE_NAMES,
+  createAdminTableRow,
   deleteAdminTableRow,
   fetchAdminTableRows,
+  updateAdminTableRow,
+  type AdminField,
 } from "../../lib/adminApi";
+import AdminRecordForm from "../../components/admin/AdminRecordForm";
 import { cn } from "../../lib/utils";
 
 function previewColumns(row: Record<string, unknown>): [string, string][] {
@@ -60,6 +64,7 @@ export default function AdminTablePage() {
   const valid = (ADMIN_TABLE_NAMES as readonly string[]).includes(model);
 
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [fields, setFields] = useState<AdminField[]>([]);
   const [idField, setIdField] = useState("id");
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -68,6 +73,9 @@ export default function AdminTablePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const pageSize = 25;
 
@@ -84,6 +92,7 @@ export default function AdminTablePage() {
       setRows(data.rows);
       setTotal(data.total);
       setIdField(data.idField);
+      setFields(data.fields || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load table");
     } finally {
@@ -97,6 +106,8 @@ export default function AdminTablePage() {
     setQuery("");
     setSearch("");
     setExpanded(null);
+    setEditingId(null);
+    setCreating(false);
   }, [model]);
 
   useEffect(() => {
@@ -117,6 +128,36 @@ export default function AdminTablePage() {
     }
   }
 
+  async function handleCreate(data: Record<string, unknown>) {
+    setSaving(true);
+    setError("");
+    try {
+      await createAdminTableRow(model, data);
+      setCreating(false);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Create failed");
+      throw e;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUpdate(rowId: string, data: Record<string, unknown>) {
+    setSaving(true);
+    setError("");
+    try {
+      await updateAdminTableRow(model, rowId, data);
+      setEditingId(null);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed");
+      throw e;
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!valid) {
     return (
       <p className="text-sm text-red-400">Unknown table. Pick one from the sidebar.</p>
@@ -127,12 +168,43 @@ export default function AdminTablePage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h2 className="text-2xl font-bold text-foreground font-mono">{model}</h2>
-        <p className="text-sm text-foreground/55 mt-1">
-          {total} row{total === 1 ? "" : "s"} · primary key <span className="font-mono">{idField}</span>
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground font-mono">{model}</h2>
+          <p className="text-sm text-foreground/55 mt-1">
+            {total} row{total === 1 ? "" : "s"} · primary key{" "}
+            <span className="font-mono">{idField}</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setCreating(true);
+            setEditingId(null);
+            setExpanded(null);
+          }}
+          className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-primary text-primary-foreground text-sm font-medium"
+        >
+          <Plus className="w-4 h-4" />
+          New row
+        </button>
       </header>
+
+      {creating && (
+        <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+          <p className="text-sm font-semibold text-foreground">Create {model}</p>
+          <AdminRecordForm
+            key={`create-${model}`}
+            fields={fields}
+            initial={{}}
+            idField={idField}
+            mode="create"
+            saving={saving}
+            onCancel={() => setCreating(false)}
+            onSave={handleCreate}
+          />
+        </div>
+      )}
 
       <form
         className="flex gap-2"
@@ -179,6 +251,7 @@ export default function AdminTablePage() {
             rows.map((row) => {
               const rowId = String(row[idField] ?? "");
               const isOpen = expanded === rowId;
+              const isEditing = editingId === rowId;
               const cols = previewColumns(row);
               return (
                 <div
@@ -187,7 +260,10 @@ export default function AdminTablePage() {
                 >
                   <button
                     type="button"
-                    onClick={() => setExpanded(isOpen ? null : rowId)}
+                    onClick={() => {
+                      setExpanded(isOpen ? null : rowId);
+                      if (isEditing) setEditingId(null);
+                    }}
                     className="w-full text-left px-4 py-3.5 hover:bg-accent/20 transition-colors"
                   >
                     <div className="flex items-start gap-3">
@@ -209,27 +285,55 @@ export default function AdminTablePage() {
 
                   {isOpen && (
                     <div className="border-t border-border/60 px-4 py-3 space-y-3 bg-accent/10">
-                      <pre className="text-[11px] leading-relaxed text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all font-mono">
-                        {JSON.stringify(row, null, 2)}
-                      </pre>
-                      {model !== "User" && rowId && (
-                        <button
-                          type="button"
-                          disabled={deletingId === rowId}
-                          onClick={() => handleDelete(rowId)}
-                          className={cn(
-                            "inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium",
-                            "bg-red-500/15 text-red-400 hover:bg-red-500/25 disabled:opacity-50"
-                          )}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          {deletingId === rowId ? "Deleting…" : "Delete row"}
-                        </button>
-                      )}
-                      {model === "User" && (
-                        <p className="text-xs text-foreground/45">
-                          Delete users from the Users page so avatars and billing are cleaned up.
-                        </p>
+                      {isEditing ? (
+                        <AdminRecordForm
+                          key={`edit-${rowId}`}
+                          fields={fields}
+                          initial={row}
+                          idField={idField}
+                          mode="edit"
+                          saving={saving}
+                          onCancel={() => setEditingId(null)}
+                          onSave={(data) => handleUpdate(rowId, data)}
+                        />
+                      ) : (
+                        <>
+                          <pre className="text-[11px] leading-relaxed text-foreground/80 overflow-x-auto whitespace-pre-wrap break-all font-mono">
+                            {JSON.stringify(row, null, 2)}
+                          </pre>
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCreating(false);
+                                setEditingId(rowId);
+                              }}
+                              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium bg-primary/15 text-primary hover:bg-primary/25"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              Edit
+                            </button>
+                            {model !== "User" && rowId && (
+                              <button
+                                type="button"
+                                disabled={deletingId === rowId}
+                                onClick={() => handleDelete(rowId)}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-xs font-medium",
+                                  "bg-red-500/15 text-red-400 hover:bg-red-500/25 disabled:opacity-50"
+                                )}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                {deletingId === rowId ? "Deleting…" : "Delete"}
+                              </button>
+                            )}
+                            {model === "User" && (
+                              <p className="text-xs text-foreground/45 self-center">
+                                Prefer Users page for avatar/billing-safe user delete.
+                              </p>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
                   )}

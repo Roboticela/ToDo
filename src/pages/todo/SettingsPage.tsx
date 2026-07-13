@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
@@ -88,7 +88,7 @@ function osSoundHint(): string {
 export default function SettingsPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, updateUser, logout, session } = useAuth();
+  const { user, updateUser, logout, session, ensureFreshSession } = useAuth();
   const { refreshTasks } = useTasks();
   const { scheduleSync } = useSync();
   const [activeModal, setActiveModal] = useState<ModalType>(null);
@@ -138,6 +138,31 @@ export default function SettingsPage() {
       }
     })();
   }, [searchParams, session, updateUser, setSearchParams]);
+
+  // Refresh profile so isAdmin / plan flags stay current for Settings UI
+  useEffect(() => {
+    if (!session?.accessToken || session.accessToken.startsWith("local_")) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const fresh = await ensureFreshSession();
+        const token = fresh?.accessToken || session.accessToken;
+        const res = await fetch(`${getApiBase()}/api/users/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) return;
+        const userData = await res.json();
+        const updatedUser = mapUserFromApi(userData);
+        await saveUser(updatedUser);
+        if (!cancelled) updateUser(updatedUser);
+      } catch {
+        /* keep cached user */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.accessToken, ensureFreshSession, updateUser]);
 
   // Keep custom ringtone cached locally for offline playback
   useEffect(() => {
@@ -516,18 +541,12 @@ export default function SettingsPage() {
 
         {currentUser.isAdmin && (
           <Section label="Admin">
-            <Link
-              to="/admin"
-              className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-accent/30 active:bg-accent/50"
-            >
-              <div className="shrink-0">
-                <Shield className="w-4 h-4 text-primary/70" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <span className="text-sm font-medium">Admin Dashboard</span>
-              </div>
-              <ChevronRight className="w-4 h-4 text-foreground/30 shrink-0" />
-            </Link>
+            <SettingsRow
+              icon={<Shield className="w-4 h-4 text-primary/70" />}
+              label="Admin Dashboard"
+              value="Manage users & data"
+              onClick={() => navigate("/admin")}
+            />
           </Section>
         )}
 

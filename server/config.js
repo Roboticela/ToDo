@@ -58,8 +58,9 @@ export const config = {
     publicUrl: (process.env.R2_PUBLIC_URL || "").replace(/\/$/, ""),
   },
 
-  /** Comma-separated emails allowed to use /api/admin and the /admin UI. */
-  adminEmails: (process.env.ADMIN_EMAILS || "")
+  /** Comma-separated emails allowed to use /api/admin and the /admin UI.
+   * Also accepts singular ADMIN_EMAIL for convenience. */
+  adminEmails: (process.env.ADMIN_EMAILS || process.env.ADMIN_EMAIL || "")
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean),

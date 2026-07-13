@@ -27,7 +27,19 @@ async function adminFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export type AdminTableInfo = { name: string; count: number };
+export type AdminField = {
+  name: string;
+  type: string;
+  nullable?: boolean;
+  readOnly?: boolean;
+};
+
+export type AdminTableInfo = {
+  name: string;
+  count: number;
+  idField?: string;
+  fields?: AdminField[];
+};
 
 export type AdminUserListItem = {
   id: string;
@@ -70,8 +82,20 @@ export async function fetchAdminUsers(opts: {
   return adminFetch(`/users${qs ? `?${qs}` : ""}`);
 }
 
-export async function fetchAdminUser(id: string): Promise<AdminUserDetail> {
-  const data = await adminFetch<{ user: AdminUserDetail }>(`/users/${encodeURIComponent(id)}`);
+export async function fetchAdminUser(
+  id: string
+): Promise<{ user: AdminUserDetail; fields: AdminField[] }> {
+  return adminFetch(`/users/${encodeURIComponent(id)}`);
+}
+
+export async function updateAdminUser(
+  id: string,
+  body: Record<string, unknown>
+): Promise<AdminUserDetail> {
+  const data = await adminFetch<{ user: AdminUserDetail }>(`/users/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
   return data.user;
 }
 
@@ -85,6 +109,7 @@ export async function fetchAdminTableRows(
 ): Promise<{
   model: string;
   idField: string;
+  fields: AdminField[];
   page: number;
   pageSize: number;
   total: number;
@@ -101,8 +126,31 @@ export async function fetchAdminTableRows(
 export async function fetchAdminTableRow(
   model: string,
   id: string
-): Promise<{ model: string; idField: string; row: Record<string, unknown> }> {
+): Promise<{ model: string; idField: string; fields: AdminField[]; row: Record<string, unknown> }> {
   return adminFetch(`/tables/${encodeURIComponent(model)}/${encodeURIComponent(id)}`);
+}
+
+export async function createAdminTableRow(
+  model: string,
+  body: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const data = await adminFetch<{ row: Record<string, unknown> }>(
+    `/tables/${encodeURIComponent(model)}`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+  return data.row;
+}
+
+export async function updateAdminTableRow(
+  model: string,
+  id: string,
+  body: Record<string, unknown>
+): Promise<Record<string, unknown>> {
+  const data = await adminFetch<{ row: Record<string, unknown> }>(
+    `/tables/${encodeURIComponent(model)}/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+  return data.row;
 }
 
 export async function deleteAdminTableRow(model: string, id: string): Promise<void> {

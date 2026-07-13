@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, User, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, User, Trash2 } from "lucide-react";
 import {
   deleteAdminUser,
   fetchAdminUser,
+  updateAdminUser,
+  type AdminField,
   type AdminUserDetail,
 } from "../../lib/adminApi";
+import AdminRecordForm from "../../components/admin/AdminRecordForm";
 import { cn } from "../../lib/utils";
 
 function Field({ label, value }: { label: string; value: unknown }) {
@@ -27,30 +30,33 @@ export default function AdminUserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [user, setUser] = useState<AdminUserDetail | null>(null);
+  const [fields, setFields] = useState<AdminField[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    if (!id) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAdminUser(id);
+      setUser(data.user);
+      setFields(data.fields || []);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load user");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
     document.title = "Admin — User";
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError("");
-      try {
-        const data = await fetchAdminUser(id);
-        if (!cancelled) setUser(data);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load user");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function handleDelete() {
@@ -64,6 +70,22 @@ export default function AdminUserDetailPage() {
       setError(e instanceof Error ? e.message : "Delete failed");
       setDeleting(false);
       setConfirmDelete(false);
+    }
+  }
+
+  async function handleSave(data: Record<string, unknown>) {
+    if (!id) return;
+    setSaving(true);
+    setError("");
+    try {
+      const updated = await updateAdminUser(id, data);
+      setUser(updated);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed");
+      throw e;
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -91,12 +113,24 @@ export default function AdminUserDetailPage() {
 
   return (
     <div className="space-y-5">
-      <Link
-        to="/admin/users"
-        className="inline-flex items-center gap-1.5 text-sm text-foreground/55 hover:text-foreground"
-      >
-        <ArrowLeft className="w-4 h-4" /> Users
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link
+          to="/admin/users"
+          className="inline-flex items-center gap-1.5 text-sm text-foreground/55 hover:text-foreground"
+        >
+          <ArrowLeft className="w-4 h-4" /> Users
+        </Link>
+        {!editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl bg-primary/15 text-primary text-sm font-medium hover:bg-primary/25"
+          >
+            <Pencil className="w-4 h-4" />
+            Edit user
+          </button>
+        )}
+      </div>
 
       {error && (
         <div className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-400">
@@ -144,16 +178,36 @@ export default function AdminUserDetailPage() {
         </div>
       )}
 
-      <section className="space-y-2">
-        <p className="text-xs font-semibold text-foreground/40 uppercase tracking-wider px-1">
-          Profile
-        </p>
-        <dl className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/50">
-          {extraEntries.map(([key, value]) => (
-            <Field key={key} label={key} value={value} />
-          ))}
-        </dl>
-      </section>
+      {editing ? (
+        <section className="space-y-2">
+          <p className="text-xs font-semibold text-foreground/40 uppercase tracking-wider px-1">
+            Edit profile
+          </p>
+          <div className="bg-card border border-border rounded-2xl p-4">
+            <AdminRecordForm
+              key={user.id}
+              fields={fields}
+              initial={user}
+              idField="id"
+              mode="edit"
+              saving={saving}
+              onCancel={() => setEditing(false)}
+              onSave={handleSave}
+            />
+          </div>
+        </section>
+      ) : (
+        <section className="space-y-2">
+          <p className="text-xs font-semibold text-foreground/40 uppercase tracking-wider px-1">
+            Profile
+          </p>
+          <dl className="bg-card border border-border rounded-2xl overflow-hidden divide-y divide-border/50">
+            {extraEntries.map(([key, value]) => (
+              <Field key={key} label={key} value={value} />
+            ))}
+          </dl>
+        </section>
+      )}
 
       <section className="space-y-2">
         <p className="text-xs font-semibold text-red-400/80 uppercase tracking-wider px-1">
