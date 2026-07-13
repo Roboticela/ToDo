@@ -1,4 +1,4 @@
 <resources>
     <string name="app_name">ToDo</string>
-    <string name="main_activity_title">Roboticela ToDo</string>
+    <string name="main_activity_title">ToDo</string>
 </resources>

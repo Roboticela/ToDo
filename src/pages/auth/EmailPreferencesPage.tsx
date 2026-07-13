@@ -10,7 +10,7 @@ export default function EmailPreferencesPage() {
   const error = searchParams.get("error");
 
   useEffect(() => {
-    document.title = "Email preferences - Roboticela ToDo";
+    document.title = "Email preferences - ToDo";
   }, []);
 
   const getContent = () => {

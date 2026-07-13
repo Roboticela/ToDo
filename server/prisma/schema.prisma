@@ -1,4 +1,4 @@
-// Prisma schema for Roboticela ToDo - PostgreSQL
+// Prisma schema for ToDo - PostgreSQL
 generator client {
   provider = "prisma-client-js"
 }

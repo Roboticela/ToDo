@@ -45,7 +45,7 @@ interface TodoHeaderProps {
   rightContent?: React.ReactNode;
 }
 
-function TodoHeader({ title: _title = "Roboticela ToDo", rightContent }: TodoHeaderProps) {
+function TodoHeader({ title: _title = "ToDo", rightContent }: TodoHeaderProps) {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
   const { triggerSync, isSyncing } = useSync();
@@ -69,7 +69,7 @@ function TodoHeader({ title: _title = "Roboticela ToDo", rightContent }: TodoHea
         <CheckSquare className="w-6 h-6 text-primary" strokeWidth={2} />
         <h1 className="text-base font-bold text-foreground">
           <span className="sm:hidden">ToDo</span>
-          <span className="hidden sm:inline">Roboticela ToDo</span>
+          <span className="hidden sm:inline">ToDo</span>
         </h1>
       </button>
 

@@ -465,7 +465,7 @@ export async function getExportData(userId: string): Promise<ExportData> {
   return {
     version: EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
-    app: "Roboticela ToDo",
+    app: "ToDo",
     tasks,
     completions,
   };

@@ -4,7 +4,7 @@ import { emailLayout, buttonStyle } from "./layout.js";
  * Subscription reminder – user is on free plan; encourage upgrade. Includes unsubscribe.
  */
 export function getSubscriptionReminderEmail({ userName, subscriptionUrl, unsubscribeUrl }) {
-  const subject = "Unlock more with Roboticela ToDo";
+  const subject = "Unlock more with ToDo";
   const bodyHtml = `
     <p style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #0f172a;">Hi ${userName},</p>
     <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #334155;">You're on the <strong>Free</strong> plan. Upgrade to <strong>Basic</strong> or <strong>Pro</strong> for more task history, repeat tasks, and analytics.</p>
@@ -29,9 +29,9 @@ export function getSubscriptionReminderEmail({ userName, subscriptionUrl, unsubs
         </td>
       </tr>
     </table>
-    <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #64748b;">You're receiving this because you have a Roboticela ToDo account. Cancel anytime from your account settings.</p>
+    <p style="margin: 0; font-size: 14px; line-height: 1.6; color: #64748b;">You're receiving this because you have a ToDo account. Cancel anytime from your account settings.</p>
   `;
   const html = emailLayout({ bodyHtml, unsubscribeUrl });
-  const text = `Hi ${userName},\n\nYou're on the free plan. Upgrade to Basic or Pro for more features.\n\nView plans: ${subscriptionUrl}\n\nUnsubscribe: ${unsubscribeUrl}\n\nRoboticela ToDo`;
+  const text = `Hi ${userName},\n\nYou're on the free plan. Upgrade to Basic or Pro for more features.\n\nView plans: ${subscriptionUrl}\n\nUnsubscribe: ${unsubscribeUrl}\n\nToDo`;
   return { subject, text, html };
 }

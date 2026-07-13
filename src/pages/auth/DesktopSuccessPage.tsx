@@ -5,7 +5,7 @@ import { Check, CheckSquare } from "lucide-react";
 /** Shown after desktop Google OAuth auto-links to the app poll slot. */
 export default function DesktopSuccessPage() {
   useEffect(() => {
-    document.title = "Signed in - Roboticela ToDo";
+    document.title = "Signed in - ToDo";
   }, []);
 
   return (

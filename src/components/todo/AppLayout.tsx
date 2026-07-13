@@ -54,7 +54,7 @@ export default function AppLayout() {
   );
 
   useEffect(() => {
-    document.title = `${headerTitle} - Roboticela ToDo`;
+    document.title = `${headerTitle} - ToDo`;
   }, [headerTitle]);
 
   useEffect(() => {

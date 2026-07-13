@@ -69,7 +69,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   transition={{ delay: 0.15 }}
                   className="text-xl sm:text-2xl font-bold text-foreground"
                 >
-                  About Roboticela ToDo
+                  About ToDo
                 </motion.h2>
                 <motion.button
                   onClick={onClose}
@@ -99,7 +99,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   >
                     <h3 className="text-lg font-semibold text-foreground mb-2">Description</h3>
                     <p className="text-foreground/90 text-sm sm:text-base leading-relaxed">
-                      Roboticela ToDo is a task management app to plan your day, track progress, and stay on top of what to do and what to avoid. Use Today, Calendar, and Analytics to organize tasks by time, repeat schedules, and see how you’re doing.
+                      ToDo is a task management app to plan your day, track progress, and stay on top of what to do and what to avoid. Use Today, Calendar, and Analytics to organize tasks by time, repeat schedules, and see how you’re doing.
                     </p>
                   </motion.div>
 

@@ -15,7 +15,7 @@ export default function RegisterPage() {
   const { setAuthData, isAuthenticated, isLoading: authLoading, user } = useAuth();
 
   useEffect(() => {
-    document.title = "Sign up - Roboticela ToDo";
+    document.title = "Sign up - ToDo";
   }, []);
 
   useEffect(() => {

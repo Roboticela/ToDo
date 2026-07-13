@@ -750,7 +750,7 @@ export default function SettingsPage() {
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">Launch at startup</p>
                 <p className="text-xs text-foreground/50 mt-0.5">
-                  Open Roboticela ToDo automatically when you sign in to your computer.
+                  Open ToDo automatically when you sign in to your computer.
                 </p>
               </div>
               <button

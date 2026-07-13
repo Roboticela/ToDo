@@ -18,7 +18,7 @@ export default function LoginPage() {
   const [showVerifiedMessage, setShowVerifiedMessage] = useState(false);
 
   useEffect(() => {
-    document.title = "Login - Roboticela ToDo";
+    document.title = "Login - ToDo";
   }, []);
 
   // If we become authenticated while on login (e.g. deep link just processed), go to app
@@ -136,7 +136,7 @@ export default function LoginPage() {
           >
             <CheckSquare className="w-8 h-8 text-primary" />
           </motion.div>
-          <h1 className="text-2xl font-bold text-foreground">Roboticela ToDo</h1>
+          <h1 className="text-2xl font-bold text-foreground">ToDo</h1>
           <p className="text-sm text-foreground/60 mt-1">Welcome back</p>
         </div>
 

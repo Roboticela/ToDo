@@ -10,7 +10,7 @@ export default function ResetPasswordPage() {
   const token = searchParams.get("token");
 
   useEffect(() => {
-    document.title = "Set new password - Roboticela ToDo";
+    document.title = "Set new password - ToDo";
   }, []);
 
   const [password, setPassword] = useState("");

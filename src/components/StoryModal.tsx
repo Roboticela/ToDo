@@ -67,7 +67,7 @@ export default function StoryModal({ isOpen, onClose }: StoryModalProps) {
                     <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">
                       How it works
                     </h2>
-                    <p className="text-xs text-tertiary mt-0.5">Roboticela ToDo</p>
+                    <p className="text-xs text-tertiary mt-0.5">ToDo</p>
                   </div>
                 </div>
                 <motion.button

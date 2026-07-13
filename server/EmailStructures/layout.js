@@ -17,7 +17,7 @@ export function emailLayout({ bodyHtml, unsubscribeUrl }) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Roboticela ToDo</title>
+  <title>ToDo</title>
 </head>
 <body style="margin: 0; padding: 0; background-color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f1f5f9;">
@@ -29,7 +29,7 @@ export function emailLayout({ bodyHtml, unsubscribeUrl }) {
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
                 <tr>
                   <td>
-                    <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">Roboticela ToDo</h1>
+                    <h1 style="margin: 0; font-size: 22px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">ToDo</h1>
                     <p style="margin: 4px 0 0 0; font-size: 13px; color: rgba(255,255,255,0.85);">Organize your tasks, get things done</p>
                   </td>
                 </tr>

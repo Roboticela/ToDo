@@ -4,7 +4,7 @@ import { emailLayout, buttonStyle } from "./layout.js";
  * Email change – confirm your new email address
  */
 export function getEmailChangeEmail({ confirmUrl, userName, newEmail, unsubscribeUrl }) {
-  const subject = "Confirm your new email – Roboticela ToDo";
+  const subject = "Confirm your new email – ToDo";
   const bodyHtml = `
     <p style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #0f172a;">Hi ${userName},</p>
     <p style="margin: 0 0 24px 0; font-size: 16px; line-height: 1.6; color: #334155;">You requested to change your email address to <strong style="color: #6366f1;">${newEmail}</strong>. Click the button below to confirm. This link expires in <strong>1 hour</strong>.</p>
@@ -20,7 +20,7 @@ export function getEmailChangeEmail({ confirmUrl, userName, newEmail, unsubscrib
     <p style="margin: 4px 0 0 0; font-size: 12px; word-break: break-all;"><a href="${confirmUrl}" style="color: #6366f1; text-decoration: underline;">${confirmUrl}</a></p>
   `;
   const html = emailLayout({ bodyHtml, unsubscribeUrl });
-  let text = `Hi ${userName},\n\nYou requested to change your email to ${newEmail}. Click the link below to confirm (valid for 1 hour):\n${confirmUrl}\n\nIf you didn't request this change, ignore this email.\n\nRoboticela ToDo`;
+  let text = `Hi ${userName},\n\nYou requested to change your email to ${newEmail}. Click the link below to confirm (valid for 1 hour):\n${confirmUrl}\n\nIf you didn't request this change, ignore this email.\n\nToDo`;
   if (unsubscribeUrl) text += `\n\nUnsubscribe from these emails: ${unsubscribeUrl}`;
   return { subject, text, html };
 }

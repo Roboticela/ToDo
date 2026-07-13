@@ -7,7 +7,7 @@ import { cn } from "../../lib/utils";
 
 export default function ForgotPasswordPage() {
   useEffect(() => {
-    document.title = "Forgot Password - Roboticela ToDo";
+    document.title = "Forgot Password - ToDo";
   }, []);
 
   const [email, setEmail] = useState("");

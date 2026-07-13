@@ -116,7 +116,7 @@ fn show_main_window<R: Runtime>(app: &AppHandle<R>) {
 pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let prefs = load_prefs(app);
 
-    let show_i = MenuItem::with_id(app, "show", "Open Roboticela ToDo", true, None::<&str>)?;
+    let show_i = MenuItem::with_id(app, "show", "Open ToDo", true, None::<&str>)?;
     let hide_i = MenuItem::with_id(app, "hide", "Hide window", true, None::<&str>)?;
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show_i, &hide_i, &quit_i])?;
@@ -129,7 +129,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     let tray = TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon)
         .menu(&menu)
-        .tooltip("Roboticela ToDo")
+        .tooltip("ToDo")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "show" => show_main_window(app),

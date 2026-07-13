@@ -299,7 +299,7 @@ export async function previewNotificationSound(opts: {
       try {
         await showNativeNotification(
           {
-            title: "Roboticela ToDo",
+            title: "ToDo",
             body: "System default notification sound",
             tag: "preview-normal",
             mode: "normal",

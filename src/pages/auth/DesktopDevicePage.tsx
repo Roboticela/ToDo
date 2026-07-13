@@ -18,7 +18,7 @@ export default function DesktopDevicePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    document.title = "Link desktop app - Roboticela ToDo";
+    document.title = "Link desktop app - ToDo";
     const hash = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);
     const code = params.get("code");
