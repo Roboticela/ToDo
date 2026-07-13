@@ -119,21 +119,50 @@ export function getGoogleWebClientId(): string {
   return String(import.meta.env.VITE_GOOGLE_CLIENT_ID ?? "").trim();
 }
 
+function mapNativeGoogleError(raw: string): string {
+  const msg = raw.trim();
+  if (!msg) return "Google sign-in failed.";
+  if (/cancel/i.test(msg)) return msg;
+  if (/No Google account/i.test(msg)) {
+    return "No Google account found on this device. Add a Google account in system settings, then try again.";
+  }
+  // Common Credential Manager / Play Services failures when Android OAuth client or SHA-1 is missing
+  if (
+    /Credential error|GetCredential|28444|Developer console|not set up correctly|16:/i.test(msg)
+  ) {
+    return (
+      "Google account picker could not verify this app. In Google Cloud Console, create an " +
+      "Android OAuth client for package com.roboticela.todo and add your debug/release SHA-1 fingerprint. " +
+      "Use the Web client ID as VITE_GOOGLE_CLIENT_ID (not the Android client ID)."
+    );
+  }
+  return msg;
+}
+
 /**
  * Android / iOS: system Google account picker, then exchange ID token with the API.
  */
 export async function loginWithNativeGoogle(): Promise<{ user: User; session: AuthSession }> {
   const clientId = getGoogleWebClientId();
   if (!clientId) {
-    throw new Error("Google Sign-In is not configured (missing VITE_GOOGLE_CLIENT_ID).");
+    throw new Error(
+      "Google Sign-In is not configured (missing VITE_GOOGLE_CLIENT_ID). Rebuild after setting it in .env."
+    );
   }
   const { signIn } = await import("@choochmeque/tauri-plugin-google-auth-api");
-  const { getAppRuntime } = await import("./platform");
-  const tokens = await signIn({
-    clientId,
-    scopes: ["openid", "email", "profile"],
-    ...(getAppRuntime() === "android" ? { flowType: "native" as const } : {}),
-  });
+  const { getAppRuntime, formatCaughtError } = await import("./platform");
+
+  let tokens;
+  try {
+    tokens = await signIn({
+      clientId,
+      scopes: ["openid", "email", "profile"],
+      ...(getAppRuntime() === "android" ? { flowType: "native" as const } : {}),
+    });
+  } catch (e) {
+    throw new Error(mapNativeGoogleError(formatCaughtError(e, "Google sign-in failed.")));
+  }
+
   if (!tokens.idToken) {
     throw new Error("Google did not return an ID token. Please try again.");
   }

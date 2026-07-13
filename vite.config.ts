@@ -26,6 +26,12 @@ export default defineConfig(({ mode }) => {
     env.VITE_API_URL ||
     env.API_URL ||
     ''
+  const googleClientId =
+    process.env.VITE_GOOGLE_CLIENT_ID ||
+    process.env.GOOGLE_CLIENT_ID ||
+    env.VITE_GOOGLE_CLIENT_ID ||
+    env.GOOGLE_CLIENT_ID ||
+    ''
 
   // Visible in GitHub Actions / CI logs so you can verify what URLs get baked into the client.
   console.log('')
@@ -37,20 +43,23 @@ export default defineConfig(({ mode }) => {
   console.log('---------- process.env --------------------------------')
   console.log(`VITE_APP_URL           = ${process.env.VITE_APP_URL ?? '(unset)'}`)
   console.log(`VITE_API_URL           = ${process.env.VITE_API_URL ?? '(unset)'}`)
+  console.log(`VITE_GOOGLE_CLIENT_ID  = ${process.env.VITE_GOOGLE_CLIENT_ID ? '(set)' : '(unset)'}`)
   console.log(`APP_URL                = ${process.env.APP_URL ?? '(unset)'}`)
   console.log(`API_URL                = ${process.env.API_URL ?? '(unset)'}`)
   console.log('---------- loadEnv(.env*) ------------------------------')
   console.log(`VITE_APP_URL           = ${env.VITE_APP_URL ?? '(unset)'}`)
   console.log(`VITE_API_URL           = ${env.VITE_API_URL ?? '(unset)'}`)
+  console.log(`VITE_GOOGLE_CLIENT_ID  = ${env.VITE_GOOGLE_CLIENT_ID ? '(set)' : '(unset)'}`)
   console.log(`APP_URL                = ${env.APP_URL ?? '(unset)'}`)
   console.log(`API_URL                = ${env.API_URL ?? '(unset)'}`)
   console.log('---------- FINAL (import.meta.env) ---------------------')
   console.log(`VITE_APP_URL           = ${appUrl || '(empty)'}`)
   console.log(`VITE_API_URL           = ${apiUrl || '(empty)'}`)
+  console.log(`VITE_GOOGLE_CLIENT_ID  = ${googleClientId ? '(set)' : '(empty)'}`)
   console.log('========================================================')
   console.log('')
   if (process.env.GITHUB_ACTIONS === 'true') {
-    console.log(`::notice title=Vite baked URLs::VITE_APP_URL=${appUrl || '(empty)'} VITE_API_URL=${apiUrl || '(empty)'}`)
+    console.log(`::notice title=Vite baked URLs::VITE_APP_URL=${appUrl || '(empty)'} VITE_API_URL=${apiUrl || '(empty)'} VITE_GOOGLE_CLIENT_ID=${googleClientId ? 'set' : '(empty)'}`)
   }
 
   return {
@@ -60,6 +69,7 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.VITE_APP_URL': JSON.stringify(appUrl),
       'import.meta.env.VITE_API_URL': JSON.stringify(apiUrl),
+      'import.meta.env.VITE_GOOGLE_CLIENT_ID': JSON.stringify(googleClientId),
     },
     plugins: [react(), tailwindcss()],
 

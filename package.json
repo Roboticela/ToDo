@@ -38,7 +38,8 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "icons:generate": "node scripts/icons-generate.js",
-    "sounds:download": "node scripts/download-sound-library.js"
+    "sounds:download": "node scripts/download-sound-library.js",
+    "android:sha1": "node scripts/print-android-sha1.mjs"
   },
   "dependencies": {
     "@choochmeque/tauri-plugin-google-auth-api": "^0.5.1",

@@ -6,7 +6,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { login, getGoogleAuthUrl, startDesktopGoogleLogin, pollDesktopPending, loginWithNativeGoogle } from "../../lib/authService";
 import { isTauri } from "../../lib/tauri";
 import { openLink } from "../../lib/tauri";
-import { getAppRuntime } from "../../lib/platform";
+import { getAppRuntime, formatCaughtError, isUserCancelledAuthError } from "../../lib/platform";
 import { cn } from "../../lib/utils";
 import { completeDesktopAuthWithCode } from "../../lib/deepLinkAuth";
 import DesktopDeviceCodePanel from "../../components/auth/DesktopDeviceCodePanel";
@@ -90,8 +90,8 @@ export default function LoginPage() {
         setAuthData(user, session);
         navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Could not start Google sign-in.";
-        if (!/cancel/i.test(msg)) {
+        const msg = formatCaughtError(e, "Could not start Google sign-in.");
+        if (!isUserCancelledAuthError(msg)) {
           setError(msg);
         }
       } finally {
@@ -105,7 +105,7 @@ export default function LoginPage() {
         await openLink(verificationUrl, { openInNewTab: true });
         setPendingDesktopAuth({ requestId, pollSecret, userCode });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not start Google sign-in.");
+        setError(formatCaughtError(e, "Could not start Google sign-in."));
       }
       return;
     }
