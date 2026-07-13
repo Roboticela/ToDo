@@ -1,4 +1,4 @@
-import type { RepeatDay, SubscriptionPlan, TaskFormData } from "../types/todo";
+import type { RepeatDay, SubscriptionPlan, Task, TaskFormData } from "../types/todo";
 import { PLAN_FEATURES } from "../types/todo";
 import {
   getAllTasksByUser,

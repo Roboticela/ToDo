@@ -287,11 +287,11 @@ export async function resendVerification(): Promise<void> {
 }
 
 export async function changePassword(
-  userId: string,
+  _userId: string,
   newPassword: string,
   currentPassword?: string
 ): Promise<void> {
-  const session = await getSession(userId);
+  const session = await getAnySession();
   if (!session) throw new Error("Not signed in");
   const res = await fetch(`${API_BASE}/api/auth/change-password`, {
     method: "POST",
@@ -340,7 +340,7 @@ export { clearLocalAuthState, isValidAuthPayload };
 
 export async function logout(userId: string): Promise<void> {
   try {
-    const session = await getSession(userId);
+    const session = await getAnySession();
     if (session) {
       await fetch(`${API_BASE}/api/auth/logout`, {
         method: "POST",
