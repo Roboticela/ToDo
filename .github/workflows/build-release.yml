@@ -238,6 +238,20 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Sync frontend env for Tauri → Vite
+        run: |
+          echo "========== JOB ENV (GitHub Actions → Tauri) =========="
+          echo "GitHub Environment: ${{ inputs.environment }}"
+          echo "VITE_APP_URL=${VITE_APP_URL:-(empty)}"
+          echo "VITE_API_URL=${VITE_API_URL:-(empty)}"
+          echo "APP_URL=${APP_URL:-(empty)}"
+          echo "API_URL=${API_URL:-(empty)}"
+          echo "======================================================"
+          node scripts/sync-frontend-env.mjs
+          echo "---------- .env.production after sync ----------------"
+          cat .env.production 2>/dev/null || echo "(no .env.production written)"
+          echo "======================================================"
+
       - name: Build Tauri app
         run: npm run tauri:build -- --target ${{ matrix.rust-target }}
 
@@ -304,6 +318,21 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      - name: Sync frontend env for Tauri → Vite
+        shell: bash
+        run: |
+          echo "========== JOB ENV (GitHub Actions → Tauri) =========="
+          echo "GitHub Environment: ${{ inputs.environment }}"
+          echo "VITE_APP_URL=${VITE_APP_URL:-(empty)}"
+          echo "VITE_API_URL=${VITE_API_URL:-(empty)}"
+          echo "APP_URL=${APP_URL:-(empty)}"
+          echo "API_URL=${API_URL:-(empty)}"
+          echo "======================================================"
+          node scripts/sync-frontend-env.mjs
+          echo "---------- .env.production after sync ----------------"
+          cat .env.production 2>/dev/null || echo "(no .env.production written)"
+          echo "======================================================"
 
       - name: Build Tauri app
         run: npm run tauri:build -- --target ${{ matrix.rust-target }}
@@ -382,6 +411,20 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      - name: Sync frontend env for Tauri → Vite
+        run: |
+          echo "========== JOB ENV (GitHub Actions → Tauri) =========="
+          echo "GitHub Environment: ${{ inputs.environment }}"
+          echo "VITE_APP_URL=${VITE_APP_URL:-(empty)}"
+          echo "VITE_API_URL=${VITE_API_URL:-(empty)}"
+          echo "APP_URL=${APP_URL:-(empty)}"
+          echo "API_URL=${API_URL:-(empty)}"
+          echo "======================================================"
+          node scripts/sync-frontend-env.mjs
+          echo "---------- .env.production after sync ----------------"
+          cat .env.production 2>/dev/null || echo "(no .env.production written)"
+          echo "======================================================"
 
       - name: Initialize Tauri Android
         run: npx tauri android init
