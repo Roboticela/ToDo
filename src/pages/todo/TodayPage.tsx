@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, ChevronLeft, ChevronRight, CheckCircle2, List, TrendingUp, TrendingDown } from "lucide-react";
 import { format, addDays, subDays, parseISO } from "date-fns";
@@ -22,7 +22,12 @@ export default function TodayPage() {
   const today = format(new Date(), "yyyy-MM-dd");
   const isToday = selectedDate === today;
 
-  const loadRepeatingCompletions = async () => {
+  // BUG-02: Use useCallback so the function identity is stable, and a ref-based cancel
+  // token so stale async results can't overwrite fresher state when deps change quickly.
+  const cancelRef = useRef<number>(0);
+
+  const loadRepeatingCompletions = useCallback(async () => {
+    const token = ++cancelRef.current;
     if (!user || tasks.length === 0) {
       setRepeatingCompletedCount(0);
       return;
@@ -35,20 +40,15 @@ export default function TodayPage() {
     const results = await Promise.all(
       repeatingTasks.map((task) => getTaskCompletionForDate(task, selectedDate))
     );
+    // Discard if a newer call has started
+    if (token !== cancelRef.current) return;
     const count = results.filter((r) => r.isCompleted).length;
     setRepeatingCompletedCount(count);
-  };
-
-  // Load completed count for repeating tasks for the selected date
-  useEffect(() => {
-    let cancelled = false;
-    loadRepeatingCompletions().then(() => {
-      if (cancelled) return;
-    });
-    return () => {
-      cancelled = true;
-    };
   }, [user, tasks, selectedDate]);
+
+  useEffect(() => {
+    void loadRepeatingCompletions();
+  }, [loadRepeatingCompletions]);
 
   function goToPrevDay() {
     setSelectedDate(format(subDays(parsedDate, 1), "yyyy-MM-dd"));

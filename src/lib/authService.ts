@@ -353,6 +353,13 @@ export async function logout(userId: string): Promise<void> {
   }
   const { clearAllTimers } = await import("./notificationService");
   clearAllTimers();
+  // BUG-10: Also cancel native OS alarms (Android AlarmManager) so they don't fire after logout
+  try {
+    const { cancelAllNativeNotifications } = await import("./nativeNotification");
+    await cancelAllNativeNotifications();
+  } catch {
+    // ignore — native cancel failing should not block logout
+  }
   // Wipe local tasks/completions/notifications so another account on this device
   // cannot see prior data or receive prior reminders
   const { clearAll, deleteSession } = await import("./db");

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -59,6 +59,7 @@ export default function CalendarPage() {
   const gridStart = startOfWeek(monthStart, { weekStartsOn: 0 });
   const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
 
+  // Calculate days for the calendar grid
   const days: Date[] = [];
   let cur = gridStart;
   while (cur <= gridEnd) {
@@ -66,15 +67,30 @@ export default function CalendarPage() {
     cur = addDays(cur, 1);
   }
 
+  // BUG-24: Use a ref-based cancel token so stale async results don't overwrite fresher state.
+  const cancelRef = useRef<number>(0);
+
   // Load month task indicators
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
+    const token = ++cancelRef.current;
 
     async function loadMonthIndicators() {
+      // BUG-24: Recalculate days inside to ensure we're using the freshest dates for the month
+      const ms = startOfMonth(currentMonth);
+      const me = endOfMonth(currentMonth);
+      const gs = startOfWeek(ms, { weekStartsOn: 0 });
+      const ge = endOfWeek(me, { weekStartsOn: 0 });
+      const currentDays: Date[] = [];
+      let c = gs;
+      while (c <= ge) {
+        currentDays.push(new Date(c));
+        c = addDays(c, 1);
+      }
+
       const map = new Map<string, DayInfo>();
       const cutoff = getHistoryCutoff(user!.plan, user!.planExpiresAt);
-      const batchDays = days.slice(0, 42);
+      const batchDays = currentDays.slice(0, 42);
       await Promise.all(
         batchDays
           .filter((d) => isSameMonth(d, currentMonth))
@@ -96,22 +112,19 @@ export default function CalendarPage() {
             }
           })
       );
-      if (!cancelled) {
+      if (token === cancelRef.current) {
         setDayInfoMap(map);
       }
     }
-    loadMonthIndicators();
+    void loadMonthIndicators();
 
-    const reload = () => loadMonthIndicators();
+    const reload = () => void loadMonthIndicators();
     window.addEventListener("tasks-synced", reload);
     window.addEventListener("tasks-changed", reload);
     return () => {
-      cancelled = true;
       window.removeEventListener("tasks-synced", reload);
       window.removeEventListener("tasks-changed", reload);
     };
-    // days is derived from currentMonth; including the array would re-run every render
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, currentMonth]);
 
   const loadDayTasks = useCallback(

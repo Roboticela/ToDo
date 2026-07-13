@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "./uuid";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import type { Task, TaskFormData, TaskPriority, RepeatDay } from "../types/todo";
 import {
   saveTask,
@@ -286,15 +286,19 @@ export async function getTaskCompletionForDate(
   task: Task,
   date: string
 ): Promise<{ isCompleted: boolean; completionId?: string }> {
+  const completions = await getCompletionsByUserAndDate(task.userId, date);
+  const rows = completions.filter((c) => c.taskId === task.id);
+  const completed = rows.find((c) => c.status === "completed");
+
   if (task.isRepeating) {
-    const completions = await getCompletionsByUserAndDate(task.userId, date);
-    const rows = completions.filter((c) => c.taskId === task.id);
-    const completed = rows.find((c) => c.status === "completed");
     if (completed) return { isCompleted: true, completionId: completed.id };
-    const any = rows[0];
-    return { isCompleted: false, completionId: any?.id };
+    return { isCompleted: false, completionId: rows[0]?.id };
   } else {
-    return { isCompleted: task.status === "completed" };
+    // BUG-32: Check completions table for one-time tasks as well so history isn't orphaned
+    return { 
+      isCompleted: task.status === "completed" || !!completed,
+      completionId: completed?.id 
+    };
   }
 }
 
@@ -367,10 +371,15 @@ export async function getAnalyticsForDateRange(
       // (avoids rewriting past "missed" days when the task is finished later).
       const isCompleted = task.isRepeating
         ? completionsForDay.some((c) => c.taskId === task.id)
+        // BUG-07: For one-time tasks, check completedAt date first (late completions),
+        // then fall back to the task's scheduled date. This ensures tasks completed
+        // after their due date are attributed to the day they were actually finished.
         : task.status === "completed" &&
           (task.completedAt
             ? task.completedAt.slice(0, 10) === day
             : task.date === day);
+      // Count as completed on whichever day matches; for days before completedAt,
+      // the task appears as pending (inProgress) or missed if already past.
       if (isCompleted) {
         dayCompleted++;
         if (task.category === "dont") dontCompleted++;
@@ -415,10 +424,12 @@ export async function getAnalyticsForDateRange(
 
 // ─── Get Earliest Task Date ───────────────────────────────────────────────────
 
+// BUG-03: Exclude soft-deleted tasks and return the earliest date
 export async function getEarliestTaskDate(userId: string): Promise<string | null> {
   const tasks = await getAllTasksByUser(userId);
-  if (tasks.length === 0) return null;
-  const dates = tasks.map((t) => t.date).sort();
+  const activeTasks = tasks.filter((t) => !t.deletedAt);
+  if (activeTasks.length === 0) return null;
+  const dates = activeTasks.map((t) => t.date).sort();
   return dates[0];
 }
 
@@ -428,14 +439,16 @@ export function getTodayString(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
 
+// BUG-22: Use date-fns helpers (DST-safe) instead of raw ms arithmetic
 export function getDateLabel(date: string): string {
   const today = getTodayString();
-  const tomorrow = format(new Date(Date.now() + 86400000), "yyyy-MM-dd");
-  const yesterday = format(new Date(Date.now() - 86400000), "yyyy-MM-dd");
+  const todayMidnight = new Date(today + "T00:00:00");
+  const tomorrowStr = format(addDays(todayMidnight, 1), "yyyy-MM-dd");
+  const yesterdayStr = format(addDays(todayMidnight, -1), "yyyy-MM-dd");
 
   if (date === today) return "Today";
-  if (date === tomorrow) return "Tomorrow";
-  if (date === yesterday) return "Yesterday";
+  if (date === tomorrowStr) return "Tomorrow";
+  if (date === yesterdayStr) return "Yesterday";
 
   return format(new Date(date + "T12:00:00"), "EEE, MMM d");
 }

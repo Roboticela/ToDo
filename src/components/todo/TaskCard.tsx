@@ -37,9 +37,13 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   const { user } = useAuth();
   const { completeTask, uncompleteTask, deleteTask, skipTaskForDate, endRepeatingSeriesFromDate } = useTasks();
   const [isCompleted, setIsCompleted] = useState(false);
+  // BUG-31: Track skipped state separately so we can style it distinctly from pending
+  const [isSkipped, setIsSkipped] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  // BUG-04: Surface delete errors to the user
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   const timeFormat = user?.timeFormat === "24h" ? "24h" : "12h";
@@ -47,15 +51,21 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
 
   useEffect(() => {
     let cancelled = false;
-    getTaskCompletionForDate(task, date).then(({ isCompleted: c }) => {
+    getTaskCompletionForDate(task, date).then(({ isCompleted: c, completionId }) => {
       if (!cancelled) {
         setIsCompleted((prev) => (prev === c ? prev : c));
+        // BUG-31: Detect skipped completions so we can style them differently
+        if (!c && completionId && task.isRepeating) {
+          // completionId present + not completed => skipped
+          setIsSkipped(true);
+        } else {
+          setIsSkipped(false);
+        }
       }
     });
     return () => {
       cancelled = true;
     };
-    // Intentionally narrow deps so background sync (new object refs / syncStatus) does not flicker.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- task fields listed below
   }, [task.id, task.status, task.updatedAt, task.completedAt, date]);
 
@@ -66,14 +76,17 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
     return () => window.clearInterval(id);
   }, [showCountdown, task.id, task.time, task.startTime, task.endTime, date]);
 
+  // BUG-01: Pass the card's own `date` prop, not the context selectedDate
   async function handleToggle() {
     if (isCompleted) {
-      await uncompleteTask(task);
+      await uncompleteTask(task, date);
       setIsCompleted(false);
+      setIsSkipped(false);
       onCompletionChange?.(false);
     } else {
-      await completeTask(task);
+      await completeTask(task, date);
       setIsCompleted(true);
+      setIsSkipped(false);
       onCompletionChange?.(true);
     }
   }
@@ -84,6 +97,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
 
   async function handleDeleteConfirm(choice: DeleteChoice) {
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       if (choice === "this_date") {
         await skipTaskForDate(task, date);
@@ -93,7 +107,8 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
         await deleteTask(task.id);
       }
     } catch (e) {
-      // Ignore or log error
+      // BUG-04: Surface the error so the user knows the delete failed
+      setDeleteError(e instanceof Error ? e.message : "Failed to delete task. Please try again.");
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
@@ -230,10 +245,26 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                       (task.priority ?? "medium").slice(1)}
                   </span>
 
-                  {task.isRepeating && (
-                    <span className="inline-flex items-center gap-1 text-xs text-primary/60 bg-primary/10 px-1.5 py-0.5 rounded-full">
-                      <Repeat className="w-3 h-3" />
-                      Weekly
+                  {task.isRepeating && (() => {
+                    // BUG-13: Dynamic repeat label instead of hardcoded "Weekly"
+                    const days = task.repeatDays?.length ?? 0;
+                    const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+                    let repeatLabel = "Weekly";
+                    if (days === 7) repeatLabel = "Daily";
+                    else if (days === 5 && !task.repeatDays!.includes(0) && !task.repeatDays!.includes(6)) repeatLabel = "Weekdays";
+                    else if (days === 1) repeatLabel = `${DAY_NAMES[task.repeatDays![0]]}s`;
+                    return (
+                      <span className="inline-flex items-center gap-1 text-xs text-primary/60 bg-primary/10 px-1.5 py-0.5 rounded-full">
+                        <Repeat className="w-3 h-3" />
+                        {repeatLabel}
+                      </span>
+                    );
+                  })()}
+
+                  {/* BUG-31: Show amber "Skipped" badge when this occurrence was skipped */}
+                  {isSkipped && !isCompleted && (
+                    <span className="inline-flex items-center gap-1 text-xs text-amber-500/80 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                      Skipped
                     </span>
                   )}
                 </div>
@@ -299,6 +330,21 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
       onConfirm={handleDeleteConfirm}
       isDeleting={isDeleting}
     />
+
+    {/* BUG-04: Show delete error toast so user is informed when delete fails */}
+    <AnimatePresence>
+      {deleteError && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 8 }}
+          onAnimationComplete={() => setTimeout(() => setDeleteError(null), 4000)}
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[9998] flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/95 text-white text-sm font-medium shadow-xl"
+        >
+          {deleteError}
+        </motion.div>
+      )}
+    </AnimatePresence>
   </>
   );
 }

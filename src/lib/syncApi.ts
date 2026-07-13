@@ -159,6 +159,12 @@ async function doSync(userId: string): Promise<SyncResult> {
     endSyncApplyBarrier();
   }
 
+  // BUG-11: We must throw an error after safely saving everything so the user is notified
+  // that their tasks were rejected due to plan limits, otherwise it loops forever silently.
+  if (rejectedTaskIds.size > 0) {
+    throw new Error(`Daily limit exceeded. ${rejectedTaskIds.size} task(s) could not be synced.`);
+  }
+
   return { ok: true, tasks: serverTasks, completions: serverCompletions };
 }
 

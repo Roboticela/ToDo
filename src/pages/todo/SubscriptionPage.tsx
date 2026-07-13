@@ -360,7 +360,14 @@ export default function SubscriptionPage() {
               ? false
               : effectivePlan === plan.id;
           const isPendingSelectFree = plan.id === "free" && user?.plan === "pending";
-          const isUpgrade = isPaidPlan(plan.id) && !isCurrentPlan;
+          const planTiers: Record<string, number> = { pending: -1, free: 0, basic: 1, pro: 2, lifetime: 3 };
+          const currentTier = planTiers[effectivePlan] ?? 0;
+          const targetTier = planTiers[plan.id] ?? 0;
+          
+          // BUG-26: Only treat as upgrade if the target tier is strictly higher.
+          // Otherwise, it's a downgrade/lateral move and they must use the portal.
+          const isUpgrade = targetTier > currentTier;
+          
           const isLoading = loadingPlan === plan.id;
           const isSelectingFree = plan.id === "free" && selectingFree;
           const isLifetime = plan.id === "lifetime";
@@ -459,6 +466,8 @@ export default function SubscriptionPage() {
                 onClick={() => {
                   if (plan.id === "free") handleSelectFree();
                   else if (isUpgrade) handleUpgrade(plan.id);
+                  // BUG-26: Instead of starting a checkout for downgrades, send them to the portal
+                  else handleManageSubscription();
                 }}
                 className={cn(
                   "w-full h-11 rounded-xl text-sm font-semibold transition-all",
@@ -481,7 +490,9 @@ export default function SubscriptionPage() {
                   ? "Opening checkout..."
                   : isLifetime
                   ? "Get Lifetime"
-                  : `Upgrade to ${plan.name}`}
+                  : isUpgrade
+                  ? `Upgrade to ${plan.name}`
+                  : `Downgrade to ${plan.name}`}
               </motion.button>
             </motion.div>
           );

@@ -45,12 +45,16 @@ export function isNotificationSupported(): boolean {
   return "Notification" in window || isTauri();
 }
 
-/** Only schedule reminders for today (re-armed daily on app open / sync). */
+/** Schedule reminders for today, and also future one-off tasks (re-armed daily on app open / sync). */
 function getOccurrenceDates(task: Task): string[] {
   const today = format(new Date(), "yyyy-MM-dd");
 
   if (!task.isRepeating || !task.repeatDays?.length) {
-    return task.date === today ? [today] : [];
+    // BUG-09: Also schedule future one-off tasks, not just today's.
+    // Without this, alarms for tomorrow's tasks are never registered
+    // and the user only gets a reminder if they open the app on that day.
+    if (!task.date || task.date < today) return [];
+    return [task.date];
   }
 
   if (task.date > today) return [];
@@ -463,7 +467,9 @@ export function clearAllTimers(): void {
   nativeSyncQueued = false;
 }
 
-/** Clear in-memory timers + native alarms for a task's pending notifications. */
+/** Clear in-memory timers + native alarms + DB rows for a task's pending notifications.
+ * BUG-28: Must also delete DB rows so they cannot be rescheduled on app restart.
+ */
 export async function cancelTimersForTask(taskId: string): Promise<void> {
   const pending = await getPendingNotifications();
   for (const n of pending) {
@@ -475,4 +481,7 @@ export async function cancelTimersForTask(taskId: string): Promise<void> {
     }
     await cancelNativeNotification(n.id).catch(() => {});
   }
+  // BUG-28: Delete DB rows so initNotificationScheduler cannot resurrect these
+  // as ghost alarms after the app is restarted or foregrounded
+  await deleteNotificationsByTask(taskId);
 }

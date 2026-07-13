@@ -1281,6 +1281,7 @@ function EditEmailModal({
     setIsLoading(true);
     try {
       await requestEmailChange(trimmed);
+      onSave(trimmed);
       setSentTo(trimmed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send confirmation email.");
@@ -1464,7 +1465,9 @@ function ChangePasswordModal({ userId, onClose }: { userId: string; onClose: () 
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -1498,9 +1501,9 @@ function ChangePasswordModal({ userId, onClose }: { userId: string; onClose: () 
       ) : (
         <div className="space-y-4">
           {error && <div className="p-3 rounded-xl bg-red-500/10 text-red-400 text-xs border border-red-500/20">{error}</div>}
-          <PasswordInput label="Current Password" value={current} onChange={setCurrent} show={showNext} onToggle={() => setShowNext(!showNext)} />
+          <PasswordInput label="Current Password" value={current} onChange={setCurrent} show={showCurrent} onToggle={() => setShowCurrent(!showCurrent)} />
           <PasswordInput label="New Password" value={next} onChange={setNext} show={showNext} onToggle={() => setShowNext(!showNext)} />
-          <PasswordInput label="Confirm New Password" value={confirm} onChange={setConfirm} show={showNext} onToggle={() => {}} />
+          <PasswordInput label="Confirm New Password" value={confirm} onChange={setConfirm} show={showConfirm} onToggle={() => setShowConfirm(!showConfirm)} />
           <div className="flex gap-3">
             <button type="button" onClick={onClose} className="flex-1 h-11 rounded-xl border border-border text-sm font-medium text-foreground/70 hover:bg-accent/30 transition-colors">
               Cancel

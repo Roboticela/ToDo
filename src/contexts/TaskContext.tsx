@@ -32,8 +32,9 @@ interface TaskContextType {
   skipTaskForDate: (task: Task, date: string) => Promise<void>;
   setTaskEndDate: (task: Task, endDate: string) => Promise<Task>;
   endRepeatingSeriesFromDate: (task: Task, fromDate: string) => Promise<Task>;
-  completeTask: (task: Task) => Promise<void>;
-  uncompleteTask: (task: Task) => Promise<void>;
+  // BUG-01: Accept explicit date so callers (e.g. Calendar) aren't forced to use selectedDate
+  completeTask: (task: Task, date: string) => Promise<void>;
+  uncompleteTask: (task: Task, date: string) => Promise<void>;
 }
 
 const TaskContext = createContext<TaskContextType | undefined>(undefined);
@@ -182,24 +183,26 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     [refreshTasks, scheduleSync]
   );
 
+  // BUG-01: Accept explicit date param — do not fall back to context selectedDate
+  // which may differ when TaskCard is shown in Calendar view for a non-selected day.
   const completeTask = useCallback(
-    async (task: Task): Promise<void> => {
-      await svcComplete(task, selectedDate);
+    async (task: Task, date: string): Promise<void> => {
+      await svcComplete(task, date);
       await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
-    [selectedDate, refreshTasks, scheduleSync]
+    [refreshTasks, scheduleSync]
   );
 
   const uncompleteTask = useCallback(
-    async (task: Task): Promise<void> => {
-      await svcUncomplete(task, selectedDate);
+    async (task: Task, date: string): Promise<void> => {
+      await svcUncomplete(task, date);
       await refreshTasks({ silent: true });
       scheduleSync();
       window.dispatchEvent(new CustomEvent("tasks-changed"));
     },
-    [selectedDate, refreshTasks, scheduleSync]
+    [refreshTasks, scheduleSync]
   );
 
   return (

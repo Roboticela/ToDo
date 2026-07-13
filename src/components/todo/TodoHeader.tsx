@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import { useTheme, type ThemeName } from "../../contexts/ThemeContext";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   CheckSquare,
   Palette,
@@ -48,6 +48,7 @@ interface TodoHeaderProps {
 function TodoHeader({ title: _title = "ToDo", rightContent }: TodoHeaderProps) {
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const location = useLocation();
   const { triggerSync, isSyncing } = useSync();
   const currentTheme = themes.find((t) => t.name === theme);
   const [aboutModalOpen, setAboutModalOpen] = useState(false);
@@ -63,14 +64,16 @@ function TodoHeader({ title: _title = "ToDo", rightContent }: TodoHeaderProps) {
     >
       <button
         type="button"
-        onClick={() => navigate("/todo")}
+        // BUG-16: Only navigate if we aren't already on /todo, otherwise it triggers an exit animation flash
+        onClick={() => { if (location.pathname !== "/todo") navigate("/todo"); }}
         className="flex items-center gap-2 flex-shrink-0"
       >
         <CheckSquare className="w-6 h-6 text-primary" strokeWidth={2} />
-        <h1 className="text-base font-bold text-foreground">
+        {/* BUG-25: Persistent h1 in header breaks semantic SEO page titles. Use div instead. */}
+        <div className="text-base font-bold text-foreground">
           <span className="sm:hidden">ToDo</span>
           <span className="hidden sm:inline">ToDo</span>
-        </h1>
+        </div>
       </button>
 
       <div className="flex items-center gap-2 ml-auto">

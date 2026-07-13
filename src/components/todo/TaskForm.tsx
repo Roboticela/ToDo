@@ -331,9 +331,10 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
               />
 
               {/* Time fields */}
-              <AnimatePresence>
+              <AnimatePresence mode="wait">
                 {type === "time-based" && (
                   <motion.div
+                    key="time-based"
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
@@ -351,6 +352,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
 
                 {type === "duration" && (
                   <motion.div
+                    key="duration"
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}

@@ -123,7 +123,7 @@ function shouldPlayAppAudio(mode: NotificationSoundMode, os: OsKind): boolean {
 function buildSoundPayload(
   mode: NotificationSoundMode,
   os: OsKind,
-  _soundId: string | undefined,
+  soundId: string | undefined,
   silentOsToast: boolean
 ): { silent?: boolean; sound?: string; channelId: string } {
   const channelId = silentOsToast ? CHANNEL_SILENT : CHANNEL_DEFAULT;
@@ -135,6 +135,13 @@ function buildSoundPayload(
       sound: windowsMediaPath("Windows Notify System Generic.wav"),
     };
   }
+  
+  // BUG-34: Scheduled background notifications on Android must pass the sound payload
+  // so the native plugin knows which raw resource to play instead of the channel default.
+  if (os === "android" && soundId && (mode === "preset" || mode === "ringtone")) {
+    return { channelId, sound: soundId };
+  }
+
   // Library plays bundled MP3 in-app when foregrounded; scheduled uses OS channel default
   return { channelId };
 }
@@ -282,6 +289,22 @@ async function showWebNotification(
 ): Promise<void> {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   try {
+    // BUG-35: `new Notification()` is illegal in mobile Chrome/Safari without a Service Worker
+    // and throws TypeError: Illegal constructor. Use the SW API when available.
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.getRegistration().catch(() => null);
+      if (registration) {
+        await registration.showNotification(opts.title, {
+          body: opts.body,
+          icon: "/favicon.svg",
+          badge: "/favicon.svg",
+          tag: opts.tag,
+          silent,
+        });
+        return;
+      }
+    }
+    // Desktop fallback: direct Notification constructor (valid on non-mobile browsers)
     new Notification(opts.title, {
       body: opts.body,
       icon: "/favicon.svg",
@@ -291,7 +314,7 @@ async function showWebNotification(
       silent,
     });
   } catch {
-    // ignore
+    // ignore — unsupported environment
   }
 }
 

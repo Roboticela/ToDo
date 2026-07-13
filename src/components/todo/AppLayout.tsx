@@ -75,28 +75,32 @@ export default function AppLayout() {
     }
   }, [isAuthenticated, isLoading, user?.plan, location.pathname, navigate]);
 
+  // BUG-23: Depend on stable scalar fields (user.id, taskNotificationsEnabled) rather than
+  // the full user object. Any profile update (avatar, plan, name, etc.) creates a new user
+  // reference and would otherwise tear down + rebuild all notifications unnecessarily.
+  const userId = user?.id;
+  const notificationsEnabled = user?.taskNotificationsEnabled;
   useEffect(() => {
-    if (isAuthenticated && user) {
-      clearAllTimers();
-      requestNotificationPermission()
-        .then((granted) => {
-          if (granted) {
-            void import("../../lib/nativeNotification")
-              .then((m) => m.ensureNotificationChannels())
-              .catch(console.error);
-          }
-          initNotificationScheduler(user.id).catch(console.error);
-        })
-        .catch(console.error);
-    }
+    if (!isAuthenticated || !userId) return;
+    clearAllTimers();
+    requestNotificationPermission()
+      .then((granted) => {
+        if (granted) {
+          void import("../../lib/nativeNotification")
+            .then((m) => m.ensureNotificationChannels())
+            .catch(console.error);
+        }
+        initNotificationScheduler(userId).catch(console.error);
+      })
+      .catch(console.error);
     return () => clearAllTimers();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId, notificationsEnabled]);
 
   // Re-arm timers when returning from background (browser tab / Android resume)
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
     const refresh = () => {
-      void initNotificationScheduler(user.id);
+      void initNotificationScheduler(userId);
     };
     const onVis = () => {
       if (document.visibilityState === "visible") refresh();
@@ -107,17 +111,17 @@ export default function AppLayout() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   // Soft-reconcile reminders after sync (do not wipe timers — that was skipping fires)
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
+    if (!isAuthenticated || !userId) return;
     const reconcile = () => {
-      void reconcileNotificationsForUser(user.id);
+      void reconcileNotificationsForUser(userId);
     };
     window.addEventListener("tasks-synced", reconcile);
     return () => window.removeEventListener("tasks-synced", reconcile);
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, userId]);
 
   if (isLoading) {
     return (

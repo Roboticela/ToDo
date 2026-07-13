@@ -6,6 +6,7 @@ import { getAnySession, getUser, saveSession, saveUser } from "../lib/db";
 import { logout as authLogout, refreshSession } from "../lib/authService";
 import { getApiBase } from "../lib/apiBase";
 import { mapUserFromApi } from "../lib/mapUserFromApi";
+import { X } from "lucide-react";
 
 interface AuthContextType {
   user: User | null;
@@ -27,6 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  // BUG-37: Non-blocking session expiry notice instead of alert()
+  const [sessionExpired, setSessionExpired] = useState(false);
   const sessionRef = useRef<AuthSession | null>(null);
   sessionRef.current = session;
 
@@ -120,23 +123,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applySession]);
 
   // Proactive refresh while the app is open
+  // BUG-37: Use non-blocking state toast; alert() can freeze the Android WebView thread
+  // BUG-30: Only force-logout on explicit auth failure, NOT on network errors
   useEffect(() => {
     if (!session || session.accessToken.startsWith("local_")) return;
-    const id = window.setInterval(() => {
-      ensureFreshSession()
-        .then((fresh) => {
-          if (!fresh && navigator.onLine) {
-            void authLogout(session.userId);
-            setUser(null);
-            setSession(null);
-            sessionRef.current = null;
-            alert("Your session has expired. Please log in again.");
-          }
-        })
-        .catch(() => {});
+    const id = window.setInterval(async () => {
+      if (!navigator.onLine) return; // Don't touch session while offline
+      try {
+        // refreshSession returns null only on a clear 401; network errors throw/return null too.
+        // We distinguish by checking expiry: if token is still valid locally, keep it.
+        const current = sessionRef.current;
+        const expiresAt = current ? new Date(current.expiresAt).getTime() : 0;
+        const stillValid = expiresAt - Date.now() > 0;
+        const refreshed = await refreshSession();
+        if (refreshed) {
+          // Good — token renewed
+          return;
+        }
+        // refreshSession returned null. Only log out if the token is truly expired
+        // AND we are online (network error would also return null but token may be fine).
+        if (!stillValid && navigator.onLine) {
+          await authLogout(session.userId);
+          setUser(null);
+          setSession(null);
+          sessionRef.current = null;
+          setSessionExpired(true);
+        }
+        // If stillValid but refresh failed → network error → keep session, retry next tick
+      } catch {
+        // Network error — do nothing, try again next interval
+      }
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
-  }, [session, ensureFreshSession]);
+  }, [session]);
 
   // Refetch profile (plan, etc.) when window regains focus — picks up Paddle webhooks
   useEffect(() => {
@@ -237,6 +256,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      {/* BUG-37: Non-blocking session expiry banner instead of blocking alert() */}
+      {sessionExpired && (
+        <div
+          role="alert"
+          className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[9999] flex items-center gap-3 px-4 py-3 rounded-2xl bg-red-500/95 text-white text-sm font-medium shadow-xl backdrop-blur-sm"
+        >
+          <span>Your session has expired. Please log in again.</span>
+          <button
+            type="button"
+            onClick={() => setSessionExpired(false)}
+            className="p-1 rounded-lg hover:bg-white/20 transition-colors"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }

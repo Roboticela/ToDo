@@ -185,7 +185,10 @@ export default function DeleteConfirmDialog({
                   <button
                     type="button"
                     onClick={onClose}
-                    className="w-full py-2.5 rounded-xl border border-border text-foreground/70 font-medium hover:bg-accent/30 transition-colors"
+                    // BUG-21: Disable Cancel while an async delete is in flight so users
+                    // can't close the dialog and leave the operation in an undefined state
+                    disabled={isDeleting}
+                    className="w-full py-2.5 rounded-xl border border-border text-foreground/70 font-medium hover:bg-accent/30 transition-colors disabled:opacity-50 disabled:pointer-events-none"
                   >
                     Cancel
                   </button>

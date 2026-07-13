@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Wifi, WifiOff, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
 import { useSync } from "../../contexts/SyncContext";
@@ -19,6 +20,13 @@ function formatLastSync(iso: string | null): string {
 
 export default function SyncIndicator() {
   const { isOnline, isSyncing, lastSyncAt, syncError, pendingCount } = useSync();
+
+  // BUG-19: Tick every 30s so "X ago" stays fresh without external re-renders
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const status = !isOnline
     ? "offline"
@@ -43,13 +51,15 @@ export default function SyncIndicator() {
               ? formatLastSync(lastSyncAt)
               : "Synced";
 
+  // BUG-06: rgba(var(--color-primary), 0.12) is invalid CSS — var() resolves to an HSL/hex string,
+  // not R/G/B channels. Use explicit valid colors instead.
   const style =
     status === "offline"
       ? { background: "rgba(239, 68, 68, 0.12)", color: "rgb(239, 68, 68)" }
       : status === "error"
         ? { background: "rgba(239, 68, 68, 0.12)", color: "rgb(239, 68, 68)" }
         : status === "syncing" || status === "pending"
-          ? { background: "rgba(var(--color-primary), 0.12)", color: "var(--color-primary)" }
+          ? { background: "rgba(99, 102, 241, 0.12)", color: "rgb(99, 102, 241)" }
           : { background: "rgba(34, 197, 94, 0.12)", color: "rgb(34, 197, 94)" };
 
   return (

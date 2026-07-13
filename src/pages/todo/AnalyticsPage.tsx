@@ -176,7 +176,9 @@ export default function AnalyticsPage() {
       startDate = format(subDays(new Date(), 89), "yyyy-MM-dd");
     } else if (range === "all") {
       if (!earliestDateLoaded) return; // Wait for it to load
-      startDate = earliestDate || format(subDays(new Date(), 364), "yyyy-MM-dd");
+      // BUG-17/27: If empty history, earliestDate is null -> default to today instead of -1 yr.
+      // If earliestDate is > today (only future tasks), cap it to today so start <= end.
+      startDate = earliestDate ? (earliestDate > today ? today : earliestDate) : today;
     } else {
       // custom
       startDate = customFrom;
@@ -204,7 +206,8 @@ export default function AnalyticsPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, range, customFrom, customTo, earliestDate, isFreePlan]);
+    // BUG-17: include earliestDateLoaded so the effect re-runs when it finishes loading
+  }, [user, range, customFrom, customTo, earliestDate, earliestDateLoaded, isFreePlan]);
 
   // Refresh analytics after local edits or sync
   useEffect(() => {
