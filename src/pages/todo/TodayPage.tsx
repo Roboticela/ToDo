@@ -16,34 +16,34 @@ export default function TodayPage() {
   const [showForm, setShowForm] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [activeFilter, setActiveFilter] = useState<"all" | "do" | "dont">("all");
-  const [completionDelta, setCompletionDelta] = useState(0);
   const [repeatingCompletedCount, setRepeatingCompletedCount] = useState(0);
 
   const parsedDate = parseISO(selectedDate + "T12:00:00");
   const today = format(new Date(), "yyyy-MM-dd");
   const isToday = selectedDate === today;
 
-  // Load completed count for repeating tasks for the selected date; reset delta when data changes
-  useEffect(() => {
+  const loadRepeatingCompletions = async () => {
     if (!user || tasks.length === 0) {
       setRepeatingCompletedCount(0);
-      setCompletionDelta(0);
       return;
     }
-    let cancelled = false;
     const repeatingTasks = tasks.filter((t) => t.isRepeating);
     if (repeatingTasks.length === 0) {
       setRepeatingCompletedCount(0);
-      setCompletionDelta(0);
       return;
     }
-    Promise.all(
+    const results = await Promise.all(
       repeatingTasks.map((task) => getTaskCompletionForDate(task, selectedDate))
-    ).then((results) => {
+    );
+    const count = results.filter((r) => r.isCompleted).length;
+    setRepeatingCompletedCount(count);
+  };
+
+  // Load completed count for repeating tasks for the selected date
+  useEffect(() => {
+    let cancelled = false;
+    loadRepeatingCompletions().then(() => {
       if (cancelled) return;
-      const count = results.filter((r) => r.isCompleted).length;
-      setRepeatingCompletedCount(count);
-      setCompletionDelta(0);
     });
     return () => {
       cancelled = true;
@@ -68,7 +68,7 @@ export default function TodayPage() {
     (t) => !t.isRepeating && t.status === "completed"
   ).length;
   const baseCompletedCount = oneTimeCompletedCount + repeatingCompletedCount;
-  const completedCount = Math.max(0, Math.min(totalCount, baseCompletedCount + completionDelta));
+  const completedCount = Math.min(totalCount, baseCompletedCount);
   const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const doTasks = filteredTasks.filter((t) => t.category === "do");
@@ -79,8 +79,8 @@ export default function TodayPage() {
     setShowForm(true);
   }
 
-  function handleCompletionChange(completed: boolean) {
-    setCompletionDelta((prev) => (completed ? prev + 1 : prev - 1));
+  function handleCompletionChange() {
+    loadRepeatingCompletions();
   }
 
   function handleCloseForm() {

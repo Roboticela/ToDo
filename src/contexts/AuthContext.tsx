@@ -1,3 +1,4 @@
+// @refresh reset
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import type { User, AuthSession } from "../types/todo";
@@ -122,7 +123,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session || session.accessToken.startsWith("local_")) return;
     const id = window.setInterval(() => {
-      ensureFreshSession().catch(() => {});
+      ensureFreshSession()
+        .then((fresh) => {
+          if (!fresh && navigator.onLine) {
+            void authLogout(session.userId);
+            setUser(null);
+            setSession(null);
+            sessionRef.current = null;
+            alert("Your session has expired. Please log in again.");
+          }
+        })
+        .catch(() => {});
     }, 5 * 60 * 1000);
     return () => clearInterval(id);
   }, [session, ensureFreshSession]);

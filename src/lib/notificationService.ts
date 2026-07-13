@@ -458,6 +458,9 @@ export function clearAllTimers(): void {
     clearTimeout(timer);
   }
   notificationTimers.clear();
+  firingIds.clear();
+  nativeSyncChain = Promise.resolve();
+  nativeSyncQueued = false;
 }
 
 /** Clear in-memory timers + native alarms for a task's pending notifications. */

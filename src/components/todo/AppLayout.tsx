@@ -78,14 +78,16 @@ export default function AppLayout() {
   useEffect(() => {
     if (isAuthenticated && user) {
       clearAllTimers();
-      requestNotificationPermission().then((granted) => {
-        if (granted) {
-          void import("../../lib/nativeNotification").then((m) =>
-            m.ensureNotificationChannels()
-          );
-        }
-        initNotificationScheduler(user.id);
-      });
+      requestNotificationPermission()
+        .then((granted) => {
+          if (granted) {
+            void import("../../lib/nativeNotification")
+              .then((m) => m.ensureNotificationChannels())
+              .catch(console.error);
+          }
+          initNotificationScheduler(user.id).catch(console.error);
+        })
+        .catch(console.error);
     }
     return () => clearAllTimers();
   }, [isAuthenticated, user]);

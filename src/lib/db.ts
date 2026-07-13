@@ -85,34 +85,36 @@ let dbPromise: Promise<IDBPDatabase<TodoDB>> | null = null;
 export function getDB(): Promise<IDBPDatabase<TodoDB>> {
   if (!dbPromise) {
     dbPromise = openDB<TodoDB>(DB_NAME, DB_VERSION, {
-      upgrade(db: IDBPDatabase<TodoDB>) {
-        // Tasks store
-        const tasksStore = db.createObjectStore("tasks", { keyPath: "id" });
-        tasksStore.createIndex("by-userId", "userId");
-        tasksStore.createIndex("by-date", "date");
-        tasksStore.createIndex("by-userId-date", ["userId", "date"]);
-        tasksStore.createIndex("by-syncStatus", "syncStatus");
+      upgrade(db: IDBPDatabase<TodoDB>, oldVersion: number) {
+        if (oldVersion < 1) {
+          // Tasks store
+          const tasksStore = db.createObjectStore("tasks", { keyPath: "id" });
+          tasksStore.createIndex("by-userId", "userId");
+          tasksStore.createIndex("by-date", "date");
+          tasksStore.createIndex("by-userId-date", ["userId", "date"]);
+          tasksStore.createIndex("by-syncStatus", "syncStatus");
 
-        // Completions store
-        const completionsStore = db.createObjectStore("completions", { keyPath: "id" });
-        completionsStore.createIndex("by-taskId", "taskId");
-        completionsStore.createIndex("by-userId-date", ["userId", "date"]);
-        completionsStore.createIndex("by-syncStatus", "syncStatus");
+          // Completions store
+          const completionsStore = db.createObjectStore("completions", { keyPath: "id" });
+          completionsStore.createIndex("by-taskId", "taskId");
+          completionsStore.createIndex("by-userId-date", ["userId", "date"]);
+          completionsStore.createIndex("by-syncStatus", "syncStatus");
 
-        // Notifications store
-        const notifStore = db.createObjectStore("notifications", { keyPath: "id" });
-        notifStore.createIndex("by-taskId", "taskId");
-        notifStore.createIndex("by-scheduledAt", "scheduledAt");
+          // Notifications store
+          const notifStore = db.createObjectStore("notifications", { keyPath: "id" });
+          notifStore.createIndex("by-taskId", "taskId");
+          notifStore.createIndex("by-scheduledAt", "scheduledAt");
 
-        // Users store
-        db.createObjectStore("users", { keyPath: "id" });
+          // Users store
+          db.createObjectStore("users", { keyPath: "id" });
 
-        // Sessions store
-        db.createObjectStore("sessions", { keyPath: "userId" });
+          // Sessions store
+          db.createObjectStore("sessions", { keyPath: "userId" });
 
-        // Sync queue store
-        const syncStore = db.createObjectStore("syncQueue", { keyPath: "id" });
-        syncStore.createIndex("by-createdAt", "createdAt");
+          // Sync queue store
+          const syncStore = db.createObjectStore("syncQueue", { keyPath: "id" });
+          syncStore.createIndex("by-createdAt", "createdAt");
+        }
       },
     });
   }

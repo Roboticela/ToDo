@@ -503,7 +503,8 @@ export function DropdownMenuSub({
   onMouseLeave?: () => void;
 }) {
   const [internalOpen, setInternalOpen] = React.useState(false);
-  const itemRef = itemRefProp ?? React.useRef<HTMLDivElement>(null);
+  const internalRef = React.useRef<HTMLDivElement>(null);
+  const itemRef = itemRefProp ?? internalRef;
   const subContentRef = React.useRef<HTMLDivElement>(null);
   const menuItemClickedRef = React.useRef(false);
   const parentContext = React.useContext(DropdownMenuContext);

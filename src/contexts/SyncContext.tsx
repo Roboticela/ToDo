@@ -1,3 +1,4 @@
+// @refresh reset
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
@@ -125,7 +126,7 @@ export function SyncProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (user && navigator.onLine) triggerSync();
-  }, [user]);
+  }, [user, triggerSync]);
 
   useEffect(() => {
     void refreshPendingCount();

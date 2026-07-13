@@ -77,7 +77,7 @@ export default function AuthCallbackPage() {
       await saveSession(data.session);
       setAuthData(user, data.session);
       window.history.replaceState({}, "", "/auth/callback");
-      window.location.replace(user.plan === "pending" ? "/todo/subscription" : "/todo");
+      navigate(user.plan === "pending" ? "/todo/subscription" : "/todo", { replace: true });
     } catch {
       exchangedCodes.delete(code);
       startedRef.current = false;

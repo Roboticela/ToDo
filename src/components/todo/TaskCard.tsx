@@ -92,11 +92,11 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
       } else {
         await deleteTask(task.id);
       }
-      setShowDeleteDialog(false);
-    } catch {
-      setIsDeleting(false);
+    } catch (e) {
+      // Ignore or log error
     } finally {
       setIsDeleting(false);
+      setShowDeleteDialog(false);
     }
   }
 

@@ -265,6 +265,7 @@ export async function resetPassword(token: string, newPassword: string): Promise
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, password: newPassword }),
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
@@ -286,18 +287,20 @@ export async function resendVerification(): Promise<void> {
 }
 
 export async function changePassword(
-  _userId: string,
+  userId: string,
   newPassword: string,
   currentPassword?: string
 ): Promise<void> {
-  const session = await getAnySession();
+  const session = await getSession(userId);
+  if (!session) throw new Error("Not signed in");
   const res = await fetch(`${API_BASE}/api/auth/change-password`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${session?.accessToken}`,
+      Authorization: `Bearer ${session.accessToken}`,
     },
     body: JSON.stringify({ newPassword, currentPassword }),
+    signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
     const errBody = await res.json().catch(() => ({}));
@@ -336,9 +339,8 @@ export { clearLocalAuthState, isValidAuthPayload };
 // ─── Logout ───────────────────────────────────────────────────────────────────
 
 export async function logout(userId: string): Promise<void> {
-  void userId;
   try {
-    const session = await getAnySession();
+    const session = await getSession(userId);
     if (session) {
       await fetch(`${API_BASE}/api/auth/logout`, {
         method: "POST",
@@ -353,7 +355,8 @@ export async function logout(userId: string): Promise<void> {
   clearAllTimers();
   // Wipe local tasks/completions/notifications so another account on this device
   // cannot see prior data or receive prior reminders
-  const { clearAll } = await import("./db");
+  const { clearAll, deleteSession } = await import("./db");
+  await deleteSession(userId);
   await clearAll();
 }
 

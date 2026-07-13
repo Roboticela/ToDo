@@ -76,13 +76,14 @@ export function clampDateToHistory(
 async function countTasksOnDateForLimits(
   userId: string,
   date: string,
-  excludeId?: string
+  excludeId?: string,
+  cachedRepeats?: Task[]
 ): Promise<number> {
   const dayOfWeek = new Date(date + "T12:00:00").getDay() as RepeatDay;
   const direct = (await getTasksByUserAndDate(userId, date)).filter(
     (t) => !t.isRepeating && t.id !== excludeId
   );
-  const repeats = await getRepeatTasksByUser(userId);
+  const repeats = cachedRepeats ?? await getRepeatTasksByUser(userId);
   const matching = repeats.filter(
     (t) =>
       t.id !== excludeId &&
@@ -261,9 +262,11 @@ export async function assertCanExpandRepeatDays(
   const today = getTodayString();
   const from = startDate > today ? startDate : today;
 
+  const cachedRepeats = await getRepeatTasksByUser(userId);
+
   for (const dow of daysToCheck) {
     for (const sampleStr of sampleDatesForWeekday(from, dow, endDate)) {
-      const count = await countTasksOnDateForLimits(userId, sampleStr, taskId || undefined);
+      const count = await countTasksOnDateForLimits(userId, sampleStr, taskId || undefined, cachedRepeats);
       if (count >= features.maxDailyTasks) {
         throw new PlanLimitError(
           "MAX_DAILY_TASKS",

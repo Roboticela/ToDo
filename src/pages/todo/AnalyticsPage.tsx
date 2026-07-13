@@ -141,6 +141,7 @@ export default function AnalyticsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [effectiveFrom, setEffectiveFrom] = useState("");
   const [effectiveTo, setEffectiveTo] = useState("");
+  const [earliestDateLoaded, setEarliestDateLoaded] = useState(false);
 
   // Free plan: analytics is a paid feature — honour planExpiresAt like the rest of the app
   const isFreePlan =
@@ -149,7 +150,10 @@ export default function AnalyticsPage() {
   // Load earliest date once
   useEffect(() => {
     if (!user || isFreePlan) return;
-    getEarliestTaskDate(user.id).then(setEarliestDate);
+    getEarliestTaskDate(user.id)
+      .then(setEarliestDate)
+      .catch(() => setEarliestDate(null))
+      .finally(() => setEarliestDateLoaded(true));
   }, [user, isFreePlan]);
 
   // Calculate date range and load stats
@@ -171,6 +175,7 @@ export default function AnalyticsPage() {
     } else if (range === "90d") {
       startDate = format(subDays(new Date(), 89), "yyyy-MM-dd");
     } else if (range === "all") {
+      if (!earliestDateLoaded) return; // Wait for it to load
       startDate = earliestDate || format(subDays(new Date(), 364), "yyyy-MM-dd");
     } else {
       // custom

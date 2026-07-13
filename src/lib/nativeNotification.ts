@@ -25,7 +25,7 @@ export function notifIdFromTag(tag: string): number {
   for (let i = 0; i < tag.length; i++) {
     h = (Math.imul(31, h) + tag.charCodeAt(i)) | 0;
   }
-  return h === 0 ? 1 : h;
+  return (h >>> 0) || 1;
 }
 
 async function ensureNativeChannels(): Promise<void> {
@@ -187,7 +187,9 @@ export async function scheduleNativeNotification(
   opts: ShowTaskNotificationOpts & { scheduleAt: Date }
 ): Promise<void> {
   if (!isTauri()) return;
-  if (opts.scheduleAt.getTime() <= Date.now()) return;
+  if (opts.scheduleAt.getTime() <= Date.now()) {
+    return showTaskNotification({ ...opts, scheduleAt: undefined } as ShowTaskNotificationOpts);
+  }
 
   await ensureNativeChannels();
   const mode: NotificationSoundMode = opts.mode ?? "preset";

@@ -92,7 +92,8 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
     if (isRepeating && repeatDays.length > 0) {
       const dow = new Date(date + "T12:00:00").getDay() as RepeatDay;
       if (!repeatDays.includes(dow)) {
-        // Auto-add rather than block — handled on submit
+        const dayLabel = DAYS.find((d) => d.value === dow)?.label;
+        newErrors.repeatDays = `Must include start day (${dayLabel})`;
       }
     }
     setErrors(newErrors);
@@ -116,12 +117,7 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
         startTime: type === "duration" ? startTime : undefined,
         endTime: type === "duration" ? endTime : undefined,
         isRepeating,
-        repeatDays: isRepeating
-          ? (() => {
-              const dow = new Date(date + "T12:00:00").getDay() as RepeatDay;
-              return repeatDays.includes(dow) ? repeatDays : [...repeatDays, dow];
-            })()
-          : [],
+        repeatDays: isRepeating ? repeatDays : [],
       };
 
       if (editTask) {

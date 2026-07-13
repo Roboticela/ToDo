@@ -272,16 +272,14 @@ export default function TimePicker({
   const [minuteIdx, setMinuteIdx] = useState<number>(0);
   const [ampm,      setAmpm]      = useState<"AM" | "PM">("AM");
 
-  // Sync drum state when picker opens
+  // Sync drum state when picker opens or when external value changes
   useEffect(() => {
     if (!open) return;
     const p = parseValue(value);
     setHourIdx(use24h ? p.hour24 : p.hour12 - 1);
     setMinuteIdx(p.minute);
     setAmpm(p.ampm);
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Note: we intentionally do NOT include value/use24h – we only want
-  // to sync once per open event, not on every value change mid-session.
+  }, [open, value, use24h]);
 
   const hours = use24h ? HOURS_24 : HOURS_12;
 

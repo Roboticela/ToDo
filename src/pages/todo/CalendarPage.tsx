@@ -69,6 +69,8 @@ export default function CalendarPage() {
   // Load month task indicators
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
+
     async function loadMonthIndicators() {
       const map = new Map<string, DayInfo>();
       const cutoff = getHistoryCutoff(user!.plan, user!.planExpiresAt);
@@ -81,11 +83,10 @@ export default function CalendarPage() {
             if (cutoff && dateStr < cutoff) return;
             const tasks = await getTasksForDate(user!.id, dateStr);
             if (tasks.length > 0) {
-              let completedCount = 0;
-              for (const t of tasks) {
-                const { isCompleted } = await getTaskCompletionForDate(t, dateStr);
-                if (isCompleted) completedCount++;
-              }
+              const completionResults = await Promise.all(
+                tasks.map((t) => getTaskCompletionForDate(t, dateStr))
+              );
+              const completedCount = completionResults.filter((r) => r.isCompleted).length;
               map.set(dateStr, {
                 date: dateStr,
                 taskCount: tasks.length,
@@ -95,7 +96,9 @@ export default function CalendarPage() {
             }
           })
       );
-      setDayInfoMap(map);
+      if (!cancelled) {
+        setDayInfoMap(map);
+      }
     }
     loadMonthIndicators();
 
@@ -103,6 +106,7 @@ export default function CalendarPage() {
     window.addEventListener("tasks-synced", reload);
     window.addEventListener("tasks-changed", reload);
     return () => {
+      cancelled = true;
       window.removeEventListener("tasks-synced", reload);
       window.removeEventListener("tasks-changed", reload);
     };
