@@ -15,6 +15,7 @@ import {
 import { uploadAvatarFromUrl, isR2ApiEndpointUrl } from "../services/r2Service.js";
 import { requireAuth } from "../middleware/auth.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
+import { isAdminEmail } from "../lib/admin.js";
 
 const router = Router();
 
@@ -104,6 +105,7 @@ function toUserResponse(user) {
         : user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
+    isAdmin: isAdminEmail(user.email),
     createdAt: user.createdAt.toISOString(),
   };
 }

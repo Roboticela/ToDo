@@ -30,6 +30,12 @@ import AnalyticsPage from "./pages/todo/AnalyticsPage";
 import SettingsPage from "./pages/todo/SettingsPage";
 import SubscriptionPage from "./pages/todo/SubscriptionPage";
 
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminOverviewPage from "./pages/admin/AdminOverviewPage";
+import AdminUsersPage from "./pages/admin/AdminUsersPage";
+import AdminUserDetailPage from "./pages/admin/AdminUserDetailPage";
+import AdminTablePage from "./pages/admin/AdminTablePage";
+
 if (isTauri()) {
   document.addEventListener("contextmenu", (e) => e.preventDefault());
   document.addEventListener("keydown", (e) => {
@@ -72,6 +78,14 @@ createRoot(document.getElementById("root")!).render(
                 <Route path="settings" element={<SettingsPage />} />
                 <Route path="profile" element={<Navigate to="/todo/settings" replace />} />
                 <Route path="subscription" element={<SubscriptionPage />} />
+              </Route>
+
+              {/* Admin (ADMIN_EMAILS allowlist) */}
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<AdminOverviewPage />} />
+                <Route path="users" element={<AdminUsersPage />} />
+                <Route path="users/:id" element={<AdminUserDetailPage />} />
+                <Route path="tables/:model" element={<AdminTablePage />} />
               </Route>
 
               {/* Redirect root to /todo, old paths to auth */}

@@ -1,5 +1,6 @@
 import { verifyAccessToken } from "../services/jwtService.js";
 import { prisma } from "../lib/prisma.js";
+import { isAdminEmail } from "../lib/admin.js";
 
 /**
  * Require valid Bearer access token that matches a stored session.
@@ -31,6 +32,20 @@ export async function requireAuth(req, res, next) {
   } catch {
     return res.status(401).json({ error: "Invalid or expired token" });
   }
+}
+
+/**
+ * Require authenticated user whose email is in ADMIN_EMAILS.
+ * Must be used after requireAuth (or call requireAuth first in the chain).
+ */
+export function requireAdmin(req, res, next) {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  if (!isAdminEmail(req.user.email)) {
+    return res.status(403).json({ error: "Forbidden" });
+  }
+  next();
 }
 
 /**

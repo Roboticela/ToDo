@@ -86,6 +86,8 @@ export interface User {
   customSoundUrl?: string;
   /** False for Google-only accounts with no password set */
   hasPassword?: boolean;
+  /** True when email is in server ADMIN_EMAILS allowlist */
+  isAdmin?: boolean;
   createdAt: string;
 }
 

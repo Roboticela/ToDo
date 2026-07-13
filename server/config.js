@@ -57,4 +57,10 @@ export const config = {
     bucket: process.env.R2_BUCKET || "",
     publicUrl: (process.env.R2_PUBLIC_URL || "").replace(/\/$/, ""),
   },
+
+  /** Comma-separated emails allowed to use /api/admin and the /admin UI. */
+  adminEmails: (process.env.ADMIN_EMAILS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean),
 };

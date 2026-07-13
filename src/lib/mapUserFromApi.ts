@@ -30,6 +30,7 @@ export function mapUserFromApi(userData: Record<string, unknown>): User {
     customSoundUrl:
       typeof userData.customSoundUrl === "string" ? userData.customSoundUrl : undefined,
     hasPassword: userData.hasPassword === true,
+    isAdmin: userData.isAdmin === true,
     createdAt: String(userData.createdAt ?? new Date().toISOString()),
   };
 }

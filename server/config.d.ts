@@ -43,4 +43,5 @@ export declare const config: {
     bucket: string;
     publicUrl: string;
   };
+  adminEmails: string[];
 };

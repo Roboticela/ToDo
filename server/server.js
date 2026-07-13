@@ -8,6 +8,7 @@ import userRoutes from "./routes/users.js";
 import taskRoutes from "./routes/tasks.js";
 import paddleRoutes, { handlePaddleWebhook } from "./routes/paddle.js";
 import emailRoutes from "./routes/email.js";
+import adminRoutes from "./routes/admin.js";
 import { startSubscriptionReminderJob } from "./jobs/subscriptionReminderJob.js";
 
 // Validate required env vars and log configuration on startup
@@ -16,6 +17,7 @@ const OPTIONAL_ENV = [
   "FRONTEND_URL", "BACKEND_URL", "GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET",
   "SMTP_HOST", "SMTP_USER", "SMTP_PASS", "PADDLE_API_KEY", "PADDLE_WEBHOOK_SECRET",
   "R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "NODE_ENV",
+  "ADMIN_EMAILS",
 ];
 
 const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
@@ -65,6 +67,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/paddle", paddleRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/admin", adminRoutes);
 
 // Health — includes safe config snapshot to verify env vars in production
 app.get("/health", (req, res) => {

@@ -9,6 +9,7 @@ import {
 } from "../services/r2Service.js";
 import { getEffectivePlan } from "../lib/planUtils.js";
 import { config } from "../config.js";
+import { isAdminEmail } from "../lib/admin.js";
 import { cancelActiveSubscriptionsForUser } from "./paddle.js";
 
 const router = Router();
@@ -41,6 +42,7 @@ function toUserResponse(user) {
         : user.notificationSoundId ?? undefined,
     customSoundUrl: user.customSoundUrl ?? undefined,
     hasPassword: Boolean(user.passwordHash),
+    isAdmin: isAdminEmail(user.email),
     createdAt: user.createdAt.toISOString(),
   };
 }

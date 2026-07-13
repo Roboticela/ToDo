@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   User,
@@ -21,6 +21,7 @@ import {
   Volume2,
   Music,
   Play,
+  Shield,
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "../../lib/utils";
@@ -512,6 +513,23 @@ export default function SettingsPage() {
             />
           )}
         </Section>
+
+        {currentUser.isAdmin && (
+          <Section label="Admin">
+            <Link
+              to="/admin"
+              className="w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-accent/30 active:bg-accent/50"
+            >
+              <div className="shrink-0">
+                <Shield className="w-4 h-4 text-primary/70" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium">Admin Dashboard</span>
+              </div>
+              <ChevronRight className="w-4 h-4 text-foreground/30 shrink-0" />
+            </Link>
+          </Section>
+        )}
 
         {/* Task notifications */}
         <Section label="Notifications">
