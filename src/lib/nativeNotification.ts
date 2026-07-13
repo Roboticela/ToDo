@@ -205,6 +205,7 @@ export async function scheduleNativeNotification(
       channelId: soundBits.channelId,
       silent: soundBits.silent,
       sound: soundBits.sound,
+      icon: "ic_notification",
       schedule: Schedule.at(opts.scheduleAt, false, allowWhileIdle),
     });
   } catch {
@@ -251,6 +252,7 @@ async function showNativeNotification(
       silent?: boolean;
       sound?: string;
       schedule?: ReturnType<typeof Schedule.at>;
+      icon?: string;
     } = {
       id: notifIdFromTag(opts.tag),
       title: opts.title,
@@ -258,6 +260,7 @@ async function showNativeNotification(
       channelId: soundBits.channelId,
       silent: soundBits.silent,
       sound: soundBits.sound,
+      icon: "ic_notification",
     };
 
     if (opts.scheduleAt && opts.scheduleAt.getTime() > Date.now()) {
