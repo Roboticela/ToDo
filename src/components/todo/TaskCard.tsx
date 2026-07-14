@@ -6,13 +6,14 @@ import {
   CalendarDays,
   Repeat,
   CheckCircle2,
-  Circle,
+  XCircle,
   Pencil,
   Trash2,
   ChevronDown,
   TrendingUp,
   TrendingDown,
   Flag,
+  Lock,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import type { Task } from "../../types/todo";
@@ -33,6 +34,14 @@ interface TaskCardProps {
   staggerDelay?: number;
 }
 
+/** Returns true if the given date string (YYYY-MM-DD) is strictly before today (local). */
+function isDateInPast(dateStr: string): boolean {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(dateStr + "T00:00:00");
+  return d < today;
+}
+
 export default function TaskCard({ task, date, onEdit, onCompletionChange, staggerDelay = 0 }: TaskCardProps) {
   const { user } = useAuth();
   const { completeTask, uncompleteTask, deleteTask, skipTaskForDate, endRepeatingSeriesFromDate } = useTasks();
@@ -45,6 +54,9 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   // BUG-04: Surface delete errors to the user
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+
+  /** Past-day tasks are locked — no edits, deletes, or status changes allowed. */
+  const isPastDay = isDateInPast(date);
 
   const timeFormat = user?.timeFormat === "24h" ? "24h" : "12h";
   const showCountdown = !isCompleted && (task.type === "time-based" || task.type === "duration");
@@ -78,6 +90,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
 
   // BUG-01: Pass the card's own `date` prop, not the context selectedDate
   async function handleToggle() {
+    if (isPastDay) return; // locked
     if (isCompleted) {
       await uncompleteTask(task, date);
       setIsCompleted(false);
@@ -92,6 +105,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   }
 
   function handleDeleteClick() {
+    if (isPastDay) return; // locked
     setShowDeleteDialog(true);
   }
 
@@ -115,8 +129,6 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
     }
   }
 
-  const isDoCategory = task.category === "do";
-
   const timeLabel = () => {
     if (task.type === "time-based" && task.time) return formatTime(task.time, timeFormat);
     if (task.type === "duration" && task.startTime && task.endTime)
@@ -131,6 +143,20 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   const TypeIcon =
     task.type === "time-based" ? Clock : task.type === "duration" ? Timer : CalendarDays;
 
+  /**
+   * Left-border colour:
+   *  – Past day + completed  → green
+   *  – Past day + incomplete → red
+   *  – Today/future          → category colour (green for "do", orange for "dont")
+   */
+  const leftBorderClass = isPastDay
+    ? isCompleted
+      ? "border-l-4 border-l-green-500"
+      : "border-l-4 border-l-red-500"
+    : task.category === "do"
+      ? "border-l-2 border-l-green-400/60"
+      : "border-l-2 border-l-orange-400/60";
+
   return (
     <>
     <motion.div
@@ -140,43 +166,61 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
       transition={{ duration: 0.2, delay: isDeleting ? 0 : staggerDelay }}
       className={cn(
         "rounded-2xl border bg-card transition-all overflow-hidden",
-        isCompleted ? "border-border/40 opacity-70" : "border-border",
-        task.category === "do" && "border-l-2 border-l-green-400/60",
-        task.category === "dont" && "border-l-2 border-l-orange-400/60"
+        isPastDay && isCompleted && "border-border/40 opacity-80",
+        isPastDay && !isCompleted && "border-red-500/30 opacity-75",
+        !isPastDay && isCompleted && "border-border/40 opacity-70",
+        !isPastDay && !isCompleted && "border-border",
+        leftBorderClass
       )}
     >
       <div className="p-4">
         <div className="flex items-start gap-3">
-          <motion.button
-            type="button"
-            onClick={handleToggle}
-            whileTap={{ scale: 0.85 }}
-            className={cn(
-              "mt-0.5 flex-shrink-0 transition-colors",
-              isCompleted
-                ? isDoCategory
-                  ? "text-green-400"
-                  : "text-orange-400"
-                : isDoCategory
-                  ? "text-foreground/30 hover:text-primary/70"
-                  : "text-foreground/30 hover:text-orange-400/70"
-            )}
-            aria-label={
-              isCompleted
-                ? isDoCategory
-                  ? "Mark as not done"
-                  : "Mark as not avoided"
-                : isDoCategory
-                  ? "Mark as done"
-                  : "Mark as avoided"
-            }
-          >
-            {isCompleted ? (
-              <CheckCircle2 className="w-5 h-5" />
-            ) : (
-              <Circle className="w-5 h-5" />
-            )}
-          </motion.button>
+          {/* Status icon — check (green) or X (red) for past-day; toggle button for current day */}
+          {isPastDay ? (
+            <div
+              className={cn(
+                "mt-0.5 flex-shrink-0",
+                isCompleted ? "text-green-500" : "text-red-500"
+              )}
+            >
+              {isCompleted ? (
+                <CheckCircle2 className="w-5 h-5" />
+              ) : (
+                <XCircle className="w-5 h-5" />
+              )}
+            </div>
+          ) : (
+            <motion.button
+              type="button"
+              onClick={handleToggle}
+              whileTap={{ scale: 0.85 }}
+              className={cn(
+                "mt-0.5 flex-shrink-0 transition-colors",
+                isCompleted
+                  ? task.category === "do"
+                    ? "text-green-400"
+                    : "text-orange-400"
+                  : task.category === "do"
+                    ? "text-foreground/30 hover:text-primary/70"
+                    : "text-foreground/30 hover:text-orange-400/70"
+              )}
+              aria-label={
+                isCompleted
+                  ? task.category === "do"
+                    ? "Mark as not done"
+                    : "Mark as not avoided"
+                  : task.category === "do"
+                    ? "Mark as done"
+                    : "Mark as avoided"
+              }
+            >
+              {isCompleted ? (
+                <CheckCircle2 className="w-5 h-5" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5 opacity-20" />
+              )}
+            </motion.button>
+          )}
 
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
@@ -184,7 +228,8 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                 <p
                   className={cn(
                     "text-sm font-medium text-foreground leading-snug",
-                    isCompleted && "line-through text-foreground/40"
+                    isCompleted && "line-through text-foreground/40",
+                    isPastDay && !isCompleted && "text-foreground/60"
                   )}
                 >
                   {task.title}
@@ -267,26 +312,46 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                       Skipped
                     </span>
                   )}
+
+                  {/* Past-day lock badge */}
+                  {isPastDay && !isCompleted && (
+                    <span className="inline-flex items-center gap-1 text-xs text-red-400/80 bg-red-500/10 px-1.5 py-0.5 rounded-full">
+                      <Lock className="w-3 h-3" />
+                      Missed
+                    </span>
+                  )}
                 </div>
               </div>
 
               <div className="flex items-center gap-1 flex-shrink-0">
-                <motion.button
-                  type="button"
-                  onClick={() => onEdit(task)}
-                  whileTap={{ scale: 0.85 }}
-                  className="p-1.5 rounded-lg text-foreground/30 hover:text-primary/70 hover:bg-primary/10 transition-colors"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </motion.button>
-                <motion.button
-                  type="button"
-                  onClick={handleDeleteClick}
-                  whileTap={{ scale: 0.85 }}
-                  className="p-1.5 rounded-lg text-foreground/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </motion.button>
+                {isPastDay ? (
+                  /* Past-day: show a static lock icon instead of action buttons */
+                  <div
+                    className="p-1.5 rounded-lg text-foreground/20"
+                    title="This day has passed — task is locked"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                  </div>
+                ) : (
+                  <>
+                    <motion.button
+                      type="button"
+                      onClick={() => onEdit(task)}
+                      whileTap={{ scale: 0.85 }}
+                      className="p-1.5 rounded-lg text-foreground/30 hover:text-primary/70 hover:bg-primary/10 transition-colors"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      onClick={handleDeleteClick}
+                      whileTap={{ scale: 0.85 }}
+                      className="p-1.5 rounded-lg text-foreground/30 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </motion.button>
+                  </>
+                )}
                 {task.description && (
                   <motion.button
                     type="button"
@@ -322,14 +387,16 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
       </div>
     </motion.div>
 
-    <DeleteConfirmDialog
-      isOpen={showDeleteDialog}
-      onClose={() => setShowDeleteDialog(false)}
-      task={task}
-      date={date}
-      onConfirm={handleDeleteConfirm}
-      isDeleting={isDeleting}
-    />
+    {!isPastDay && (
+      <DeleteConfirmDialog
+        isOpen={showDeleteDialog}
+        onClose={() => setShowDeleteDialog(false)}
+        task={task}
+        date={date}
+        onConfirm={handleDeleteConfirm}
+        isDeleting={isDeleting}
+      />
+    )}
 
     {/* BUG-04: Show delete error toast so user is informed when delete fails */}
     <AnimatePresence>

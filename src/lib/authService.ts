@@ -159,10 +159,11 @@ export async function loginWithNativeGoogle(): Promise<{ user: User; session: Au
 
   let tokens;
   try {
+    const isNativeAndroid = getAppRuntime() === "android";
     tokens = await signIn({
       clientId,
-      scopes: ["openid", "email", "profile"],
-      ...(getAppRuntime() === "android" ? { flowType: "native" as const } : {}),
+      scopes: isNativeAndroid ? [] : ["openid", "email", "profile"],
+      ...(isNativeAndroid ? { flowType: "native" as const } : {}),
     });
   } catch (e) {
     throw new Error(mapNativeGoogleError(formatCaughtError(e, "Google sign-in failed.")));

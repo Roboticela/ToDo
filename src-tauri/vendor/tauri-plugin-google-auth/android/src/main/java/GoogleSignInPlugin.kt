@@ -148,7 +148,11 @@ class GoogleSignInPlugin(private val activity: Activity) : Plugin(activity) {
                 val idToken = requestGoogleIdToken(args.clientId)
 
                 // Step 2: Get access token via AuthorizationClient
-                startNativeAuthorization(invoke, idToken, args.scopes)
+                if (args.scopes.isNullOrEmpty()) {
+                    resolveNativeSignIn(invoke, idToken, "", emptyArray())
+                } else {
+                    startNativeAuthorization(invoke, idToken, args.scopes)
+                }
 
             } catch (e: GetCredentialCancellationException) {
                 invoke.reject("Sign-in cancelled: ${e.message}")

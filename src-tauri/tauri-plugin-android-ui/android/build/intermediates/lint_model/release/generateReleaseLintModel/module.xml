@@ -1,0 +1,19 @@
+<lint-module
+    format="1"
+    dir="D:\Muhammad\Roboticela\ToDo\src-tauri\tauri-plugin-android-ui\android"
+    name=":tauri-plugin-android-ui"
+    type="LIBRARY"
+    maven="android:tauri-plugin-android-ui:unspecified"
+    agpVersion="8.11.0"
+    buildFolder="build"
+    bootClassPath="C:\Users\mshah\AppData\Local\Android\Sdk\platforms\android-36\android.jar;C:\Users\mshah\AppData\Local\Android\Sdk\build-tools\35.0.0\core-lambda-stubs.jar"
+    javaSourceLevel="1.8"
+    compileTarget="android-36"
+    neverShrinking="true">
+  <lintOptions
+      abortOnError="true"
+      absolutePaths="true"
+      checkReleaseBuilds="true"
+      explainIssues="true"/>
+  <variant name="release"/>
+</lint-module>
