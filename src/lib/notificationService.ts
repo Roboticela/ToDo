@@ -238,6 +238,11 @@ async function syncNativeAlarms(userId?: string): Promise<void> {
     return;
   }
 
+  // Desktop Tauri's notification plugin ignores Schedule.at and shows immediately —
+  // so OS "scheduling" would spam every future reminder on sync. JS timers + tray
+  // keep the process alive; that is the desktop delivery path.
+  if (getAppRuntime() === "desktop") return;
+
   await cancelAllNativeNotifications().catch(() => {});
 
   const pending = await getPendingNotifications(userId);

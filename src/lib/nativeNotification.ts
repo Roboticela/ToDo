@@ -13,7 +13,7 @@ import {
   playOsDefaultNotify,
   playWindowsDefaultNotify,
 } from "./notificationSound";
-import { DEFAULT_LIBRARY_SOUND_ID, DEFAULT_RINGTONE_SOUND_ID, windowsMediaPath } from "./soundCatalog";
+import { DEFAULT_LIBRARY_SOUND_ID, DEFAULT_RINGTONE_SOUND_ID } from "./soundCatalog";
 
 export const CHANNEL_DEFAULT = "task-reminders";
 export const CHANNEL_SILENT = "task-reminders-silent";
@@ -116,8 +116,11 @@ export interface ShowTaskNotificationOpts {
 }
 
 function shouldPlayAppAudio(mode: NotificationSoundMode, os: OsKind): boolean {
+  // Library / Custom always play in-app on desktop. Normal also plays via
+  // play_system_sound / OS synth — Windows Media paths are not valid toast sounds.
   if (mode === "custom" || mode === "preset" || mode === "ringtone") return true;
-  return os === "windows";
+  if (mode === "normal") return os === "windows" || os === "macos" || os === "linux";
+  return false;
 }
 
 function buildSoundPayload(
@@ -129,13 +132,12 @@ function buildSoundPayload(
   const channelId = silentOsToast ? CHANNEL_SILENT : CHANNEL_DEFAULT;
   if (silentOsToast) return { silent: true, channelId };
 
+  // Windows toast `sound` only accepts names like "Default" / "Reminder", not file paths.
+  // Actual Windows Media playback goes through play_system_sound in-app.
   if (mode === "normal" && os === "windows") {
-    return {
-      channelId,
-      sound: windowsMediaPath("Windows Notify System Generic.wav"),
-    };
+    return { channelId, sound: "Default" };
   }
-  
+
   // BUG-34: Scheduled background notifications on Android must pass the sound payload
   // so the native plugin knows which raw resource to play instead of the channel default.
   if (os === "android" && soundId && (mode === "preset" || mode === "ringtone")) {
@@ -194,6 +196,8 @@ export async function scheduleNativeNotification(
   opts: ShowTaskNotificationOpts & { scheduleAt: Date }
 ): Promise<void> {
   if (!isTauri()) return;
+  // Desktop plugin ignores Schedule.at (shows immediately) — JS timers own desktop delivery.
+  if (getAppRuntime() === "desktop") return;
   if (opts.scheduleAt.getTime() <= Date.now()) {
     return showTaskNotification({ ...opts, scheduleAt: undefined } as ShowTaskNotificationOpts);
   }
@@ -269,8 +273,12 @@ async function showNativeNotification(
       channelId: soundBits.channelId,
       silent: soundBits.silent,
       sound: soundBits.sound,
-      icon: "ic_notification",
     };
+
+    // Android uses the custom checklist icon; desktop uses the app auto-icon.
+    if (getAppRuntime() === "android" || getAppRuntime() === "ios") {
+      payload.icon = "ic_notification";
+    }
 
     if (opts.scheduleAt && opts.scheduleAt.getTime() > Date.now()) {
       const allowWhileIdle = getAppRuntime() === "android" || getAppRuntime() === "ios";
