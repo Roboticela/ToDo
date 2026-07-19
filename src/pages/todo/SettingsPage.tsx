@@ -72,7 +72,7 @@ import {
   isBackgroundServiceEnabledLocally,
   startReminderService,
   stopReminderService,
-  requestReminderBatteryExemption,
+  ensureAndroidBackgroundPermissions,
   syncReminderSoundToNative,
 } from "../../lib/reminderService";
 
@@ -267,15 +267,15 @@ export default function SettingsPage() {
     try {
       if (next) {
         await requestNotificationPermission();
-        const started = await startReminderService();
+        const ready = await startReminderService();
+        await ensureAndroidBackgroundPermissions();
         setBackgroundServiceOn(true);
-        // Materialize reminder rows; if native start failed, Schedule.at/timers stay as delivery.
         await rebuildNotificationsForUser(currentUser.id);
-        if (!started) await initNotificationScheduler(currentUser.id);
+        // Until exact alarms are granted, keep Schedule.at/timers as fallback.
+        if (!ready) await initNotificationScheduler(currentUser.id);
       } else {
         await stopReminderService();
         setBackgroundServiceOn(false);
-        // Arm system alarms / JS timers so reminders still fire without the FGS.
         await initNotificationScheduler(currentUser.id);
       }
     } finally {
@@ -284,7 +284,7 @@ export default function SettingsPage() {
   }
 
   async function handleRequestBatteryExemption() {
-    await requestReminderBatteryExemption();
+    await ensureAndroidBackgroundPermissions();
     setBatteryExemptionRequested(true);
   }
 
@@ -1009,11 +1009,11 @@ export default function SettingsPage() {
                   <Shield className="w-4 h-4 text-primary/70" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-medium text-foreground">Run in background for instant reminders</p>
+                  <p className="text-sm font-medium text-foreground">Reminders when the app is closed</p>
                   <p className="text-xs text-foreground/50 mt-0.5 leading-relaxed">
                     {backgroundServiceOn
-                      ? "ToDo keeps running so reminders fire on time even if you close the app. A small \u201cToDo reminders active\u201d notification will stay visible while this is on."
-                      : "Off: reminders are still scheduled with the system, but ToDo won't keep a persistent background notification running."}
+                      ? "Android will wake ToDo briefly for each reminder (exact alarms). Allow notifications, exact alarms, and battery exemption when prompted."
+                      : "Off: reminders rely on system scheduling only and may be less reliable after you close the app."}
                   </p>
                 </div>
               </div>
@@ -1040,13 +1040,13 @@ export default function SettingsPage() {
               </button>
             </div>
 
-            <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">Ignore battery optimization</p>
+                <p className="text-sm font-medium text-foreground">Allow exact alarms &amp; battery</p>
                 <p className="text-xs text-foreground/50 mt-0.5 leading-relaxed">
                   {batteryExemptionRequested
-                    ? "If Android showed a dialog, choose \u201cAllow\u201d so reminders can't be delayed by battery saving."
-                    : "Recommended so Android doesn't delay or stop background reminders to save power."}
+                    ? "If Android showed settings screens, turn on Alarms &amp; reminders and Allow unrestricted battery."
+                    : "Required so reminders still fire after you swipe the app away. Opens Android settings when needed."}
                 </p>
               </div>
               <button
@@ -1059,8 +1059,8 @@ export default function SettingsPage() {
             </div>
 
             <p className="px-4 py-2 text-[11px] text-foreground/45 border-t border-border/50 leading-relaxed">
-              Task reminders are also scheduled with the system so they can fire in the background even
-              with the toggle above off. Keep notifications allowed, and grant exact alarms if Android asks.
+              After enabling, grant notification permission, Alarms &amp; reminders, and unrestricted battery.
+              Then you can close the app completely and reminders will still fire.
             </p>
           </Section>
         )}

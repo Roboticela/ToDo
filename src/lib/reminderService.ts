@@ -1,7 +1,7 @@
 /**
- * Bridge to the native `tauri-plugin-reminder-service` Android plugin: a persistent
- * foreground service that fires custom, actionable reminder notifications and keeps
- * running even when the app is fully closed. No-op on every other platform.
+ * Bridge to the native `tauri-plugin-reminder-service` Android plugin.
+ * Exact AlarmManager wakes a short-lived foreground worker to fire reminders
+ * even when the app is fully closed. No-op on every other platform.
  */
 import { invoke } from "@tauri-apps/api/core";
 import type { User } from "../types/todo";
@@ -13,9 +13,18 @@ import {
 } from "./soundCatalog";
 
 const STORAGE_KEY = "todo:background-reminder-service";
+const BATTERY_PROMPTED_KEY = "todo:battery-exemption-prompted";
+
+export interface ReminderCapability {
+  enabled: boolean;
+  exactAlarms: boolean;
+  batteryExempt: boolean;
+}
 
 /** Set only after a successful native start_service invoke in this JS session. */
 let nativeServiceRunning = false;
+/** Exact alarms granted — required before native path exclusively owns delivery. */
+let nativeExactAlarmsOk = false;
 let lastCachedSoundKey: string | null = null;
 
 function isAndroid(): boolean {
@@ -36,9 +45,13 @@ export function isBackgroundServiceEnabledLocally(): boolean {
   }
 }
 
-/** True only when native start succeeded — used to decide who owns delivery. */
+/**
+ * True when native start succeeded AND exact alarms are granted.
+ * Until exact alarms are granted, Schedule.at remains as fallback so reminders
+ * are not silently dropped after the app is killed.
+ */
 export function isNativeReminderServiceRunning(): boolean {
-  return isAndroid() && nativeServiceRunning;
+  return isAndroid() && nativeServiceRunning && nativeExactAlarmsOk;
 }
 
 function persist(enabled: boolean): void {
@@ -49,29 +62,39 @@ function persist(enabled: boolean): void {
   }
 }
 
+function applyCapability(cap: ReminderCapability | null | undefined): void {
+  if (!cap) return;
+  nativeExactAlarmsOk = cap.exactAlarms === true;
+}
+
 /**
- * Start the always-on foreground service.
- * Returns true only when the native plugin accepted the start — on failure,
- * callers should keep Schedule.at / JS timers as the delivery path.
+ * Start the reminder worker, prompt for exact alarms if needed, and arm the next wake.
+ * Returns true when native delivery can exclusively own reminders (exact alarms OK).
  */
 export async function startReminderService(): Promise<boolean> {
   if (!isAndroid()) return false;
   persist(true);
   try {
-    await invoke("plugin:reminder-service|start_service");
+    const cap = await invoke<ReminderCapability>("plugin:reminder-service|start_service");
     nativeServiceRunning = true;
-    return true;
+    applyCapability(cap);
+    // Prompt battery exemption once after first successful start (OEM killers otherwise
+    // delay/drop alarms when the app is swiped away).
+    await maybePromptBatteryExemption(cap);
+    return nativeExactAlarmsOk;
   } catch {
     nativeServiceRunning = false;
+    nativeExactAlarmsOk = false;
     return false;
   }
 }
 
-/** Stop the foreground service (user opted out of persistent background reminders). */
+/** Stop the reminder worker (user opted out of background reminders). */
 export async function stopReminderService(): Promise<void> {
   if (!isAndroid()) return;
   persist(false);
   nativeServiceRunning = false;
+  nativeExactAlarmsOk = false;
   try {
     await invoke("plugin:reminder-service|stop_service");
   } catch {
@@ -81,23 +104,68 @@ export async function stopReminderService(): Promise<void> {
 
 /**
  * Tell the native service to re-read pending reminders from `todo.db` and re-arm its
- * next wake alarm. Tiny local IPC call — the service re-derives everything itself,
- * so this never ships a data dump like the old per-item Schedule.at loop did.
+ * next wake alarm. Tiny local IPC call — the service re-derives everything itself.
  */
 export async function rescheduleReminderService(): Promise<void> {
   if (!isAndroid()) return;
   try {
-    await invoke("plugin:reminder-service|reschedule_next");
+    const cap = await invoke<ReminderCapability>("plugin:reminder-service|reschedule_next");
+    applyCapability(cap);
   } catch {
     // ignore
   }
 }
 
+/**
+ * Open system screens for exact alarms (via service start) + battery exemption.
+ * Call from Settings when the user taps Allow.
+ */
+export async function ensureAndroidBackgroundPermissions(): Promise<ReminderCapability | null> {
+  if (!isAndroid()) return null;
+  try {
+    // Re-arm worker and prompt exact alarms if still missing.
+    const started = await invoke<ReminderCapability>("plugin:reminder-service|start_service");
+    nativeServiceRunning = true;
+    applyCapability(started);
+  } catch {
+    // continue to battery prompt
+  }
+  try {
+    const cap = await invoke<ReminderCapability>(
+      "plugin:reminder-service|request_battery_exemption"
+    );
+    applyCapability(cap);
+    try {
+      localStorage.setItem(BATTERY_PROMPTED_KEY, "true");
+    } catch {
+      // ignore
+    }
+    return cap;
+  } catch {
+    return null;
+  }
+}
+
 /** Prompt the user to exempt the app from battery optimization (system dialog). */
 export async function requestReminderBatteryExemption(): Promise<void> {
-  if (!isAndroid()) return;
+  await ensureAndroidBackgroundPermissions();
+}
+
+async function maybePromptBatteryExemption(cap: ReminderCapability | null | undefined): Promise<void> {
+  if (cap?.batteryExempt) return;
+  let already = false;
   try {
-    await invoke("plugin:reminder-service|request_battery_exemption");
+    already = localStorage.getItem(BATTERY_PROMPTED_KEY) === "true";
+  } catch {
+    already = false;
+  }
+  if (already) return;
+  try {
+    const next = await invoke<ReminderCapability>(
+      "plugin:reminder-service|request_battery_exemption"
+    );
+    applyCapability(next);
+    localStorage.setItem(BATTERY_PROMPTED_KEY, "true");
   } catch {
     // ignore
   }

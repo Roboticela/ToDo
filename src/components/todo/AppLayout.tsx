@@ -8,6 +8,7 @@ import SideNav from "./SideNav";
 import TodoHeader from "./TodoHeader";
 import VerificationBanner from "./VerificationBanner";
 import { initNotificationScheduler, requestNotificationPermission, clearAllTimers, reconcileNotificationsForUser } from "../../lib/notificationService";
+import { getAppRuntime } from "../../lib/platform";
 
 // Opacity-only transition to avoid layout/scroll jump when changing pages quickly
 const pageVariants = {
@@ -85,11 +86,26 @@ export default function AppLayout() {
     if (!isAuthenticated || !userId) return;
     clearAllTimers();
     requestNotificationPermission()
-      .then((granted) => {
+      .then(async (granted) => {
         if (granted) {
           void import("../../lib/nativeNotification")
             .then((m) => m.ensureNotificationChannels())
             .catch(console.error);
+        }
+        // Android: start reminder worker + prompt exact-alarm / battery so reminders
+        // still fire after the app is fully closed.
+        if (getAppRuntime() === "android") {
+          try {
+            const {
+              isBackgroundServiceEnabledLocally,
+              startReminderService,
+            } = await import("../../lib/reminderService");
+            if (isBackgroundServiceEnabledLocally()) {
+              await startReminderService();
+            }
+          } catch (e) {
+            console.error(e);
+          }
         }
         initNotificationScheduler(userId).catch(console.error);
       })

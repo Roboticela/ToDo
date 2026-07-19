@@ -9,10 +9,10 @@ import androidx.core.app.ServiceCompat
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Keeps the app "running forever" in the background: a real Android foreground service
- * with the mandatory always-on status notification. On every start (initial launch, alarm
- * wake, or reboot) it fires any due reminders as custom notifications, then re-arms the
- * single exact alarm for whatever is due next.
+ * Short-lived foreground service woken by [ReminderScheduler] exact alarms (or app start /
+ * reboot). It fires due reminders, re-arms the next wake, then stops — so Android 15's
+ * dataSync FGS time quota is not burned by an always-on process. Exact alarms keep delivery
+ * working after the user fully closes the app.
  */
 class ReminderForegroundService : Service() {
   private lateinit var store: ReminderStore
@@ -42,12 +42,21 @@ class ReminderForegroundService : Service() {
         } while (pendingRearm.get())
       } finally {
         processing.set(false)
+        // Work-then-exit: exact alarms wake us again. Avoid perpetual dataSync FGS
+        // (Android 15 caps ~6h/day and will kill an always-on service).
+        try {
+          ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {
+          // ignore
+        }
+        stopSelf(startId)
       }
     } else {
       pendingRearm.set(true)
     }
 
-    return START_STICKY
+    // NOT_STICKY: alarms / BootReceiver / JS startService are responsible for waking us.
+    return START_NOT_STICKY
   }
 
   override fun onBind(intent: Intent?): IBinder? = null

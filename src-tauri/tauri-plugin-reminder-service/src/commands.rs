@@ -6,9 +6,22 @@ use tauri::Manager;
 
 use crate::error::Result;
 
-/// Start the foreground service (idempotent — safe to call every app launch).
+#[cfg(target_os = "android")]
+pub use crate::android_only::ReminderCapability;
+
+#[cfg(not(target_os = "android"))]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderCapability {
+  pub enabled: bool,
+  pub exact_alarms: bool,
+  pub battery_exempt: bool,
+}
+
+/// Start the reminder worker (idempotent — safe to call every app launch).
+/// Opens exact-alarm settings when needed and returns current capability flags.
 #[tauri::command]
-pub async fn start_service<R: Runtime>(app: AppHandle<R>) -> Result<()> {
+pub async fn start_service<R: Runtime>(app: AppHandle<R>) -> Result<ReminderCapability> {
   #[cfg(target_os = "android")]
   {
     if let Some(svc) = app.try_state::<crate::android_only::ReminderService<R>>() {
@@ -19,7 +32,7 @@ pub async fn start_service<R: Runtime>(app: AppHandle<R>) -> Result<()> {
   Err(crate::Error::Unavailable)
 }
 
-/// Stop the foreground service (user opted out of background reminders).
+/// Stop the reminder worker (user opted out of background reminders).
 #[tauri::command]
 pub async fn stop_service<R: Runtime>(app: AppHandle<R>) -> Result<()> {
   #[cfg(target_os = "android")]
@@ -36,7 +49,7 @@ pub async fn stop_service<R: Runtime>(app: AppHandle<R>) -> Result<()> {
 /// next wake alarm. Call this whenever reminders are created/edited/deleted —
 /// it's a tiny local IPC call, not a data dump.
 #[tauri::command]
-pub async fn reschedule_next<R: Runtime>(app: AppHandle<R>) -> Result<()> {
+pub async fn reschedule_next<R: Runtime>(app: AppHandle<R>) -> Result<ReminderCapability> {
   #[cfg(target_os = "android")]
   {
     if let Some(svc) = app.try_state::<crate::android_only::ReminderService<R>>() {
@@ -47,10 +60,9 @@ pub async fn reschedule_next<R: Runtime>(app: AppHandle<R>) -> Result<()> {
   Err(crate::Error::Unavailable)
 }
 
-/// Prompt the user to exempt the app from battery optimization (opens the
-/// system `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` dialog).
+/// Prompt exact-alarm + battery-optimization grant screens when missing.
 #[tauri::command]
-pub async fn request_battery_exemption<R: Runtime>(app: AppHandle<R>) -> Result<()> {
+pub async fn request_battery_exemption<R: Runtime>(app: AppHandle<R>) -> Result<ReminderCapability> {
   #[cfg(target_os = "android")]
   {
     if let Some(svc) = app.try_state::<crate::android_only::ReminderService<R>>() {

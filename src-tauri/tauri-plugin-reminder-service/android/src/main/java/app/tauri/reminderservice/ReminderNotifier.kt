@@ -85,8 +85,8 @@ object ReminderNotifier {
   fun buildServiceNotification(context: Context): Notification {
     ensureChannels(context)
     return NotificationCompat.Builder(context, CHANNEL_SERVICE)
-      .setContentTitle("ToDo reminders active")
-      .setContentText("Listening for task reminders in the background")
+      .setContentTitle("ToDo")
+      .setContentText("Updating reminders…")
       .setSmallIcon(iconRes(context))
       .setColor(ACCENT_COLOR)
       .setPriority(NotificationCompat.PRIORITY_MIN)

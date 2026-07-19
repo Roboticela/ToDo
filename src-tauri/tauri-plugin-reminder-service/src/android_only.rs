@@ -2,6 +2,7 @@
 //! Android bridge for `tauri-plugin-reminder-service` (Tauri 2.10+ uses `PluginHandle<R>` and `PluginApi<R, C>`.)
 
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use tauri::plugin::PluginHandle;
 use tauri::Runtime;
 
@@ -9,11 +10,19 @@ use crate::error::Result;
 
 pub const PLUGIN_ID: &str = "app.tauri.reminderservice";
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ReminderCapability {
+  pub enabled: bool,
+  pub exact_alarms: bool,
+  pub battery_exempt: bool,
+}
+
 /// Managed handle for the Kotlin `ReminderServicePlugin` (Android only; state is absent on other platforms).
 pub struct ReminderService<R: Runtime>(pub PluginHandle<R>);
 
 impl<R: Runtime> ReminderService<R> {
-  pub fn start_service(&self) -> Result<()> {
+  pub fn start_service(&self) -> Result<ReminderCapability> {
     self
       .0
       .run_mobile_plugin("startService", ())
@@ -27,14 +36,14 @@ impl<R: Runtime> ReminderService<R> {
       .map_err(|e| crate::Error::Other(e.to_string()))
   }
 
-  pub fn reschedule_next(&self) -> Result<()> {
+  pub fn reschedule_next(&self) -> Result<ReminderCapability> {
     self
       .0
       .run_mobile_plugin("rescheduleNext", ())
       .map_err(|e| crate::Error::Other(e.to_string()))
   }
 
-  pub fn request_battery_exemption(&self) -> Result<()> {
+  pub fn request_battery_exemption(&self) -> Result<ReminderCapability> {
     self
       .0
       .run_mobile_plugin("requestBatteryExemption", ())
