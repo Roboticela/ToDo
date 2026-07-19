@@ -230,12 +230,16 @@ function queueNativeAlarmSync(userId?: string): void {
 async function syncNativeAlarms(userId?: string): Promise<void> {
   if (!isTauri()) return;
 
-  // Android: the persistent reminder service owns delivery and re-derives its own
-  // next wake time directly from todo.db — a tiny local IPC call, not a per-item
-  // Schedule.at dump like the path below.
-  if (androidServiceOwnsDelivery()) {
+  // Android: native AlarmManager path owns closed-app delivery. Always re-arm it when
+  // the background service is enabled — even before exact-alarm ownership flips —
+  // so a future wake exists as soon as the user leaves the app.
+  if (getAppRuntime() === "android" && isBackgroundServiceEnabledLocally()) {
     await rescheduleReminderService();
-    return;
+    if (androidServiceOwnsDelivery()) {
+      // Exact alarms granted: native AlarmReceiver delivers. Skip Schedule.at to
+      // avoid duplicate toasts (native marks rows fired in todo.db).
+      return;
+    }
   }
 
   // Desktop Tauri's notification plugin ignores Schedule.at and shows immediately —

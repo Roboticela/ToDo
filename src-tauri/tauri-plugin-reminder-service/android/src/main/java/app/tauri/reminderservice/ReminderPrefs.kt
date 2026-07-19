@@ -8,8 +8,9 @@ object ReminderPrefs {
   private const val PREFS_NAME = "reminder_service_prefs"
   private const val KEY_ENABLED = "enabled"
 
+  /** Defaults to true to match JS `isBackgroundServiceEnabledLocally()`. */
   fun isEnabled(context: Context): Boolean =
-    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, false)
+    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_ENABLED, true)
 
   fun setEnabled(context: Context, enabled: Boolean) {
     context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
