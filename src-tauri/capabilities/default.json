@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "android-ui:default",
+    "reminder-service:default",
     "dialog:allow-save",
     "opener:default",
     "deep-link:default",

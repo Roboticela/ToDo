@@ -1,0 +1,28 @@
+[package]
+name = "tauri-plugin-reminder-service"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77.2"
+description = "Android-only persistent foreground service that delivers custom, actionable task-reminder notifications and keeps firing them even when the app is fully closed."
+license = "MIT"
+links = "tauri-plugin-reminder-service"
+build = "build.rs"
+
+[lib]
+name = "tauri_plugin_reminder_service"
+crate-type = ["lib"]
+
+[package.metadata.platforms.support]
+windows = { level = "none", notes = "" }
+linux = { level = "none", notes = "" }
+macos = { level = "none", notes = "" }
+android = { level = "full", notes = "" }
+ios = { level = "none", notes = "Android only — commands are no-ops on iOS." }
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2" }
+thiserror = "1"

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-cache-sound"
+description = "Enables the cache_sound command without any pre-configured scope."
+commands.allow = ["cache_sound"]
+
+[[permission]]
+identifier = "deny-cache-sound"
+description = "Denies the cache_sound command without any pre-configured scope."
+commands.deny = ["cache_sound"]

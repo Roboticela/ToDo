@@ -1,23 +1,49 @@
 // @refresh reset
-import { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import type { ReactNode } from "react";
 import { useAuth } from "./AuthContext";
 import { syncTasksToServer } from "../lib/syncApi";
 
-const BACKGROUND_SYNC_INTERVAL_MS = 60 * 1000; // 1 minute
+// Background polling only exists as a fallback to pick up changes made on other
+// devices — most syncing happens on demand (local edits, reconnect, tab focus),
+// so this can be infrequent without hurting freshness.
+const BACKGROUND_SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 const SCHEDULED_SYNC_DEBOUNCE_MS = 500; // when online, sync soon after changes
 
-interface SyncContextType {
+// Opportunistic syncs (interval / tab focus / reconnect) are throttled so that
+// switching tabs, waking the laptop, etc. can't fire off a full sync round-trip
+// more than once per this window when there is nothing local to push.
+const MIN_OPPORTUNISTIC_GAP_MS = 20 * 1000;
+// If sync keeps failing (bad connection, server down, etc.) back off instead of
+// hammering the network/server on every retry.
+const BASE_BACKOFF_MS = 30 * 1000;
+const MAX_BACKOFF_MS = 10 * 60 * 1000;
+
+interface SyncStateType {
   isOnline: boolean;
   isSyncing: boolean;
   lastSyncAt: string | null;
   syncError: string | null;
   pendingCount: number;
-  triggerSync: () => Promise<void>;
+}
+
+interface SyncActionsType {
+  triggerSync: (opts?: { force?: boolean }) => Promise<void>;
   scheduleSync: () => void;
 }
 
-const SyncContext = createContext<SyncContextType | undefined>(undefined);
+type SyncContextType = SyncStateType & SyncActionsType;
+
+const SyncStateContext = createContext<SyncStateType | undefined>(undefined);
+const SyncActionsContext = createContext<SyncActionsType | undefined>(undefined);
 
 async function countPendingLocal(userId: string): Promise<number> {
   const { getAllTasksByUserForSync, getAllCompletionsByUser } = await import("../lib/db");
@@ -33,6 +59,7 @@ async function countPendingLocal(userId: string): Promise<number> {
 
 export function SyncProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
@@ -40,29 +67,53 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const [pendingCount, setPendingCount] = useState(0);
   const scheduleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncInProgressRef = useRef(false);
+  const pendingCountRef = useRef(0);
+  const lastAttemptAtRef = useRef(0);
+  const failureCountRef = useRef(0);
+  const backoffUntilRef = useRef(0);
+
+  useEffect(() => {
+    pendingCountRef.current = pendingCount;
+  }, [pendingCount]);
 
   const refreshPendingCount = useCallback(async () => {
-    if (!user) {
+    if (!userId) {
       setPendingCount(0);
       return;
     }
     try {
-      setPendingCount(await countPendingLocal(user.id));
+      setPendingCount(await countPendingLocal(userId));
     } catch {
       // ignore
     }
-  }, [user]);
+  }, [userId]);
 
-  const triggerSync = useCallback(async () => {
+  const triggerSync = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force ?? false;
     if (!navigator.onLine) return;
     if (syncInProgressRef.current) return;
+
+    const now = Date.now();
+    if (!force) {
+      // Nothing local to push and we checked the server recently — skip this
+      // round-trip. Real edits (scheduleSync) and manual "Sync" clicks always
+      // pass force so they're never dropped.
+      if (pendingCountRef.current === 0 && now - lastAttemptAtRef.current < MIN_OPPORTUNISTIC_GAP_MS) {
+        return;
+      }
+      if (now < backoffUntilRef.current) return;
+    }
+
+    lastAttemptAtRef.current = now;
     syncInProgressRef.current = true;
     setSyncError(null);
     setIsSyncing(true);
     try {
-      if (user) {
-        const result = await syncTasksToServer(user.id);
+      if (userId) {
+        const result = await syncTasksToServer(userId);
         if (result.ok) {
+          failureCountRef.current = 0;
+          backoffUntilRef.current = 0;
           setLastSyncAt(new Date().toISOString());
           setSyncError(null);
           window.dispatchEvent(new CustomEvent("tasks-synced"));
@@ -72,23 +123,31 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         } else if (result.reason === "no_session") {
           setSyncError("Sign in again to sync");
         } else {
+          failureCountRef.current += 1;
+          backoffUntilRef.current =
+            now + Math.min(BASE_BACKOFF_MS * 2 ** (failureCountRef.current - 1), MAX_BACKOFF_MS);
           setSyncError(result.message || "Sync failed");
         }
       }
       await refreshPendingCount();
     } catch (e) {
+      failureCountRef.current += 1;
+      backoffUntilRef.current =
+        now + Math.min(BASE_BACKOFF_MS * 2 ** (failureCountRef.current - 1), MAX_BACKOFF_MS);
       setSyncError(e instanceof Error ? e.message : "Sync failed");
     } finally {
       syncInProgressRef.current = false;
       setIsSyncing(false);
     }
-  }, [user, refreshPendingCount]);
+  }, [userId, refreshPendingCount]);
 
   const scheduleSync = useCallback(() => {
     if (scheduleRef.current) clearTimeout(scheduleRef.current);
     scheduleRef.current = setTimeout(() => {
       scheduleRef.current = null;
-      triggerSync();
+      // Real local changes are pushed unconditionally (bypassing the
+      // opportunistic throttle/backoff below).
+      triggerSync({ force: true });
     }, SCHEDULED_SYNC_DEBOUNCE_MS);
     // Optimistic pending bump while waiting for debounce
     void refreshPendingCount();
@@ -108,25 +167,27 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     };
   }, [triggerSync]);
 
+  // Fallback poll for changes made on other devices. Opportunistic — throttled
+  // and backed off inside triggerSync — so it never spams the network.
   useEffect(() => {
-    if (!user || !navigator.onLine) return;
-    const interval = setInterval(triggerSync, BACKGROUND_SYNC_INTERVAL_MS);
+    if (!userId || !navigator.onLine) return;
+    const interval = setInterval(() => triggerSync(), BACKGROUND_SYNC_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [user, triggerSync]);
+  }, [userId, triggerSync]);
 
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.visibilityState === "visible" && user && navigator.onLine) {
+      if (document.visibilityState === "visible" && userId && navigator.onLine) {
         triggerSync();
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [user, triggerSync]);
+  }, [userId, triggerSync]);
 
   useEffect(() => {
-    if (user && navigator.onLine) triggerSync();
-  }, [user, triggerSync]);
+    if (userId && navigator.onLine) triggerSync();
+  }, [userId, triggerSync]);
 
   useEffect(() => {
     void refreshPendingCount();
@@ -145,15 +206,38 @@ export function SyncProvider({ children }: { children: ReactNode }) {
     };
   }, [refreshPendingCount]);
 
+  const stateValue = useMemo(
+    () => ({ isOnline, isSyncing, lastSyncAt, syncError, pendingCount }),
+    [isOnline, isSyncing, lastSyncAt, syncError, pendingCount]
+  );
+
+  const actionsValue = useMemo(
+    () => ({ triggerSync, scheduleSync }),
+    [triggerSync, scheduleSync]
+  );
+
   return (
-    <SyncContext.Provider value={{ isOnline, isSyncing, lastSyncAt, syncError, pendingCount, triggerSync, scheduleSync }}>
-      {children}
-    </SyncContext.Provider>
+    <SyncActionsContext.Provider value={actionsValue}>
+      <SyncStateContext.Provider value={stateValue}>{children}</SyncStateContext.Provider>
+    </SyncActionsContext.Provider>
   );
 }
 
-export function useSync() {
-  const context = useContext(SyncContext);
-  if (!context) throw new Error("useSync must be used within SyncProvider");
+/** Sync status (online / syncing / errors) — re-renders when those change. */
+export function useSyncState() {
+  const context = useContext(SyncStateContext);
+  if (!context) throw new Error("useSyncState must be used within SyncProvider");
   return context;
+}
+
+/** Sync actions only — stable across isSyncing flips so task UI does not refresh. */
+export function useSyncActions() {
+  const context = useContext(SyncActionsContext);
+  if (!context) throw new Error("useSyncActions must be used within SyncProvider");
+  return context;
+}
+
+/** Combined hook for components that need both status and actions (e.g. header). */
+export function useSync(): SyncContextType {
+  return { ...useSyncState(), ...useSyncActions() };
 }

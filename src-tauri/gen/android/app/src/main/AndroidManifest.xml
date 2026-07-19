@@ -9,6 +9,10 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Persistent reminder foreground service: keeps firing custom reminder notifications
+         even when the app is fully closed. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- AndroidTV support -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
@@ -44,5 +48,29 @@
             android:name="android.support.FILE_PROVIDER_PATHS"
             android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- Persistent reminder service: fires custom, actionable task-reminder notifications
+             and keeps running even when the app itself is closed. -->
+        <service
+          android:name="app.tauri.reminderservice.ReminderForegroundService"
+          android:exported="false"
+          android:foregroundServiceType="dataSync" />
+
+        <receiver
+          android:name="app.tauri.reminderservice.ReminderAlarmReceiver"
+          android:exported="false" />
+
+        <receiver
+          android:name="app.tauri.reminderservice.NotificationActionReceiver"
+          android:exported="false" />
+
+        <receiver
+          android:name="app.tauri.reminderservice.BootReceiver"
+          android:exported="false">
+          <intent-filter>
+            <action android:name="android.intent.action.BOOT_COMPLETED" />
+            <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+          </intent-filter>
+        </receiver>
     </application>
 </manifest>

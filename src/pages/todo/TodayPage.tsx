@@ -5,7 +5,7 @@ import { format, addDays, subDays, parseISO } from "date-fns";
 import { cn } from "../../lib/utils";
 import { useTasks } from "../../contexts/TaskContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { getTaskCompletionForDate } from "../../lib/taskService";
+import { getTaskCompletionForDate, isDateInPast } from "../../lib/taskService";
 import TaskCard from "../../components/todo/TaskCard";
 import TaskForm from "../../components/todo/TaskForm";
 import type { Task } from "../../types/todo";
@@ -21,6 +21,7 @@ export default function TodayPage() {
   const parsedDate = parseISO(selectedDate + "T12:00:00");
   const today = format(new Date(), "yyyy-MM-dd");
   const isToday = selectedDate === today;
+  const isPastDay = isDateInPast(selectedDate);
 
   // BUG-02: Use useCallback so the function identity is stable, and a ref-based cancel
   // token so stale async results can't overwrite fresher state when deps change quickly.
@@ -75,6 +76,7 @@ export default function TodayPage() {
   const dontTasks = filteredTasks.filter((t) => t.category === "dont");
 
   function handleEdit(task: Task) {
+    if (isPastDay) return; // past days are locked
     setEditTask(task);
     setShowForm(true);
   }
@@ -287,17 +289,19 @@ export default function TodayPage() {
       </div>
 
       </div>
-      {/* FAB */}
-      <motion.button
-        type="button"
-        onClick={() => { setEditTask(null); setShowForm(true); }}
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.92 }}
-        className="fixed bottom-fab right-4 md:right-6 lg:bottom-8 lg:right-8 z-30 w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
-        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
-      >
-        <Plus className="w-6 h-6" strokeWidth={2.5} />
-      </motion.button>
+      {/* FAB — hidden on past days (locked) */}
+      {!isPastDay && (
+        <motion.button
+          type="button"
+          onClick={() => { setEditTask(null); setShowForm(true); }}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.92 }}
+          className="fixed bottom-fab right-4 md:right-6 lg:bottom-8 lg:right-8 z-30 w-14 h-14 rounded-2xl bg-primary text-primary-foreground shadow-lg flex items-center justify-center"
+          style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.3)" }}
+        >
+          <Plus className="w-6 h-6" strokeWidth={2.5} />
+        </motion.button>
+      )}
 
       {/* Task Form */}
       <TaskForm

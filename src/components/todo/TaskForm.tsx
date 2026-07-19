@@ -7,7 +7,7 @@ import { useIsDesktop } from "../../hooks/useIsDesktop";
 import type { Task, TaskFormData, TaskType, TaskCategory, TaskPriority, RepeatDay } from "../../types/todo";
 import { useTasks } from "../../contexts/TaskContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { getTodayString } from "../../lib/taskService";
+import { getTodayString, isDateInPast } from "../../lib/taskService";
 import { uses24h } from "../../lib/timeFormat";
 import DatePicker from "./DatePicker";
 import TimePicker from "./TimePicker";
@@ -67,7 +67,9 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
       setType("daily");
       setCategory("do");
       setPriority("medium");
-      setDate(defaultDate || getTodayString());
+      // Past days are locked — clamp create default to today when opening on a past day.
+      const initialDate = defaultDate || getTodayString();
+      setDate(isDateInPast(initialDate) ? getTodayString() : initialDate);
       setTime("");
       setStartTime("");
       setEndTime("");
@@ -80,6 +82,12 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
   function validate(): boolean {
     const newErrors: Record<string, string> = {};
     if (!title.trim()) newErrors.title = "Title is required";
+    // Creating always requires today+; editing may keep an existing past start date
+    // (e.g. repeating series) but cannot move onto a past day.
+    const dateChanged = !editTask || date !== editTask.date;
+    if (dateChanged && isDateInPast(date)) {
+      newErrors.date = "Past days are locked — pick today or a future date";
+    }
     if (type === "time-based" && !time) newErrors.time = "Time is required";
     if (type === "duration") {
       if (!startTime) newErrors.startTime = "Start time is required";
@@ -323,11 +331,16 @@ export default function TaskForm({ isOpen, onClose, editTask, defaultDate }: Tas
                 </div>
               </div>
 
-              {/* Date */}
+              {/* Date — past days locked; only today onwards (keep existing past start on edit) */}
               <DatePicker
                 label="Date"
                 value={date}
-                onChange={setDate}
+                onChange={(next) => {
+                  if (isDateInPast(next) && (!editTask || next !== editTask.date)) return;
+                  setDate(next);
+                }}
+                minDate={getTodayString()}
+                error={errors.date}
               />
 
               {/* Time fields */}

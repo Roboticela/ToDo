@@ -19,7 +19,7 @@ import { cn } from "../../lib/utils";
 import type { Task } from "../../types/todo";
 import { useTasks } from "../../contexts/TaskContext";
 import { useAuth } from "../../contexts/AuthContext";
-import { getTaskCompletionForDate } from "../../lib/taskService";
+import { getTaskCompletionForDate, isDateInPast } from "../../lib/taskService";
 import { formatTime, formatTimeRange } from "../../lib/timeFormat";
 import { getTaskTimeLeft } from "../../lib/taskTimeLeft";
 import DeleteConfirmDialog, { type DeleteChoice } from "./DeleteConfirmDialog";
@@ -32,14 +32,6 @@ interface TaskCardProps {
   onCompletionChange?: (completed: boolean) => void;
   /** Optional delay for list stagger animation (e.g. index * 0.03) */
   staggerDelay?: number;
-}
-
-/** Returns true if the given date string (YYYY-MM-DD) is strictly before today (local). */
-function isDateInPast(dateStr: string): boolean {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const d = new Date(dateStr + "T00:00:00");
-  return d < today;
 }
 
 export default function TaskCard({ task, date, onEdit, onCompletionChange, staggerDelay = 0 }: TaskCardProps) {
@@ -90,7 +82,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
 
   // BUG-01: Pass the card's own `date` prop, not the context selectedDate
   async function handleToggle() {
-    if (isPastDay) return; // locked
+    if (isPastDay) return; // locked — past days are read-only
     if (isCompleted) {
       await uncompleteTask(task, date);
       setIsCompleted(false);
@@ -102,6 +94,11 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
       setIsSkipped(false);
       onCompletionChange?.(true);
     }
+  }
+
+  function handleEditClick() {
+    if (isPastDay) return; // locked
+    onEdit(task);
   }
 
   function handleDeleteClick() {
@@ -160,7 +157,8 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
   return (
     <>
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      // Avoid entrance flash when parent re-renders after sync; list enter still works via AnimatePresence.
+      initial={false}
       animate={{ opacity: isDeleting ? 0 : 1, y: 0, scale: isDeleting ? 0.95 : 1 }}
       exit={{ opacity: 0, y: -8, scale: 0.95, transition: { duration: 0.2 } }}
       transition={{ duration: 0.2, delay: isDeleting ? 0 : staggerDelay }}
@@ -336,7 +334,7 @@ export default function TaskCard({ task, date, onEdit, onCompletionChange, stagg
                   <>
                     <motion.button
                       type="button"
-                      onClick={() => onEdit(task)}
+                      onClick={handleEditClick}
                       whileTap={{ scale: 0.85 }}
                       className="p-1.5 rounded-lg text-foreground/30 hover:text-primary/70 hover:bg-primary/10 transition-colors"
                     >

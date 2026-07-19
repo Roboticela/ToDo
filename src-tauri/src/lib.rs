@@ -129,6 +129,7 @@ pub fn run() {
         .plugin(tauri_plugin_android_ui::init(
             tauri_plugin_android_ui::AndroidUiConfig::DEFAULT,
         ))
+        .plugin(tauri_plugin_reminder_service::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_google_auth::init())

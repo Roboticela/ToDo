@@ -65,20 +65,31 @@ export default function RegisterPage() {
     }
   }
 
+  async function startBrowserGoogleLogin() {
+    const { requestId, pollSecret, userCode, verificationUrl } = await startDesktopGoogleLogin();
+    await openLink(verificationUrl, { openInNewTab: true });
+    setPendingDesktopAuth({ requestId, pollSecret, userCode });
+  }
+
   async function handleGoogle() {
     setError("");
     const runtime = getAppRuntime();
     if (runtime === "android" || runtime === "ios") {
       setIsLoading(true);
       try {
-        const { user, session } = await loginWithNativeGoogle();
-        setAuthData(user, session);
-        navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
-      } catch (e) {
-        const msg = formatCaughtError(e, "Could not start Google sign-up.");
-        if (!isUserCancelledAuthError(msg)) {
-          setError(msg);
+        try {
+          const { user, session } = await loginWithNativeGoogle();
+          setAuthData(user, session);
+          navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
+          return;
+        } catch (nativeErr) {
+          const msg = formatCaughtError(nativeErr, "Could not start Google sign-up.");
+          if (isUserCancelledAuthError(msg)) return;
+          // Native Credential Manager failed — browser OAuth still works.
+          await startBrowserGoogleLogin();
         }
+      } catch (e) {
+        setError(formatCaughtError(e, "Could not start Google sign-up."));
       } finally {
         setIsLoading(false);
       }
@@ -86,9 +97,7 @@ export default function RegisterPage() {
     }
     if (isTauri()) {
       try {
-        const { requestId, pollSecret, userCode, verificationUrl } = await startDesktopGoogleLogin();
-        await openLink(verificationUrl, { openInNewTab: true });
-        setPendingDesktopAuth({ requestId, pollSecret, userCode });
+        await startBrowserGoogleLogin();
       } catch (e) {
         setError(formatCaughtError(e, "Could not start Google sign-up."));
       }

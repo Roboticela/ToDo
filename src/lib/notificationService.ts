@@ -19,6 +19,14 @@ import {
   cancelAllNativeNotifications,
 } from "./nativeNotification";
 import { isTauri } from "./tauri";
+import { getAppRuntime } from "./platform";
+import {
+  isBackgroundServiceEnabledLocally,
+  isNativeReminderServiceRunning,
+  rescheduleReminderService,
+  startReminderService,
+  syncReminderSoundToNative,
+} from "./reminderService";
 import { formatTime, localDateTime } from "./timeFormat";
 
 let notificationTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
@@ -35,6 +43,21 @@ const DUE_WATCHDOG_MS = 15_000;
 let nativeSyncChain: Promise<void> = Promise.resolve();
 let nativeSyncQueued = false;
 
+/**
+ * Android foreground reminder service owns delivery only after a successful native start.
+ * If start fails, Schedule.at + JS timers remain the delivery path (no silent blackout).
+ */
+function androidServiceOwnsDelivery(): boolean {
+  return (
+    getAppRuntime() === "android" &&
+    isBackgroundServiceEnabledLocally() &&
+    isNativeReminderServiceRunning()
+  );
+}
+
+/** How many days ahead to materialize repeating-task reminder rows (app may stay closed). */
+const REPEAT_SCHEDULE_HORIZON_DAYS = 14;
+
 export async function requestNotificationPermission(): Promise<boolean> {
   const granted = await requestNativeNotificationPermission();
   if (granted) await ensureNotificationChannels();
@@ -45,23 +68,32 @@ export function isNotificationSupported(): boolean {
   return "Notification" in window || isTauri();
 }
 
-/** Schedule reminders for today, and also future one-off tasks (re-armed daily on app open / sync). */
+/**
+ * Schedule reminders for one-off dates and the next N days of repeating occurrences
+ * so the native service can fire them while the app stays closed overnight.
+ */
 function getOccurrenceDates(task: Task): string[] {
   const today = format(new Date(), "yyyy-MM-dd");
 
   if (!task.isRepeating || !task.repeatDays?.length) {
     // BUG-09: Also schedule future one-off tasks, not just today's.
-    // Without this, alarms for tomorrow's tasks are never registered
-    // and the user only gets a reminder if they open the app on that day.
     if (!task.date || task.date < today) return [];
     return [task.date];
   }
 
   if (task.date > today) return [];
   if (task.endDate && task.endDate < today) return [];
-  const dow = new Date(today + "T12:00:00").getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
-  if (!task.repeatDays.includes(dow)) return [];
-  return [today];
+
+  const dates: string[] = [];
+  for (let i = 0; i < REPEAT_SCHEDULE_HORIZON_DAYS; i++) {
+    const d = addDays(new Date(), i);
+    const dateStr = format(d, "yyyy-MM-dd");
+    if (task.date && dateStr < task.date) continue;
+    if (task.endDate && dateStr > task.endDate) break;
+    const dow = d.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6;
+    if (task.repeatDays.includes(dow)) dates.push(dateStr);
+  }
+  return dates;
 }
 
 async function buildNotificationsForTask(task: Task): Promise<ScheduledNotification[]> {
@@ -148,7 +180,7 @@ export async function scheduleTaskNotifications(task: Task): Promise<void> {
   const notifs = await buildNotificationsForTask(task);
   for (const notif of notifs) {
     await saveNotification(notif);
-    scheduleLocalTimer(notif, task);
+    if (!androidServiceOwnsDelivery()) scheduleLocalTimer(notif, task);
   }
   queueNativeAlarmSync(task.userId);
 }
@@ -197,6 +229,14 @@ function queueNativeAlarmSync(userId?: string): void {
 
 async function syncNativeAlarms(userId?: string): Promise<void> {
   if (!isTauri()) return;
+
+  // Android: the persistent reminder service owns delivery and re-derives its own
+  // next wake time directly from todo.db — a tiny local IPC call, not a per-item
+  // Schedule.at dump like the path below.
+  if (androidServiceOwnsDelivery()) {
+    await rescheduleReminderService();
+    return;
+  }
 
   await cancelAllNativeNotifications().catch(() => {});
 
@@ -318,6 +358,10 @@ async function fireNotification(notif: ScheduledNotification, task: Task): Promi
 
 /** Fire any pending reminders whose time has arrived (or recently passed). */
 export async function fireDueNotifications(userId?: string): Promise<void> {
+  // Native service handles due delivery on Android when enabled — dual firing
+  // here was cascading "next" reminders as soon as one woke the process.
+  if (androidServiceOwnsDelivery()) return;
+
   const pending = await getPendingNotifications(userId);
   const now = Date.now();
 
@@ -355,28 +399,46 @@ function stopDueWatchdog(): void {
 }
 
 export async function initNotificationScheduler(userId?: string): Promise<void> {
+  // Prefer native service when opted in; ownership flips only after a successful start.
+  if (getAppRuntime() === "android" && isBackgroundServiceEnabledLocally()) {
+    await startReminderService();
+  }
+  const serviceOwns = androidServiceOwnsDelivery();
+
+  // Keep native ReminderNotifier audio in sync with the user's sound selection.
+  if (userId && getAppRuntime() === "android") {
+    try {
+      const user = await getUser(userId);
+      await syncReminderSoundToNative(user);
+    } catch {
+      // ignore
+    }
+  }
+
   await fireDueNotifications(userId);
 
-  const pending = await getPendingNotifications(userId);
-  const now = Date.now();
+  if (!serviceOwns) {
+    const pending = await getPendingNotifications(userId);
+    const now = Date.now();
 
-  for (const notif of pending) {
-    const scheduledAt = new Date(notif.scheduledAt).getTime();
-    if (scheduledAt <= now) continue;
+    for (const notif of pending) {
+      const scheduledAt = new Date(notif.scheduledAt).getTime();
+      if (scheduledAt <= now) continue;
 
-    const task = await getTask(notif.taskId);
-    if (!task) {
-      await cancelNativeNotification(notif.id).catch(() => {});
-      await markNotificationFired(notif.id);
-      continue;
+      const task = await getTask(notif.taskId);
+      if (!task) {
+        await cancelNativeNotification(notif.id).catch(() => {});
+        await markNotificationFired(notif.id);
+        continue;
+      }
+
+      scheduleLocalTimer(notif, task);
     }
-
-    scheduleLocalTimer(notif, task);
   }
 
   if (userId) {
     await ensureMissingSchedules(userId);
-    startDueWatchdog(userId);
+    if (!serviceOwns) startDueWatchdog(userId);
   }
 
   queueNativeAlarmSync(userId);
@@ -407,7 +469,7 @@ async function ensureMissingSchedules(userId: string): Promise<void> {
       if (pendingTaskTypes.has(`${notif.taskId}|${notif.type}`)) continue;
 
       await saveNotification(notif);
-      scheduleLocalTimer(notif, task);
+      if (!androidServiceOwnsDelivery()) scheduleLocalTimer(notif, task);
       existingKeys.add(scheduleKey(notif));
       pendingTaskTypes.add(`${notif.taskId}|${notif.type}`);
     }
@@ -445,14 +507,15 @@ export async function rebuildNotificationsForUser(userId: string): Promise<void>
   }
   const { getAllTasksByUser } = await import("./db");
   const tasks = await getAllTasksByUser(userId);
+  const serviceOwns = androidServiceOwnsDelivery();
   for (const task of tasks) {
     const notifs = await buildNotificationsForTask(task);
     for (const notif of notifs) {
       await saveNotification(notif);
-      scheduleLocalTimer(notif, task);
+      if (!serviceOwns) scheduleLocalTimer(notif, task);
     }
   }
-  startDueWatchdog(userId);
+  if (!serviceOwns) startDueWatchdog(userId);
   queueNativeAlarmSync(userId);
 }
 

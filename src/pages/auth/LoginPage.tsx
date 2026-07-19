@@ -80,20 +80,32 @@ export default function LoginPage() {
     }
   }
 
+  async function startBrowserGoogleLogin() {
+    const { requestId, pollSecret, userCode, verificationUrl } = await startDesktopGoogleLogin();
+    await openLink(verificationUrl, { openInNewTab: true });
+    setPendingDesktopAuth({ requestId, pollSecret, userCode });
+  }
+
   async function handleGoogle() {
     setError("");
     const runtime = getAppRuntime();
     if (runtime === "android" || runtime === "ios") {
       setIsLoading(true);
       try {
-        const { user, session } = await loginWithNativeGoogle();
-        setAuthData(user, session);
-        navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
-      } catch (e) {
-        const msg = formatCaughtError(e, "Could not start Google sign-in.");
-        if (!isUserCancelledAuthError(msg)) {
-          setError(msg);
+        // Prefer native Credential Manager; if SHA-1 / Play Services / console
+        // setup fails, fall back to the same browser OAuth used on desktop.
+        try {
+          const { user, session } = await loginWithNativeGoogle();
+          setAuthData(user, session);
+          navigate(user.plan === "pending" ? "/todo/subscription" : "/todo");
+          return;
+        } catch (nativeErr) {
+          const msg = formatCaughtError(nativeErr, "Could not start Google sign-in.");
+          if (isUserCancelledAuthError(msg)) return;
+          await startBrowserGoogleLogin();
         }
+      } catch (e) {
+        setError(formatCaughtError(e, "Could not start Google sign-in."));
       } finally {
         setIsLoading(false);
       }
@@ -101,9 +113,7 @@ export default function LoginPage() {
     }
     if (isTauri()) {
       try {
-        const { requestId, pollSecret, userCode, verificationUrl } = await startDesktopGoogleLogin();
-        await openLink(verificationUrl, { openInNewTab: true });
-        setPendingDesktopAuth({ requestId, pollSecret, userCode });
+        await startBrowserGoogleLogin();
       } catch (e) {
         setError(formatCaughtError(e, "Could not start Google sign-in."));
       }

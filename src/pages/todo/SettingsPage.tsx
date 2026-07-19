@@ -43,6 +43,7 @@ import {
   isNotificationSupported,
   requestNotificationPermission,
   rebuildNotificationsForUser,
+  initNotificationScheduler,
 } from "../../lib/notificationService";
 import {
   prefetchCustomSound,
@@ -67,6 +68,13 @@ import {
   isNativePermissionGranted,
   getNotificationPermissionState,
 } from "../../lib/nativeNotification";
+import {
+  isBackgroundServiceEnabledLocally,
+  startReminderService,
+  stopReminderService,
+  requestReminderBatteryExemption,
+  syncReminderSoundToNative,
+} from "../../lib/reminderService";
 
 type ModalType = "edit-name" | "edit-email" | "change-avatar" | "change-password" | "delete-account" | null;
 
@@ -114,6 +122,13 @@ export default function SettingsPage() {
   const soundInputRef = useRef<HTMLInputElement>(null);
   const showDesktopSection = isDesktopShell();
   const runtime = getAppRuntime();
+  const [backgroundServiceOn, setBackgroundServiceOn] = useState(false);
+  const [backgroundServiceUpdating, setBackgroundServiceUpdating] = useState(false);
+  const [batteryExemptionRequested, setBatteryExemptionRequested] = useState(false);
+
+  useEffect(() => {
+    if (runtime === "android") setBackgroundServiceOn(isBackgroundServiceEnabledLocally());
+  }, [runtime]);
 
   // After email change confirmation (redirect from link), refetch user and clear param
   useEffect(() => {
@@ -246,11 +261,45 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleBackgroundServiceToggle() {
+    const next = !backgroundServiceOn;
+    setBackgroundServiceUpdating(true);
+    try {
+      if (next) {
+        await requestNotificationPermission();
+        const started = await startReminderService();
+        setBackgroundServiceOn(true);
+        // Materialize reminder rows; if native start failed, Schedule.at/timers stay as delivery.
+        await rebuildNotificationsForUser(currentUser.id);
+        if (!started) await initNotificationScheduler(currentUser.id);
+      } else {
+        await stopReminderService();
+        setBackgroundServiceOn(false);
+        // Arm system alarms / JS timers so reminders still fire without the FGS.
+        await initNotificationScheduler(currentUser.id);
+      }
+    } finally {
+      setBackgroundServiceUpdating(false);
+    }
+  }
+
+  async function handleRequestBatteryExemption() {
+    await requestReminderBatteryExemption();
+    setBatteryExemptionRequested(true);
+  }
+
   async function handleEnablePermission() {
     const granted = await requestNotificationPermission();
     setPermission(isNotificationSupported() ? Notification.permission : "unsupported");
     if (granted && taskNotifsOn) {
       await rebuildNotificationsForUser(currentUser.id);
+    }
+  }
+
+  async function applySoundToNotifications(userAfter: typeof currentUser, force = false) {
+    await syncReminderSoundToNative(userAfter, { force });
+    if (taskNotifsOn) {
+      await rebuildNotificationsForUser(userAfter.id);
     }
   }
 
@@ -269,6 +318,7 @@ export default function SettingsPage() {
       }
       const updated = await updateProfile(currentUser.id, patch);
       updateUser(updated);
+      await applySoundToNotifications(updated, true);
     } catch (err) {
       setSoundError(err instanceof Error ? err.message : "Could not update sound.");
     } finally {
@@ -285,6 +335,7 @@ export default function SettingsPage() {
         notificationSoundId: soundId,
       });
       updateUser(updated);
+      await applySoundToNotifications(updated, true);
       await previewNotificationSound({ mode: "preset", soundId });
     } catch (err) {
       setSoundError(err instanceof Error ? err.message : "Could not update sound.");
@@ -326,6 +377,7 @@ export default function SettingsPage() {
       if (updated.customSoundUrl) {
         await prefetchCustomSound(updated.customSoundUrl);
       }
+      await applySoundToNotifications(updated, true);
     } catch (err) {
       setSoundError(err instanceof Error ? err.message : "Sound upload failed.");
     } finally {
@@ -345,6 +397,7 @@ export default function SettingsPage() {
       });
       updateUser(updated);
       if (previousUrl) await clearCustomSoundCache(previousUrl);
+      await applySoundToNotifications(updated, true);
     } catch (err) {
       setSoundError(err instanceof Error ? err.message : "Could not remove sound.");
     } finally {
@@ -630,7 +683,11 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium text-foreground">Task reminders</p>
                 <p className="text-xs text-foreground/50 mt-0.5">
                   {taskNotifsOn
-                    ? "Uses your device’s default notification sound (Windows, macOS, Linux, Android, iOS)."
+                    ? soundMode === "normal"
+                      ? `Uses your device’s default sound (${osSoundHint()}).`
+                      : soundMode === "custom"
+                        ? "Uses your uploaded custom sound for reminders."
+                        : `Uses “${selectedCatalog?.name ?? "library"}” from the sound library.`
                     : "Task reminders are off."}
                 </p>
               </div>
@@ -946,13 +1003,65 @@ export default function SettingsPage() {
 
         {runtime === "android" && (
           <Section label="Background">
-            <div className="px-4 py-3.5 space-y-1">
-              <p className="text-sm font-medium text-foreground">Android reminders</p>
-              <p className="text-xs text-foreground/50 leading-relaxed">
-                Task reminders are scheduled with the system so they can fire while the app is in the
-                background. Keep notifications allowed, and grant exact alarms if Android asks.
-              </p>
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5 border-b border-border/50">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0">
+                  <Shield className="w-4 h-4 text-primary/70" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground">Run in background for instant reminders</p>
+                  <p className="text-xs text-foreground/50 mt-0.5 leading-relaxed">
+                    {backgroundServiceOn
+                      ? "ToDo keeps running so reminders fire on time even if you close the app. A small \u201cToDo reminders active\u201d notification will stay visible while this is on."
+                      : "Off: reminders are still scheduled with the system, but ToDo won't keep a persistent background notification running."}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={backgroundServiceOn}
+                disabled={backgroundServiceUpdating}
+                onClick={handleBackgroundServiceToggle}
+                className={cn(
+                  "relative w-11 h-6 rounded-full transition-all duration-200 shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2 focus:ring-offset-background",
+                  backgroundServiceOn ? "bg-primary/20" : "bg-foreground/10",
+                  backgroundServiceUpdating && "opacity-70 cursor-not-allowed"
+                )}
+              >
+                <motion.div
+                  animate={{ x: backgroundServiceOn ? 20 : 2 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  className={cn(
+                    "absolute top-1 w-4 h-4 rounded-full shadow-sm transition-colors duration-200",
+                    backgroundServiceOn ? "bg-primary" : "bg-foreground"
+                  )}
+                />
+              </button>
             </div>
+
+            <div className="flex items-center justify-between gap-3 px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">Ignore battery optimization</p>
+                <p className="text-xs text-foreground/50 mt-0.5 leading-relaxed">
+                  {batteryExemptionRequested
+                    ? "If Android showed a dialog, choose \u201cAllow\u201d so reminders can't be delayed by battery saving."
+                    : "Recommended so Android doesn't delay or stop background reminders to save power."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRequestBatteryExemption}
+                className="shrink-0 rounded-xl border border-border/70 bg-accent/10 px-3 py-2 text-xs font-medium text-foreground/80 hover:bg-accent/25 transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                Allow
+              </button>
+            </div>
+
+            <p className="px-4 py-2 text-[11px] text-foreground/45 border-t border-border/50 leading-relaxed">
+              Task reminders are also scheduled with the system so they can fire in the background even
+              with the toggle above off. Keep notifications allowed, and grant exact alarms if Android asks.
+            </p>
           </Section>
         )}
 

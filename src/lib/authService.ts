@@ -9,6 +9,12 @@ const API_BASE = getApiBase();
 async function clearLocalAuthState(): Promise<void> {
   const { clearAllTimers } = await import("./notificationService");
   clearAllTimers();
+  try {
+    const { stopReminderService } = await import("./reminderService");
+    await stopReminderService();
+  } catch {
+    // ignore
+  }
   const { clearAll } = await import("./db");
   await clearAll();
 }
@@ -354,6 +360,13 @@ export async function logout(userId: string): Promise<void> {
   }
   const { clearAllTimers } = await import("./notificationService");
   clearAllTimers();
+  // Stop Android foreground reminder service + cancel its alarms before wipe.
+  try {
+    const { stopReminderService } = await import("./reminderService");
+    await stopReminderService();
+  } catch {
+    // ignore
+  }
   // BUG-10: Also cancel native OS alarms (Android AlarmManager) so they don't fire after logout
   try {
     const { cancelAllNativeNotifications } = await import("./nativeNotification");

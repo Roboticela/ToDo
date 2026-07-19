@@ -43,7 +43,8 @@ import java.util.concurrent.TimeUnit
 class SignInArgs {
     lateinit var clientId: String
     var clientSecret: String? = null
-    lateinit var scopes: List<String>
+    /** Optional — empty means ID-token only (no AuthorizationClient step). */
+    var scopes: List<String>? = null
     var hostedDomain: String? = null
     var loginHint: String? = null
     var redirectUri: String? = ""
@@ -130,10 +131,11 @@ class GoogleSignInPlugin(private val activity: Activity) : Plugin(activity) {
     }
 
     private fun signInWeb(invoke: Invoke, args: SignInArgs) {
+        val scopes = args.scopes ?: emptyList()
         val intent = Intent(activity, GoogleSignInActivity::class.java).apply {
             putExtra(CLIENT_ID, args.clientId)
             putExtra(CLIENT_SECRET, args.clientSecret)
-            putExtra(SCOPES, args.scopes.toTypedArray())
+            putExtra(SCOPES, scopes.toTypedArray())
             putExtra(REDIRECT_URI, args.redirectUri)
             putExtra(TITLE, "Sign in with Google")
             putExtra(SUBTITLE, "Choose an account")
@@ -147,11 +149,12 @@ class GoogleSignInPlugin(private val activity: Activity) : Plugin(activity) {
                 // Step 1: Get ID token via CredentialManager (using main activity)
                 val idToken = requestGoogleIdToken(args.clientId)
 
-                // Step 2: Get access token via AuthorizationClient
-                if (args.scopes.isNullOrEmpty()) {
+                // Step 2: Get access token via AuthorizationClient (optional)
+                val scopes = args.scopes ?: emptyList()
+                if (scopes.isEmpty()) {
                     resolveNativeSignIn(invoke, idToken, "", emptyArray())
                 } else {
-                    startNativeAuthorization(invoke, idToken, args.scopes)
+                    startNativeAuthorization(invoke, idToken, scopes)
                 }
 
             } catch (e: GetCredentialCancellationException) {
@@ -175,9 +178,12 @@ class GoogleSignInPlugin(private val activity: Activity) : Plugin(activity) {
      * is the recommended path for a user-tapped "Continue with Google" button.
      */
     private suspend fun requestGoogleIdToken(clientId: String): String {
+        val nonce = generateNonce()
         try {
             return getCredentialIdToken(
-                GetSignInWithGoogleOption.Builder(clientId).build()
+                GetSignInWithGoogleOption.Builder(clientId)
+                    .setNonce(nonce)
+                    .build()
             )
         } catch (e: GetCredentialCancellationException) {
             throw e
@@ -191,9 +197,20 @@ class GoogleSignInPlugin(private val activity: Activity) : Plugin(activity) {
                 GetGoogleIdOption.Builder()
                     .setServerClientId(clientId)
                     .setFilterByAuthorizedAccounts(false)
+                    .setAutoSelectEnabled(false)
+                    .setNonce(nonce)
                     .build()
             )
         }
+    }
+
+    private fun generateNonce(): String {
+        val bytes = ByteArray(32)
+        java.security.SecureRandom().nextBytes(bytes)
+        return android.util.Base64.encodeToString(
+            bytes,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING,
+        )
     }
 
     private suspend fun getCredentialIdToken(option: CredentialOption): String {

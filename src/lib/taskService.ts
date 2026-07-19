@@ -15,9 +15,30 @@ import {
 } from "./db";
 import { scheduleTaskNotifications, cancelTimersForTask } from "./notificationService";
 
+export function getTodayString(): string {
+  return format(new Date(), "yyyy-MM-dd");
+}
+
+/** True when `dateStr` (YYYY-MM-DD) is strictly before local today. */
+export function isDateInPast(dateStr: string): boolean {
+  if (!dateStr) return false;
+  return dateStr < getTodayString();
+}
+
+/**
+ * Past days are locked — no complete / skip / delete-for-date / edit / create
+ * on dates before today. Today and future remain fully mutable.
+ */
+export function assertMutableDate(dateStr: string, action = "change"): void {
+  if (isDateInPast(dateStr)) {
+    throw new Error(`Past days are locked — you can't ${action} tasks before today.`);
+  }
+}
+
 // ─── Create Task ───────────────────────────────────────────────────────────────
 
 export async function createTask(userId: string, data: TaskFormData): Promise<Task> {
+  assertMutableDate(data.date, "create");
   const now = new Date().toISOString();
   const isRepeating = data.isRepeating && data.repeatDays.length > 0;
   const task: Task = {
@@ -49,6 +70,14 @@ export async function createTask(userId: string, data: TaskFormData): Promise<Ta
 // ─── Update Task ───────────────────────────────────────────────────────────────
 
 export async function updateTask(task: Task, data: Partial<TaskFormData>): Promise<Task> {
+  // One-time tasks that already belong to a past day are fully locked.
+  if (!task.isRepeating && isDateInPast(task.date)) {
+    throw new Error("Past days are locked — you can't edit tasks before today.");
+  }
+  // Allow keeping an existing past start date (repeating series); only block moving onto a past day.
+  if (data.date !== undefined && data.date !== task.date) {
+    assertMutableDate(data.date, "move");
+  }
   const isRepeating =
     data.isRepeating !== undefined
       ? Boolean(data.isRepeating && (data.repeatDays ?? task.repeatDays).length > 0)
@@ -78,9 +107,12 @@ export async function updateTask(task: Task, data: Partial<TaskFormData>): Promi
 // ─── Delete Task ───────────────────────────────────────────────────────────────
 
 export async function deleteTask(taskId: string): Promise<void> {
+  const task = await getTask(taskId);
+  if (task && !task.isRepeating && isDateInPast(task.date)) {
+    throw new Error("Past days are locked — you can't delete tasks before today.");
+  }
   await cancelTimersForTask(taskId);
   await deleteNotificationsByTask(taskId);
-  const task = await getTask(taskId);
   if (task) {
     const now = new Date().toISOString();
     await saveTask({ ...task, deletedAt: now, updatedAt: now, syncStatus: "pending" });
@@ -126,6 +158,7 @@ async function upsertCompletionForDate(
 }
 
 export async function completeTask(task: Task, date: string): Promise<void> {
+  assertMutableDate(date, "complete");
   const now = new Date().toISOString();
 
   if (task.isRepeating) {
@@ -159,6 +192,7 @@ export async function completeTask(task: Task, date: string): Promise<void> {
 
 export async function skipTaskForDate(task: Task, date: string): Promise<void> {
   if (!task.isRepeating) return;
+  assertMutableDate(date, "remove");
   await upsertCompletionForDate(task, date, "skipped");
   await saveTask({
     ...task,
@@ -192,6 +226,7 @@ export async function setTaskEndDate(task: Task, endDate: string): Promise<Task>
  * Sets endDate to the day before so fromDate and later no longer appear.
  */
 export async function endRepeatingSeriesFromDate(task: Task, fromDate: string): Promise<Task> {
+  assertMutableDate(fromDate, "end");
   const d = new Date(fromDate + "T12:00:00");
   d.setDate(d.getDate() - 1);
   return setTaskEndDate(task, format(d, "yyyy-MM-dd"));
@@ -200,6 +235,7 @@ export async function endRepeatingSeriesFromDate(task: Task, fromDate: string): 
 // ─── Uncomplete Task ───────────────────────────────────────────────────────────
 
 export async function uncompleteTask(task: Task, date: string): Promise<void> {
+  assertMutableDate(date, "uncomplete");
   if (task.isRepeating) {
     const completions = await getCompletionsByTask(task.id);
     const comps = completions.filter((c) => c.date === date);
@@ -434,10 +470,6 @@ export async function getEarliestTaskDate(userId: string): Promise<string | null
 }
 
 // ─── Date Helpers ──────────────────────────────────────────────────────────────
-
-export function getTodayString(): string {
-  return format(new Date(), "yyyy-MM-dd");
-}
 
 // BUG-22: Use date-fns helpers (DST-safe) instead of raw ms arithmetic
 export function getDateLabel(date: string): string {

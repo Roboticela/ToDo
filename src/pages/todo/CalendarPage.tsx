@@ -26,7 +26,7 @@ import {
 import { cn } from "../../lib/utils";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTasks } from "../../contexts/TaskContext";
-import { getTasksForDate, getTaskCompletionForDate } from "../../lib/taskService";
+import { getTasksForDate, getTaskCompletionForDate, isDateInPast } from "../../lib/taskService";
 import { mergeTasksPreserveRefs } from "../../lib/taskEquality";
 import { clampDateToHistory, getHistoryCutoff } from "../../lib/planLimits";
 import TaskForm from "../../components/todo/TaskForm";
@@ -38,6 +38,22 @@ interface DayInfo {
   taskCount: number;
   completedCount: number;
   hasRepeat: boolean;
+}
+
+function dayInfoMapsEqual(a: Map<string, DayInfo>, b: Map<string, DayInfo>): boolean {
+  if (a.size !== b.size) return false;
+  for (const [key, val] of b) {
+    const prev = a.get(key);
+    if (
+      !prev ||
+      prev.taskCount !== val.taskCount ||
+      prev.completedCount !== val.completedCount ||
+      prev.hasRepeat !== val.hasRepeat
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export default function CalendarPage() {
@@ -113,7 +129,7 @@ export default function CalendarPage() {
           })
       );
       if (token === cancelRef.current) {
-        setDayInfoMap(map);
+        setDayInfoMap((prev) => (dayInfoMapsEqual(prev, map) ? prev : map));
       }
     }
     void loadMonthIndicators();
@@ -125,7 +141,7 @@ export default function CalendarPage() {
       window.removeEventListener("tasks-synced", reload);
       window.removeEventListener("tasks-changed", reload);
     };
-  }, [user, currentMonth]);
+  }, [user?.id, user?.plan, user?.planExpiresAt, currentMonth]);
 
   const loadDayTasks = useCallback(
     async (dateStr: string, options?: { silent?: boolean }) => {
@@ -141,12 +157,12 @@ export default function CalendarPage() {
           const { isCompleted } = await getTaskCompletionForDate(t, clamped);
           if (isCompleted) done++;
         }
-        setCompletedCount(done);
+        setCompletedCount((prev) => (prev === done ? prev : done));
       } finally {
         if (!silent) setLoadingDay(false);
       }
     },
-    [user]
+    [user?.id, user?.plan, user?.planExpiresAt]
   );
 
   // Reload selected day when tasks change (complete/skip/delete/sync)
@@ -177,9 +193,12 @@ export default function CalendarPage() {
   }
 
   function handleEdit(task: Task) {
+    if (selectedDay && isDateInPast(selectedDay)) return; // past days are locked
     setEditTask(task);
     setShowForm(true);
   }
+
+  const isSelectedPastDay = Boolean(selectedDay && isDateInPast(selectedDay));
 
   function handleCompletionChange(_completed: boolean) {
     if (selectedDay) loadDayTasks(selectedDay);
@@ -316,20 +335,22 @@ export default function CalendarPage() {
                 : "Select a day from the calendar"}
             </p>
           </div>
-          <motion.button
-            type="button"
-            onClick={() => {
-              if (!selectedDay) return;
-              setEditTask(null);
-              setShowForm(true);
-            }}
-            disabled={!selectedDay}
-            whileTap={selectedDay ? { scale: 0.88 } : undefined}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 text-primary text-xs font-medium hover:bg-primary/25 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Task
-          </motion.button>
+          {!isSelectedPastDay && (
+            <motion.button
+              type="button"
+              onClick={() => {
+                if (!selectedDay) return;
+                setEditTask(null);
+                setShowForm(true);
+              }}
+              disabled={!selectedDay}
+              whileTap={selectedDay ? { scale: 0.88 } : undefined}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/15 text-primary text-xs font-medium hover:bg-primary/25 transition-colors disabled:opacity-40 disabled:pointer-events-none"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Task
+            </motion.button>
+          )}
         </div>
 
         {!selectedDay ? (
@@ -355,7 +376,9 @@ export default function CalendarPage() {
             </div>
             <div className="text-center">
               <p className="text-base font-semibold text-foreground/40">No tasks for this day</p>
-              <p className="text-sm text-foreground/30 mt-1">Tap Add Task to create one</p>
+              <p className="text-sm text-foreground/30 mt-1">
+                {isSelectedPastDay ? "Past days are locked" : "Tap Add Task to create one"}
+              </p>
             </div>
           </motion.div>
         ) : (

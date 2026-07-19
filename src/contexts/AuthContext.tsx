@@ -24,6 +24,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const REFRESH_SKEW_MS = 60 * 1000; // refresh 1 min before expiry
 
+/** True when profile fields that affect UI/sync are unchanged (avoids remount churn on focus refetch). */
+function usersEqual(a: User | null, b: User): boolean {
+  if (!a) return false;
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.email === b.email &&
+    a.avatarUrl === b.avatarUrl &&
+    a.plan === b.plan &&
+    a.planExpiresAt === b.planExpiresAt &&
+    a.emailVerifiedAt === b.emailVerifiedAt &&
+    a.subscribedToReminders === b.subscribedToReminders &&
+    a.taskNotificationsEnabled === b.taskNotificationsEnabled &&
+    a.notificationSoundMode === b.notificationSoundMode &&
+    a.notificationSoundId === b.notificationSoundId &&
+    a.customSoundUrl === b.customSoundUrl &&
+    a.timeFormat === b.timeFormat &&
+    a.hasPassword === b.hasPassword &&
+    a.isAdmin === b.isAdmin
+  );
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -34,7 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   sessionRef.current = session;
 
   const applySession = useCallback((u: User, s: AuthSession) => {
-    setUser(u);
+    setUser((prev) => (usersEqual(prev, u) ? prev : u));
     setSession(s);
     sessionRef.current = s;
   }, []);
@@ -161,7 +183,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!session || session.accessToken.startsWith("local_")) return;
 
+    // "focus" and "visibilitychange" typically fire together on tab switch —
+    // throttle so a single tab switch can't trigger two profile fetches, and
+    // rapid alt-tabbing doesn't repeatedly hit the network.
+    const PROFILE_REFETCH_MIN_GAP_MS = 60 * 1000;
+    let lastFetchAt = 0;
+
     async function refetchProfile() {
+      const now = Date.now();
+      if (now - lastFetchAt < PROFILE_REFETCH_MIN_GAP_MS) return;
+      lastFetchAt = now;
       try {
         const fresh = await ensureFreshSession();
         if (!fresh?.accessToken || fresh.accessToken.startsWith("local_")) return;
@@ -193,14 +224,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const userData = await retry.json();
           const updatedUser = mapUserFromApi(userData);
           await saveUser(updatedUser);
-          setUser(updatedUser);
+          setUser((prev) => (usersEqual(prev, updatedUser) ? prev : updatedUser));
           return;
         }
         if (!res.ok) return;
         const userData = await res.json();
         const updatedUser = mapUserFromApi(userData);
         await saveUser(updatedUser);
-        setUser(updatedUser);
+        setUser((prev) => (usersEqual(prev, updatedUser) ? prev : updatedUser));
       } catch {
         // ignore
       }
@@ -230,7 +261,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const updateUser = useCallback((updatedUser: User) => {
-    setUser(updatedUser);
+    setUser((prev) => (usersEqual(prev, updatedUser) ? prev : updatedUser));
   }, []);
 
   const logout = useCallback(async () => {

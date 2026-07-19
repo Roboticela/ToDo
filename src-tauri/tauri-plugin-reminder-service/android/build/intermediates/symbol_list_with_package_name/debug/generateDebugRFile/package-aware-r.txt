@@ -1,0 +1,2 @@
+app.tauri.reminderservice
+drawable ic_notification

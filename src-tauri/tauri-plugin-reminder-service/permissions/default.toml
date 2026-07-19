@@ -1,0 +1,9 @@
+[default]
+description = "Allows starting/stopping the reminder foreground service, rescheduling its next wake alarm, caching reminder sounds, and requesting battery-optimization exemption."
+permissions = [
+  "allow-start-service",
+  "allow-stop-service",
+  "allow-reschedule-next",
+  "allow-request-battery-exemption",
+  "allow-cache-sound",
+]

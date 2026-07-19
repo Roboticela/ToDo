@@ -86,7 +86,7 @@ function TodoHeader({ title: _title = "ToDo", rightContent }: TodoHeaderProps) {
             variant="outline"
             size="sm"
             className="gap-1.5 rounded-xl h-9 px-3 inline-flex items-center justify-center"
-            onClick={() => triggerSync()}
+            onClick={() => triggerSync({ force: true })}
             disabled={isSyncing}
             title="Sync"
           >

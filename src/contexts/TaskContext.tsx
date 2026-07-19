@@ -1,5 +1,5 @@
 // @refresh reset
-import { createContext, useContext, useState, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { ReactNode } from "react";
 import type { Task, TaskFormData } from "../types/todo";
 import {
@@ -17,7 +17,7 @@ import {
 import { assertCanCreateTask, assertCanEnableRepeating, assertCanMoveTaskToDate, assertCanExpandRepeatDays, clampDateToHistory } from "../lib/planLimits";
 import { mergeTasksPreserveRefs } from "../lib/taskEquality";
 import { useAuth } from "./AuthContext";
-import { useSync } from "./SyncContext";
+import { useSyncActions } from "./SyncContext";
 
 interface TaskContextType {
   tasks: Task[];
@@ -41,33 +41,42 @@ const TaskContext = createContext<TaskContextType | undefined>(undefined);
 
 export function TaskProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const { scheduleSync } = useSync();
+  const { scheduleSync } = useSyncActions();
+  const userId = user?.id ?? null;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [selectedDate, setSelectedDateState] = useState(getTodayString());
   const [historyClamped, setHistoryClamped] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  // First paint / date change show a spinner; sync must never flip isLoading.
+  const hasLoadedRef = useRef(false);
 
   const refreshTasks = useCallback(async (options?: { silent?: boolean }) => {
-    if (!user) {
+    if (!userId) {
       setTasks([]);
+      hasLoadedRef.current = false;
       return;
     }
-    const silent = options?.silent === true;
+    const silent = options?.silent === true || hasLoadedRef.current;
     if (!silent) setIsLoading(true);
     try {
-      const fetched = await getTasksForDate(user.id, selectedDate);
+      const fetched = await getTasksForDate(userId, selectedDate);
       setTasks((prev) => mergeTasksPreserveRefs(prev, fetched));
+      hasLoadedRef.current = true;
     } finally {
       if (!silent) setIsLoading(false);
     }
-  }, [user, selectedDate]);
+  }, [userId, selectedDate]);
+
+  // Date / user change — first load for that selection may show spinner; later calls stay silent.
+  useEffect(() => {
+    hasLoadedRef.current = false;
+    void refreshTasks();
+  }, [userId, selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps -- intentional: reload only on identity/date
 
   useEffect(() => {
-    refreshTasks();
-  }, [refreshTasks]);
-
-  useEffect(() => {
-    const handler = () => refreshTasks({ silent: true });
+    const handler = () => {
+      void refreshTasks({ silent: true });
+    };
     window.addEventListener("tasks-synced", handler);
     return () => window.removeEventListener("tasks-synced", handler);
   }, [refreshTasks]);
@@ -205,28 +214,42 @@ export function TaskProvider({ children }: { children: ReactNode }) {
     [refreshTasks, scheduleSync]
   );
 
-  return (
-    <TaskContext.Provider
-      value={{
-        tasks,
-        selectedDate,
-        isLoading,
-        historyClamped,
-        setSelectedDate,
-        refreshTasks,
-        createTask,
-        updateTask,
-        deleteTask,
-        skipTaskForDate,
-        setTaskEndDate,
-        endRepeatingSeriesFromDate,
-        completeTask,
-        uncompleteTask,
-      }}
-    >
-      {children}
-    </TaskContext.Provider>
+  const value = useMemo(
+    () => ({
+      tasks,
+      selectedDate,
+      isLoading,
+      historyClamped,
+      setSelectedDate,
+      refreshTasks,
+      createTask,
+      updateTask,
+      deleteTask,
+      skipTaskForDate,
+      setTaskEndDate,
+      endRepeatingSeriesFromDate,
+      completeTask,
+      uncompleteTask,
+    }),
+    [
+      tasks,
+      selectedDate,
+      isLoading,
+      historyClamped,
+      setSelectedDate,
+      refreshTasks,
+      createTask,
+      updateTask,
+      deleteTask,
+      skipTaskForDate,
+      setTaskEndDate,
+      endRepeatingSeriesFromDate,
+      completeTask,
+      uncompleteTask,
+    ]
   );
+
+  return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;
 }
 
 export function useTasks() {

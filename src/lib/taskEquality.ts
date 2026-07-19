@@ -17,7 +17,7 @@ export function tasksContentEqual(a: Task, b: Task): boolean {
     a.endDate === b.endDate &&
     a.status === b.status &&
     a.completedAt === b.completedAt &&
-    a.updatedAt === b.updatedAt &&
+    // Ignore updatedAt — sync/touch churn must not remount cards.
     a.deletedAt === b.deletedAt &&
     a.repeatDays.length === b.repeatDays.length &&
     a.repeatDays.every((d, i) => d === b.repeatDays[i])
