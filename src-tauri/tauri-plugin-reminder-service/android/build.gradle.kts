@@ -3,6 +3,22 @@ plugins {
   id("org.jetbrains.kotlin.android")
 }
 
+// Bundle Mixkit library MP3s from the web public/ folder so ReminderSound can
+// play the user's selected catalog tone without a JS→native base64 round-trip.
+// android/ → plugin/ → src-tauri/ → repo root → public/sounds
+val webSoundsDir = projectDir.resolve("../../../public/sounds")
+val bundledSoundsDir = layout.projectDirectory.dir("src/main/assets/sounds")
+
+tasks.register<Copy>("syncLibrarySounds") {
+  from(webSoundsDir) {
+    include("*.mp3")
+  }
+  into(bundledSoundsDir)
+  onlyIf { webSoundsDir.isDirectory }
+}
+
+tasks.named("preBuild").configure { dependsOn("syncLibrarySounds") }
+
 android {
   namespace = "app.tauri.reminderservice"
   compileSdk = 36

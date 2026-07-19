@@ -27,6 +27,8 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
       commands::reschedule_next,
       commands::request_battery_exemption,
       commands::cache_sound,
+      commands::activate_library_sound,
+      commands::play_sound,
     ])
     .setup(move |app, api| {
       #[cfg(target_os = "android")]

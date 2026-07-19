@@ -22,6 +22,18 @@ class CacheSoundArg {
   lateinit var dataBase64: String
 }
 
+@InvokeArg
+class ActivateLibrarySoundArg {
+  var soundId: String? = null
+}
+
+@InvokeArg
+class PlaySoundArg {
+  var mode: String? = null
+  var soundId: String? = null
+  var customSoundUrl: String? = null
+}
+
 @TauriPlugin
 class ReminderServicePlugin(private val activity: Activity) : Plugin(activity) {
 
@@ -30,6 +42,7 @@ class ReminderServicePlugin(private val activity: Activity) : Plugin(activity) {
     ReminderPrefs.setEnabled(activity, true)
     // Exact alarms are required for reliable delivery when the app is fully closed.
     maybePromptExactAlarms()
+    ReminderNotifier.ensureChannels(activity)
     ContextCompat.startForegroundService(
       activity,
       Intent(activity, ReminderForegroundService::class.java),
@@ -78,10 +91,46 @@ class ReminderServicePlugin(private val activity: Activity) : Plugin(activity) {
   @Command
   fun cacheSound(invoke: Invoke) {
     val args = invoke.parseArgs(CacheSoundArg::class.java)
+    ReminderNotifier.ensureChannels(activity)
     val ok = ReminderSound.cacheFromBase64(activity, args.key, args.dataBase64)
     val result = JSObject()
     result.put("ok", ok)
+    result.put("channelId", ReminderSound.activeChannelId(activity))
     if (ok) invoke.resolve(result) else invoke.reject("Failed to cache reminder sound")
+  }
+
+  /**
+   * Point native playback at a bundled catalog MP3 (no base64 transfer).
+   * Returns the notification channel id that plays that file for Schedule.at.
+   */
+  @Command
+  fun activateLibrarySound(invoke: Invoke) {
+    val args = invoke.parseArgs(ActivateLibrarySoundArg::class.java)
+    ReminderNotifier.ensureChannels(activity)
+    val channelId = ReminderSound.activateLibrarySound(activity, args.soundId)
+    val result = JSObject()
+    result.put("ok", channelId != ReminderNotifier.CHANNEL_REMINDERS)
+    result.put("channelId", channelId)
+    invoke.resolve(result)
+  }
+
+  /**
+   * Play the selected library/custom sound once (for immediate JS-fired reminders).
+   */
+  @Command
+  fun playSound(invoke: Invoke) {
+    val args = invoke.parseArgs(PlaySoundArg::class.java)
+    ReminderNotifier.ensureChannels(activity)
+    val mode = args.mode?.ifBlank { null } ?: "preset"
+    val prefs = UserSoundPrefs(
+      mode = mode,
+      soundId = args.soundId,
+      customSoundUrl = args.customSoundUrl,
+    )
+    val ok = ReminderSound.playForPrefs(activity, prefs)
+    val result = JSObject()
+    result.put("ok", ok)
+    invoke.resolve(result)
   }
 
   private fun maybePromptExactAlarms() {

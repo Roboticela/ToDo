@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-activate-library-sound"
+description = "Enables the activate_library_sound command without any pre-configured scope."
+commands.allow = ["activate_library_sound"]
+
+[[permission]]
+identifier = "deny-activate-library-sound"
+description = "Denies the activate_library_sound command without any pre-configured scope."
+commands.deny = ["activate_library_sound"]

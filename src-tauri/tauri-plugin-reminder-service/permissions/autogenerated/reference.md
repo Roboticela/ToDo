@@ -1,6 +1,6 @@
 ## Default Permission
 
-Allows starting/stopping the reminder foreground service, rescheduling its next wake alarm, caching reminder sounds, and requesting battery-optimization exemption.
+Allows starting/stopping the reminder foreground service, rescheduling its next wake alarm, caching/activating/playing reminder sounds, and requesting battery-optimization exemption.
 
 #### This default permission set includes the following:
 
@@ -9,6 +9,8 @@ Allows starting/stopping the reminder foreground service, rescheduling its next 
 - `allow-reschedule-next`
 - `allow-request-battery-exemption`
 - `allow-cache-sound`
+- `allow-activate-library-sound`
+- `allow-play-sound`
 
 ## Permission Table
 
@@ -18,6 +20,32 @@ Allows starting/stopping the reminder foreground service, rescheduling its next 
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`reminder-service:allow-activate-library-sound`
+
+</td>
+<td>
+
+Enables the activate_library_sound command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`reminder-service:deny-activate-library-sound`
+
+</td>
+<td>
+
+Denies the activate_library_sound command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -41,6 +69,32 @@ Enables the cache_sound command without any pre-configured scope.
 <td>
 
 Denies the cache_sound command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`reminder-service:allow-play-sound`
+
+</td>
+<td>
+
+Enables the play_sound command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`reminder-service:deny-play-sound`
+
+</td>
+<td>
+
+Denies the play_sound command without any pre-configured scope.
 
 </td>
 </tr>

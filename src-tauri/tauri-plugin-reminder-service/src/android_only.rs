@@ -18,6 +18,14 @@ pub struct ReminderCapability {
   pub battery_exempt: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SoundCacheResult {
+  pub ok: bool,
+  #[serde(default)]
+  pub channel_id: Option<String>,
+}
+
 /// Managed handle for the Kotlin `ReminderServicePlugin` (Android only; state is absent on other platforms).
 pub struct ReminderService<R: Runtime>(pub PluginHandle<R>);
 
@@ -50,7 +58,7 @@ impl<R: Runtime> ReminderService<R> {
       .map_err(|e| crate::Error::Other(e.to_string()))
   }
 
-  pub fn cache_sound(&self, key: String, data_base64: String) -> Result<()> {
+  pub fn cache_sound(&self, key: String, data_base64: String) -> Result<SoundCacheResult> {
     #[derive(serde::Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Args {
@@ -60,6 +68,44 @@ impl<R: Runtime> ReminderService<R> {
     self
       .0
       .run_mobile_plugin("cacheSound", Args { key, data_base64 })
+      .map_err(|e| crate::Error::Other(e.to_string()))
+  }
+
+  pub fn activate_library_sound(&self, sound_id: Option<String>) -> Result<SoundCacheResult> {
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Args {
+      sound_id: Option<String>,
+    }
+    self
+      .0
+      .run_mobile_plugin("activateLibrarySound", Args { sound_id })
+      .map_err(|e| crate::Error::Other(e.to_string()))
+  }
+
+  pub fn play_sound(
+    &self,
+    mode: Option<String>,
+    sound_id: Option<String>,
+    custom_sound_url: Option<String>,
+  ) -> Result<SoundCacheResult> {
+    #[derive(serde::Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Args {
+      mode: Option<String>,
+      sound_id: Option<String>,
+      custom_sound_url: Option<String>,
+    }
+    self
+      .0
+      .run_mobile_plugin(
+        "playSound",
+        Args {
+          mode,
+          sound_id,
+          custom_sound_url,
+        },
+      )
       .map_err(|e| crate::Error::Other(e.to_string()))
   }
 }

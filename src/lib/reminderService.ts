@@ -26,6 +26,15 @@ let nativeServiceRunning = false;
 /** Exact alarms granted — required before native path exclusively owns delivery. */
 let nativeExactAlarmsOk = false;
 let lastCachedSoundKey: string | null = null;
+/**
+ * Android notification channel whose sound is the user's selected library/custom file.
+ * Used by Schedule.at fallback when the reminder service does not own delivery.
+ */
+let androidSoundChannelId: string | null = null;
+
+export function getAndroidSoundChannelId(): string | null {
+  return androidSoundChannelId;
+}
 
 function isAndroid(): boolean {
   return getAppRuntime() === "android";
@@ -190,10 +199,16 @@ async function fetchSoundBytes(url: string): Promise<Uint8Array | null> {
   }
 }
 
+interface SoundCacheResult {
+  ok?: boolean;
+  channelId?: string | null;
+}
+
 /**
  * Push the user's selected reminder sound into native storage so Android
  * ReminderNotifier can play Library/Custom audio while the app is closed.
- * Normal mode clears the custom cache and uses the OS default channel sound.
+ * Library tones activate from APK assets (no base64 IPC). Custom tones are
+ * still fetched and cached. Normal mode uses the OS default channel sound.
  */
 export async function syncReminderSoundToNative(
   user: User | null | undefined,
@@ -207,46 +222,90 @@ export async function syncReminderSoundToNative(
   if (mode === "normal") {
     if (!force && lastCachedSoundKey === "normal") return;
     try {
-      await invoke("plugin:reminder-service|cache_sound", {
+      const result = await invoke<SoundCacheResult>("plugin:reminder-service|cache_sound", {
         key: "normal",
         dataBase64: "",
       });
       lastCachedSoundKey = "normal";
+      androidSoundChannelId = result?.channelId ?? null;
     } catch {
       // ignore — notifications fall back to OS default
+      androidSoundChannelId = null;
     }
     return;
   }
 
-  let key = "normal";
-  let sourceUrl: string | null = null;
-
   if (mode === "custom" && user.customSoundUrl) {
-    key = "custom";
-    sourceUrl = user.customSoundUrl;
-  } else {
-    const soundId =
-      getCatalogSound(user.notificationSoundId)?.id ||
-      (user.notificationSoundMode === "ringtone"
-        ? DEFAULT_RINGTONE_SOUND_ID
-        : DEFAULT_LIBRARY_SOUND_ID);
-    const catalog = getCatalogSound(soundId);
-    key = `preset_${soundId.replace(/-/g, "_")}`;
-    sourceUrl = catalog?.src ?? `/sounds/${soundId}.mp3`;
+    const key = "custom";
+    if (!force && lastCachedSoundKey === key) return;
+    const bytes = await fetchSoundBytes(user.customSoundUrl);
+    if (!bytes || bytes.length === 0) return;
+    try {
+      const result = await invoke<SoundCacheResult>("plugin:reminder-service|cache_sound", {
+        key,
+        dataBase64: bytesToBase64(bytes),
+      });
+      lastCachedSoundKey = key;
+      androidSoundChannelId = result?.channelId ?? null;
+    } catch {
+      // ignore — OS default remains as fallback
+    }
+    return;
   }
 
-  if (!force && lastCachedSoundKey === key) return;
-
-  const bytes = sourceUrl ? await fetchSoundBytes(sourceUrl) : null;
-  if (!bytes || bytes.length === 0) return;
+  // Library / ringtone: activate bundled APK asset (avoids Binder size limits).
+  const soundId =
+    getCatalogSound(user.notificationSoundId)?.id ||
+    (user.notificationSoundMode === "ringtone"
+      ? DEFAULT_RINGTONE_SOUND_ID
+      : DEFAULT_LIBRARY_SOUND_ID);
+  const key = `preset_${soundId.replace(/-/g, "_")}`;
+  if (!force && lastCachedSoundKey === key && androidSoundChannelId) return;
 
   try {
-    await invoke("plugin:reminder-service|cache_sound", {
-      key,
-      dataBase64: bytesToBase64(bytes),
-    });
+    const result = await invoke<SoundCacheResult>(
+      "plugin:reminder-service|activate_library_sound",
+      { soundId }
+    );
     lastCachedSoundKey = key;
+    androidSoundChannelId = result?.channelId ?? null;
   } catch {
-    // ignore — OS default remains as fallback
+    // Fallback: fetch web asset and push bytes (may fail for large ringtones).
+    try {
+      const catalog = getCatalogSound(soundId);
+      const sourceUrl = catalog?.src ?? `/sounds/${soundId}.mp3`;
+      const bytes = await fetchSoundBytes(sourceUrl);
+      if (!bytes || bytes.length === 0) return;
+      const result = await invoke<SoundCacheResult>("plugin:reminder-service|cache_sound", {
+        key,
+        dataBase64: bytesToBase64(bytes),
+      });
+      lastCachedSoundKey = key;
+      androidSoundChannelId = result?.channelId ?? null;
+    } catch {
+      // ignore — OS default remains as fallback
+    }
+  }
+}
+
+/**
+ * Play the user's selected library/custom sound via native MediaPlayer.
+ * Used for immediate Android reminders (WebView audio is unreliable).
+ */
+export async function playReminderSoundNative(
+  user: Pick<User, "notificationSoundMode" | "notificationSoundId" | "customSoundUrl"> | null | undefined
+): Promise<boolean> {
+  if (!isAndroid() || !user) return false;
+  const mode = user.notificationSoundMode ?? "preset";
+  if (mode === "normal") return false;
+  try {
+    const result = await invoke<SoundCacheResult>("plugin:reminder-service|play_sound", {
+      mode,
+      soundId: user.notificationSoundId ?? undefined,
+      customSoundUrl: user.customSoundUrl ?? undefined,
+    });
+    return result?.ok === true;
+  } catch {
+    return false;
   }
 }

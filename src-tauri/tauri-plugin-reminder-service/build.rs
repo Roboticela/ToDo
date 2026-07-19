@@ -6,6 +6,8 @@ const COMMANDS: &[&str] = &[
   "reschedule_next",
   "request_battery_exemption",
   "cache_sound",
+  "activate_library_sound",
+  "play_sound",
 ];
 
 fn main() {

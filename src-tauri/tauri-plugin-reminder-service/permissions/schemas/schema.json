@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the activate_library_sound command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-activate-library-sound",
+          "markdownDescription": "Enables the activate_library_sound command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the activate_library_sound command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-activate-library-sound",
+          "markdownDescription": "Denies the activate_library_sound command without any pre-configured scope."
+        },
+        {
           "description": "Enables the cache_sound command without any pre-configured scope.",
           "type": "string",
           "const": "allow-cache-sound",
@@ -305,6 +317,18 @@
           "type": "string",
           "const": "deny-cache-sound",
           "markdownDescription": "Denies the cache_sound command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the play_sound command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-play-sound",
+          "markdownDescription": "Enables the play_sound command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the play_sound command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-play-sound",
+          "markdownDescription": "Denies the play_sound command without any pre-configured scope."
         },
         {
           "description": "Enables the request_battery_exemption command without any pre-configured scope.",
@@ -355,10 +379,10 @@
           "markdownDescription": "Denies the stop_service command without any pre-configured scope."
         },
         {
-          "description": "Allows starting/stopping the reminder foreground service, rescheduling its next wake alarm, caching reminder sounds, and requesting battery-optimization exemption.\n#### This default permission set includes:\n\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-reschedule-next`\n- `allow-request-battery-exemption`\n- `allow-cache-sound`",
+          "description": "Allows starting/stopping the reminder foreground service, rescheduling its next wake alarm, caching/activating/playing reminder sounds, and requesting battery-optimization exemption.\n#### This default permission set includes:\n\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-reschedule-next`\n- `allow-request-battery-exemption`\n- `allow-cache-sound`\n- `allow-activate-library-sound`\n- `allow-play-sound`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Allows starting/stopping the reminder foreground service, rescheduling its next wake alarm, caching reminder sounds, and requesting battery-optimization exemption.\n#### This default permission set includes:\n\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-reschedule-next`\n- `allow-request-battery-exemption`\n- `allow-cache-sound`"
+          "markdownDescription": "Allows starting/stopping the reminder foreground service, rescheduling its next wake alarm, caching/activating/playing reminder sounds, and requesting battery-optimization exemption.\n#### This default permission set includes:\n\n- `allow-start-service`\n- `allow-stop-service`\n- `allow-reschedule-next`\n- `allow-request-battery-exemption`\n- `allow-cache-sound`\n- `allow-activate-library-sound`\n- `allow-play-sound`"
         }
       ]
     }

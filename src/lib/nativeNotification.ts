@@ -14,9 +14,15 @@ import {
   playWindowsDefaultNotify,
 } from "./notificationSound";
 import { DEFAULT_LIBRARY_SOUND_ID, DEFAULT_RINGTONE_SOUND_ID } from "./soundCatalog";
+import {
+  getAndroidSoundChannelId,
+  playReminderSoundNative,
+} from "./reminderService";
 
 export const CHANNEL_DEFAULT = "task-reminders";
 export const CHANNEL_SILENT = "task-reminders-silent";
+/** Native silent channel from ReminderNotifier — no OS tone; we play MediaPlayer. */
+export const CHANNEL_ANDROID_CUSTOM = "task-reminders-native-custom-v3";
 
 let channelsReady = false;
 
@@ -25,7 +31,10 @@ export function notifIdFromTag(tag: string): number {
   for (let i = 0; i < tag.length; i++) {
     h = (Math.imul(31, h) + tag.charCodeAt(i)) | 0;
   }
-  return (h >>> 0) || 1;
+  // Rust NotificationData.id is i32. `>>> 0` produced unsigned values that overflow
+  // ~50% of UUID tags (and always "preview-normal"), so the toast invoke failed while
+  // in-app sound still played.
+  return h === 0 ? 1 : h;
 }
 
 async function ensureNativeChannels(): Promise<void> {
@@ -126,9 +135,10 @@ function shouldPlayAppAudio(mode: NotificationSoundMode, os: OsKind): boolean {
 function buildSoundPayload(
   mode: NotificationSoundMode,
   os: OsKind,
-  soundId: string | undefined,
-  silentOsToast: boolean
-): { silent?: boolean; sound?: string; channelId: string } {
+  _soundId: string | undefined,
+  silentOsToast: boolean,
+  opts?: { scheduleAt?: boolean }
+): { silent?: boolean; sound?: string; channelId: string; playNativeAudio?: boolean } {
   const channelId = silentOsToast ? CHANNEL_SILENT : CHANNEL_DEFAULT;
   if (silentOsToast) return { silent: true, channelId };
 
@@ -138,13 +148,24 @@ function buildSoundPayload(
     return { channelId, sound: "Default" };
   }
 
-  // BUG-34: Scheduled background notifications on Android must pass the sound payload
-  // so the native plugin knows which raw resource to play instead of the channel default.
-  if (os === "android" && soundId && (mode === "preset" || mode === "ringtone")) {
-    return { channelId, sound: soundId };
+  // Android library/custom: never pass catalog IDs as res/raw names (they don't exist).
+  // Immediate: silent native channel + MediaPlayer. Scheduled: per-file channel from sync.
+  if (os === "android" && (mode === "preset" || mode === "ringtone" || mode === "custom")) {
+    if (opts?.scheduleAt) {
+      const fileChannel = getAndroidSoundChannelId();
+      if (fileChannel) {
+        return { channelId: fileChannel };
+      }
+      // No cached channel yet — fall back to default (sync should have run first).
+      return { channelId };
+    }
+    return {
+      channelId: CHANNEL_ANDROID_CUSTOM,
+      silent: true,
+      playNativeAudio: true,
+    };
   }
 
-  // Library plays bundled MP3 in-app when foregrounded; scheduled uses OS channel default
   return { channelId };
 }
 
@@ -165,7 +186,21 @@ export async function showTaskNotification(opts: ShowTaskNotificationOpts): Prom
   }
 
   // Scheduled native notifications play OS/channel sound — skip in-app audio
-  if (opts.scheduleAt || !playInAppAudio) return;
+  if (opts.scheduleAt || !playInAppAudio) {
+    // Android library/custom: MediaPlayer via reminder-service (channel stays silent).
+    if (
+      !opts.scheduleAt &&
+      os === "android" &&
+      (mode === "preset" || mode === "ringtone" || mode === "custom")
+    ) {
+      await playReminderSoundNative({
+        notificationSoundMode: mode,
+        notificationSoundId: opts.soundId,
+        customSoundUrl: opts.customSoundUrl,
+      });
+    }
+    return;
+  }
 
   if (mode === "custom" && opts.customSoundUrl) {
     await playCustomSound(opts.customSoundUrl);
@@ -206,7 +241,7 @@ export async function scheduleNativeNotification(
   const mode: NotificationSoundMode = opts.mode ?? "preset";
   const os = getOsKind();
   // Prefer audible OS channel for background delivery (app audio won't run when killed)
-  const soundBits = buildSoundPayload(mode, os, opts.soundId, false);
+  const soundBits = buildSoundPayload(mode, os, opts.soundId, false, { scheduleAt: true });
 
   try {
     const { sendNotification, Schedule } = await import("@tauri-apps/plugin-notification");
@@ -253,9 +288,28 @@ async function showNativeNotification(
   silentOsToast: boolean
 ): Promise<void> {
   await ensureNativeChannels();
+
+  // Windows: tauri-plugin-notification omits app_id under target/debug|release, so
+  // toasts show as PowerShell. Use our WinRT toast with the registered AUMID instead.
+  if (os === "windows" && getAppRuntime() === "desktop" && !opts.scheduleAt) {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      await invoke("show_windows_toast", {
+        title: opts.title,
+        body: opts.body,
+        silent: silentOsToast,
+      });
+      return;
+    } catch {
+      // fall through to plugin / web
+    }
+  }
+
   try {
     const { sendNotification, Schedule } = await import("@tauri-apps/plugin-notification");
-    const soundBits = buildSoundPayload(mode, os, opts.soundId, silentOsToast);
+    const soundBits = buildSoundPayload(mode, os, opts.soundId, silentOsToast, {
+      scheduleAt: Boolean(opts.scheduleAt),
+    });
 
     const payload: {
       id: number;

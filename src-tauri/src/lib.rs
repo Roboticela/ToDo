@@ -1,6 +1,9 @@
 mod db;
 
 #[cfg(desktop)]
+mod aumid;
+
+#[cfg(desktop)]
 mod desktop;
 
 #[cfg(desktop)]
@@ -63,6 +66,39 @@ fn write_file(path: String, data: String) -> Result<(), String> {
         .write_all(&bytes)
         .map_err(|e| format!("Failed to write file: {}", e))?;
     Ok(())
+}
+
+/// Show a Windows toast attributed to this app (not PowerShell).
+/// Used on desktop Windows because tauri-plugin-notification skips `app_id` in
+/// `target/debug` and `target/release`, which makes toasts look like PowerShell.
+#[cfg(windows)]
+#[tauri::command]
+fn show_windows_toast(
+    app: tauri::AppHandle,
+    title: String,
+    body: String,
+    silent: Option<bool>,
+) -> Result<(), String> {
+    use tauri_winrt_notification::Toast;
+
+    let aumid = app.config().identifier.clone();
+    let mut toast = Toast::new(&aumid).title(&title).text1(&body);
+    if silent.unwrap_or(false) {
+        toast = toast.sound(None);
+    }
+    toast
+        .show()
+        .map_err(|e| format!("Windows toast failed: {e}"))
+}
+
+#[cfg(not(windows))]
+#[tauri::command]
+fn show_windows_toast(
+    _title: String,
+    _body: String,
+    _silent: Option<bool>,
+) -> Result<(), String> {
+    Err("show_windows_toast is only available on Windows".into())
 }
 
 /// Play a local system sound file (Windows Media, macOS .aiff, Linux wav/ogg).
@@ -175,6 +211,7 @@ pub fn run() {
         run_db_exec,
         open_url,
         play_system_sound,
+        show_windows_toast,
         desktop::get_desktop_prefs,
         desktop::set_desktop_prefs,
     ]);
@@ -185,6 +222,7 @@ pub fn run() {
         run_db_exec,
         open_url,
         play_system_sound,
+        show_windows_toast,
     ]);
 
     builder
@@ -204,6 +242,8 @@ pub fn run() {
 
             #[cfg(desktop)]
             {
+                // Before showing UI: register AUMID so toasts brand as ToDo, not PowerShell.
+                aumid::register(app.handle());
                 desktop::setup_tray(app.handle())?;
                 desktop::sync_autostart_from_prefs(app.handle());
                 // Show main window after tray is ready (config starts visible:false)
