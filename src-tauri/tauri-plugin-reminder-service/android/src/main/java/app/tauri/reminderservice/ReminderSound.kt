@@ -20,8 +20,8 @@ data class UserSoundPrefs(
  * Caches the user's selected reminder sound and plays it when [ReminderNotifier]
  * shows a reminder.
  *
- * Library (preset/ringtone) tones are bundled as APK assets under `sounds/*.mp3`
- * (synced from `public/sounds` at Gradle build time). Custom tones are written
+ * Library (preset/ringtone) tones are bundled as APK assets under sounds/ (MP3s
+ * synced from public/sounds at Gradle build time). Custom tones are written
  * from the JS bridge as base64. Channel sound stays OS-default for "Normal"
  * mode; library/custom use a silent channel + [MediaPlayer], or a per-file
  * notification channel when the Tauri Schedule.at fallback is used.

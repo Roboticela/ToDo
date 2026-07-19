@@ -94,7 +94,7 @@ class ReminderServicePlugin(private val activity: Activity) : Plugin(activity) {
     ReminderNotifier.ensureChannels(activity)
     val ok = ReminderSound.cacheFromBase64(activity, args.key, args.dataBase64)
     val result = JSObject()
-    result.put("ok", ok)
+    result.put("ok", ok as Boolean)
     result.put("channelId", ReminderSound.activeChannelId(activity))
     if (ok) invoke.resolve(result) else invoke.reject("Failed to cache reminder sound")
   }
@@ -109,7 +109,7 @@ class ReminderServicePlugin(private val activity: Activity) : Plugin(activity) {
     ReminderNotifier.ensureChannels(activity)
     val channelId = ReminderSound.activateLibrarySound(activity, args.soundId)
     val result = JSObject()
-    result.put("ok", channelId != ReminderNotifier.CHANNEL_REMINDERS)
+    result.put("ok", (channelId != ReminderNotifier.CHANNEL_REMINDERS) as Boolean)
     result.put("channelId", channelId)
     invoke.resolve(result)
   }
@@ -129,7 +129,7 @@ class ReminderServicePlugin(private val activity: Activity) : Plugin(activity) {
     )
     val ok = ReminderSound.playForPrefs(activity, prefs)
     val result = JSObject()
-    result.put("ok", ok)
+    result.put("ok", ok as Boolean)
     invoke.resolve(result)
   }
 
