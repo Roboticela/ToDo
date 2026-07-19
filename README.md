@@ -2,16 +2,16 @@
 
 <img src="public/favicon.svg" alt="App Logo" width="128" />
 
-# Vite · Express · Tauri Template (DevKit)
+# ToDo
 
-<a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg" alt="AGPL-3.0 License" /></a>
 <a href="https://tauri.app/"><img src="https://img.shields.io/badge/Tauri-2.x-blue.svg" alt="Tauri" /></a>
 <a href="https://reactjs.org/"><img src="https://img.shields.io/badge/React-19-blue.svg" alt="React" /></a>
 <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.x-blue.svg" alt="TypeScript" /></a>
 <a href="https://vitejs.dev/"><img src="https://img.shields.io/badge/Vite-7-blue.svg" alt="Vite" /></a>
 <a href="https://expressjs.com/"><img src="https://img.shields.io/badge/Express-5-green.svg" alt="Express" /></a>
 
-**A full-stack template: React + Vite frontend, Express API server, and Tauri desktop/mobile apps — with GitHub Actions for multi-platform builds and releases.**
+**A cross-platform task manager: plan your day, track Do’s and Don’ts, sync across devices, and stay on top of what matters — with React + Vite, Express, and Tauri for desktop and mobile.**
 
 [Features](#-features) • [Installation](#-installation) • [Running & Building](#-running-the-application) • [GitHub Actions](#-github-actions-build--release) • [Icons](#-icons-generation) • [Contributing](#-contributing)
 
@@ -41,33 +41,47 @@
 
 ## 🌟 About
 
-**Vite-Express-Tauri-Template-DevKit** (Roboticela DevKit) is a production-ready starter for building cross-platform applications with a **React + TypeScript** frontend (Vite), an **Express** backend API, and **Tauri 2** for desktop (Linux, Windows, macOS) and mobile (Android; iOS coming soon). It includes a **GitHub Actions** workflow for building and releasing installers and packages across platforms, plus scripts for **icon generation** (desktop, Android, web).
+**ToDo** is a task management app from [Roboticela](https://github.com/Roboticela) to plan your day, track progress, and stay on top of what to do and what to avoid. Use **Today**, **Calendar**, and **Analytics** to organize tasks by time, set repeating schedules, and see how you’re doing — with sync across devices, offline support, themes, reminders, and account management.
 
-### Why This Template?
+Built with a **React + TypeScript** frontend (Vite), an **Express** backend API (Prisma), and **Tauri 2** for desktop (Linux, Windows, macOS) and mobile (Android; iOS coming soon). It includes a **GitHub Actions** workflow for building and releasing installers across platforms, plus scripts for **icon generation** (desktop, Android, web).
 
-- ✅ **Full-Stack** — Frontend (Vite + React), API (Express), and native shells (Tauri)
-- ✅ **Cross-Platform** — Linux, Windows, macOS (desktop); Android (and iOS planned)
+### Why ToDo?
+
+- ✅ **Day-focused** — Today view with progress, Do’s / Don’ts, and filters
+- ✅ **Cross-Platform** — Web, Linux, Windows, macOS (desktop); Android (and iOS planned)
+- ✅ **Sync & Offline** — Account sync across devices with local-first offline support
+- ✅ **Reminders** — Native notifications and customizable notification sounds
 - ✅ **CI/CD Ready** — One workflow to build .deb, .rpm, .AppImage, .exe, .msi, .apk, .aab
 - ✅ **Icon Pipeline** — Single SVG → desktop, Android adaptive, and web favicons
-- ✅ **Version Patching** — Workflow patches version in `package.json`, `Cargo.toml`, `tauri.conf.json`, and server
-- ✅ **Android Signing** — Optional secrets for release signing or auto-generated keystore for testing
 
 ---
 
 ## ✨ Features
 
-### 🖥️ Desktop & Web
+### 📋 Tasks & Planning
+- **Today view** — Progress bar, Do’s and Don’ts, and filters
+- **Calendar view** — See and manage tasks by date
+- **Time & duration tasks** — Optional repeating schedules and end dates
+- **Analytics** — Review completion and trends over time
+
+### 🔐 Accounts & Sync
+- **Auth** — Email/password, Google Sign-In, and desktop deep-link login
+- **Cloud sync** — Tasks and preferences synced via the Express API
+- **Offline support** — Work locally; sync when you’re back online
+- **Settings & subscription** — Themes, reminders, account, and plan management
+
+### 🖥️ Desktop, Mobile & Web
 - **Vite 7** — Fast HMR and optimized production builds
 - **React 19** + **TypeScript** — Type-safe UI
-- **Tauri 2** — Small binaries, system WebView
-- **TailwindCSS 4** — Utility-first styling
+- **Tauri 2** — Small binaries, system WebView; Android reminder service
+- **TailwindCSS 4** — Utility-first styling with multiple themes
 
 ### 🔧 Backend
-- **Express 5** — REST API server in `server/` (TypeScript, ts-node-dev for dev)
-- Separate `server/package.json` and build scripts: `server:dev`, `server:build`, `server:start`
+- **Express 5** — REST API in `server/` (Prisma + PostgreSQL)
+- Separate `server/package.json` and scripts: `server:dev`, `server:build`, `server:start`, plus `db:*` migrations
 
 ### 📦 Build & Release
-- **GitHub Actions** — Manual workflow with inputs: version, prerelease, draft, and per-platform toggles (Linux, Windows, Android; macOS/iOS placeholders)
+- **GitHub Actions** — Manual workflow with inputs: environment, version, prerelease, draft, and per-platform toggles (Linux, Windows, Android; macOS/iOS placeholders)
 - **Multi-arch** — Linux: x86_64, aarch64, armv7; Windows: x86_64, i686, aarch64; Android: all ABIs + AAB
 - **Checksums** — SHA256 and SHA512 for release assets
 - **Android** — APK (split per ABI) and AAB; optional keystore secrets for signing
@@ -85,7 +99,7 @@
 | Layer        | Technology |
 |-------------|------------|
 | Frontend    | React 19, TypeScript 5.x, Vite 7, TailwindCSS 4, React Router 7 |
-| Backend     | Express 5 (Node.js) |
+| Backend     | Express 5 (Node.js), Prisma, PostgreSQL |
 | Desktop/Mobile | Tauri 2, Rust |
 | Tooling     | ESLint, npm |
 
@@ -132,9 +146,17 @@ xcode-select --install
 ## 📥 Installation
 
 ```bash
-git clone https://github.com/Roboticela/Vite-Express-Tauri-Template-DevKit.git
-cd Vite-Express-Tauri-Template-DevKit
+git clone https://github.com/Roboticela/ToDo.git
+cd ToDo
 npm install
+cd server && npm install && cd ..
+```
+
+Copy environment files and fill in values as needed:
+
+```bash
+cp .env.example .env
+cp server/.env.example server/.env
 ```
 
 Optional: build Rust for desktop once:
@@ -154,15 +176,22 @@ Then open http://localhost:5173.
 
 ### Desktop (Tauri + Vite dev server)
 ```bash
-npm run tauri dev
+npm run tauri:dev
+# or
+npm run dev:desktop
 ```
 Starts Vite and opens the Tauri window with hot-reload.
+
+### Android (device / emulator)
+```bash
+npm run dev:android
+```
 
 ### Backend API only
 ```bash
 npm run server:dev
 ```
-Runs Express from `server/` with ts-node-dev (default port as in `server`).
+Runs Express from `server/` (default port as in `server/.env`).
 
 ### Web + backend together
 Run in two terminals:
@@ -186,7 +215,7 @@ Output: `dist/`.
 npm run server:build
 npm run server:start
 ```
-Output: `server/dist/`.
+Generates Prisma client and starts the API from `server/`.
 
 ### Desktop (current platform)
 ```bash
@@ -243,14 +272,16 @@ Set `NDK_HOME` if needed (e.g. `$ANDROID_HOME/ndk/<version>`).
 
 The workflow file is **`.github/workflows/build-release.yml`**. It is triggered **manually** (workflow_dispatch) and:
 
-1. **Prepares** — Patches version in `package.json`, `server/package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
-2. **Builds** — Linux, Windows, and Android (each can be toggled on/off)
-3. **Releases** — Creates a GitHub Release with artifacts and SHA256/SHA512 checksums
+1. **Validates** — Checks the selected GitHub Environment has frontend/API URLs
+2. **Prepares** — Patches version in `package.json`, `server/package.json`, `src-tauri/tauri.conf.json`, and `src-tauri/Cargo.toml`
+3. **Builds** — Linux, Windows, and Android (each can be toggled on/off)
+4. **Releases** — Creates a GitHub Release with artifacts and SHA256/SHA512 checksums
 
 ### Workflow inputs (manual trigger)
 
 | Input | Type | Default | Description |
 |-------|------|--------|-------------|
+| `environment` | environment | — | GitHub Environment (vars/secrets for this build) |
 | `version` | string | `"0.1.0"` | Release version (e.g. `1.0.0`) |
 | `prerelease` | boolean | `false` | Mark release as pre-release |
 | `draft` | boolean | `false` | Create as draft release |
@@ -266,13 +297,22 @@ Set at the top level of the workflow:
 
 | Variable | Example | Description |
 |----------|---------|-------------|
-| `APP_NAME` | `"Roboticela DevKit"` | Display name used in release title and Android signing DN |
+| `APP_NAME` | `"ToDo"` | Display name used in release title and Android signing DN |
 | `NDK_VERSION` | `"27.0.12077973"` | Android NDK version installed via `sdkmanager` |
 | `NODE_VERSION` | `"24"` | Node version for `actions/setup-node` |
 
+Required **GitHub Environment** variables (Settings → Environments → *name* → Variables):
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_APP_URL` | Frontend / deep-link base URL baked into the client |
+| `VITE_API_URL` | Backend API base URL baked into the client |
+
+Fallbacks also accepted: `APP_URL` / `FRONTEND_URL`, `API_URL` / `BACKEND_URL`. Optional: `VITE_GOOGLE_CLIENT_ID` or `GOOGLE_CLIENT_ID` for native Google Sign-In.
+
 ### Secrets (optional, for Android signing)
 
-If you want **release signing** for Android (e.g. for Play Store), add these repository secrets:
+If you want **release signing** for Android (e.g. for Play Store), add these environment secrets:
 
 | Secret | Description |
 |--------|-------------|
@@ -302,7 +342,7 @@ sha512sum -c SHA512SUMS
 
 1. Open the repo on GitHub → **Actions** → **Build and Release**.
 2. Click **Run workflow**.
-3. Fill in **version** (required) and optionally change **prerelease**, **draft**, and platform toggles.
+3. Select an **environment**, fill in **version** (required), and optionally change **prerelease**, **draft**, and platform toggles.
 4. Run; when all selected builds succeed, a release is created (or updated) with the given tag (e.g. `v1.0.0`).
 
 ---
@@ -374,18 +414,26 @@ The script is interactive by default. For CI or scripts, you would need to eithe
 ## 📁 Project Structure
 
 ```
-Vite-Express-Tauri-Template-DevKit/
+ToDo/
 ├── .github/
 │   └── workflows/
 │       └── build-release.yml    # Build & release workflow
 ├── public/
-│   └── favicon.svg              # Default icon source for icons:generate
+│   ├── favicon.svg              # Default icon source for icons:generate
+│   └── sounds/                  # Notification sound library
 ├── server/                      # Express API
-│   ├── src/
-│   │   └── index.ts
-│   ├── package.json
-│   └── tsconfig.json
+│   ├── routes/
+│   ├── services/
+│   ├── prisma/
+│   ├── server.js
+│   └── package.json
 ├── src/                         # React frontend
+│   ├── components/
+│   ├── contexts/
+│   ├── pages/
+│   │   ├── auth/
+│   │   ├── todo/
+│   │   └── admin/
 │   ├── App.tsx
 │   ├── main.tsx
 │   └── ...
@@ -404,7 +452,9 @@ Vite-Express-Tauri-Template-DevKit/
 │   └── ...
 ├── scripts/
 │   ├── icons-generate.js        # Icon generation (tauri + Android + web)
-│   └── copy-vite-icons.js       # Copy Tauri icons → public/
+│   ├── copy-vite-icons.js       # Copy Tauri icons → public/
+│   └── sync-frontend-env.mjs    # Bake VITE_* URLs for Tauri builds
+├── docker/                      # Optional deploy helpers
 ├── index.html
 ├── package.json
 ├── vite.config.ts
@@ -423,9 +473,10 @@ Vite-Express-Tauri-Template-DevKit/
 ### Frontend
 - **`vite.config.ts`** — Vite and React plugin; dev server port (default 5173).
 - **`index.html`** — Title and favicon links (use `npm run icons:generate` to refresh favicons in `public/`).
+- **`.env`** — `VITE_APP_URL`, `VITE_API_URL`, and optional Google client ID (see `.env.example`).
 
 ### Backend
-- **`server/`** — Port and environment in `server/src/index.ts` (or env vars as you add them).
+- **`server/.env`** — Database URL, JWT secrets, mail, OAuth, and related settings (see `server/.env.example`).
 
 ### Version (for releases)
 The GitHub Actions workflow patches version in:
@@ -450,14 +501,15 @@ For local releases, keep these in sync manually or run your own patch step.
 
 ## 💬 Support
 
-- **Issues:** [GitHub Issues](https://github.com/Roboticela/Vite-Express-Tauri-Template-DevKit/issues) for bugs and feature requests.
-- **Repository:** [Roboticela/Vite-Express-Tauri-Template-DevKit](https://github.com/Roboticela/Vite-Express-Tauri-Template-DevKit).
+- **Issues:** [GitHub Issues](https://github.com/Roboticela/ToDo/issues) for bugs and feature requests.
+- **Repository:** [Roboticela/ToDo](https://github.com/Roboticela/ToDo).
+- **Website:** [todo.roboticela.com](https://todo.roboticela.com).
 
 ---
 
 ## 📄 License
 
-This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for the full text.
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See [LICENSE](LICENSE) for the full text.
 
 ---
 
@@ -467,7 +519,7 @@ This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for t
    <img src="public/CompanyLogo.png" alt="Roboticela Logo" width="200" style="padding:30px;" />
 </div>
 
-**[Roboticela](https://github.com/Roboticela)** maintains this template for building cross-platform apps with Vite, Express, and Tauri. Star the repo if you find it useful.
+**[Roboticela](https://github.com/Roboticela)** builds cross-platform apps with Vite, Express, and Tauri. Star the repo if you find ToDo useful.
 
 ---
 
@@ -475,6 +527,6 @@ This project is licensed under the **MIT License**. See [LICENSE](LICENSE) for t
 
 **Built with ❤️ by [Roboticela](https://github.com/Roboticela)**
 
-[⬆ Back to Top](#-vite--express--tauri-template-devkit)
+[⬆ Back to Top](#todo)
 
 </div>
