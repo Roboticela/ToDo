@@ -159,7 +159,9 @@ export async function syncReminderSoundToNative(
   } else {
     const soundId =
       getCatalogSound(user.notificationSoundId)?.id ||
-      (mode === "ringtone" ? DEFAULT_RINGTONE_SOUND_ID : DEFAULT_LIBRARY_SOUND_ID);
+      (user.notificationSoundMode === "ringtone"
+        ? DEFAULT_RINGTONE_SOUND_ID
+        : DEFAULT_LIBRARY_SOUND_ID);
     const catalog = getCatalogSound(soundId);
     key = `preset_${soundId.replace(/-/g, "_")}`;
     sourceUrl = catalog?.src ?? `/sounds/${soundId}.mp3`;
